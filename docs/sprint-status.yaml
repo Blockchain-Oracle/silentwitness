@@ -90,11 +90,11 @@ stories:
 
   - id: story-hmac-ledger
     epic: "Epic 2 — Common types + audit infrastructure"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/9"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/104"
+    merged_at: "2026-06-03T16:35:00Z"
 
   - id: story-atomic-io
     epic: "Epic 2 — Common types + audit infrastructure"
