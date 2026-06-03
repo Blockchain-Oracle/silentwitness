@@ -1,0 +1,57 @@
+# .github/workflows/release.yml — verbatim from CICD_SPEC §4.2.
+#
+# Audit-driven deviation: UV_VERSION is "0.11.18" (the spec block predates the
+# audit-locked pin in pyproject.toml). See CI workflow header for context.
+
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write       # to push tags + CHANGELOG.md
+  packages: write       # to push the versioned Docker tag
+  id-token: write       # for any future OIDC publishing
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: semantic-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.11.18"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-extras --frozen
+
+      - name: python-semantic-release version + changelog
+        id: release
+        run: |
+          uv run semantic-release version --changelog
+          echo "released=$(uv run semantic-release version --print-last-released 2>/dev/null || echo none)" >> "$GITHUB_OUTPUT"
+
+      - name: Build + push versioned Docker image
+        if: steps.release.outputs.released != 'none'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.release.outputs.released }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.release.outputs.released }}
+            org.opencontainers.image.licenses=MIT

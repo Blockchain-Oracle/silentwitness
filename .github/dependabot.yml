@@ -1,0 +1,77 @@
+# .github/dependabot.yml — verbatim from CICD_SPEC §12.
+#
+# Three ecosystems: pip (Python deps via pyproject.toml/uv.lock), github-actions
+# (workflow action versions), docker (base image bumps). Weekly Monday cadence.
+# Auto-merge intentionally OFF for the hackathon window (CICD_SPEC §12.1).
+
+version: 2
+
+updates:
+  # Python deps (uv-managed via pyproject.toml)
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/London"
+    open-pull-requests-limit: 10
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels: ["dependencies", "python"]
+    groups:
+      python-dev:
+        patterns:
+          - "ruff"
+          - "mypy"
+          - "pytest*"
+          - "hypothesis"
+          - "coverage*"
+          - "pre-commit"
+          - "detect-secrets"
+          - "cyclonedx-py"
+          - "pip-licenses"
+          - "python-semantic-release"
+      python-prod:
+        patterns:
+          - "mcp"
+          - "pydantic-ai*"
+          - "pydantic*"
+          - "typer"
+          - "rich"
+          - "weasyprint"
+          - "mistune"
+          - "httpx"
+          - "spacy"
+          - "volatility3"
+          # NOTE: structlog DROPPED per DEEP_AUDIT_REPORT.md Decision A — direct
+          # Pydantic model_dump_json() is used in src/silentwitness_common.
+
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels: ["dependencies", "github-actions"]
+    groups:
+      github-actions:
+        patterns: ["*"]
+
+  # Docker base image
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    target-branch: "main"
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"
+    labels: ["dependencies", "docker"]

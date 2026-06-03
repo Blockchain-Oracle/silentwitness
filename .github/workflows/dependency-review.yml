@@ -1,0 +1,25 @@
+# .github/workflows/dependency-review.yml — verbatim from CICD_SPEC §4.3.
+
+name: dependency-review
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+          # Deny AGPL + GPL-3.0 outright; LGPL allowed only as runtime-linked dep
+          # (we don't statically link in Python — runtime-linkage carve-out is safe).
+          deny-licenses: AGPL-3.0,AGPL-3.0-only,AGPL-3.0-or-later,GPL-3.0,GPL-3.0-only,GPL-3.0-or-later
+          comment-summary-in-pr: always
