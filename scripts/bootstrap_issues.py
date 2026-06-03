@@ -34,7 +34,17 @@ STORIES_DIR = REPO_ROOT / "docs" / "stories"
 REPO = "Blockchain-Oracle/silentwitness"
 
 
-def _parse_sprint_yaml(path: Path) -> tuple[dict, list[dict]]:
+_Story = dict[str, object]
+
+
+def _as_str_list(value: object) -> list[str]:
+    """Narrow an unknown YAML value to a list of strings; empty if not a list."""
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return []
+
+
+def _parse_sprint_yaml(path: Path) -> tuple[dict[str, str | int], list[_Story]]:
     """Hand-rolled minimal YAML parser for our known shape.
 
     We avoid the PyYAML dependency for a bootstrap script. The sprint-status.yaml
@@ -42,8 +52,8 @@ def _parse_sprint_yaml(path: Path) -> tuple[dict, list[dict]]:
     """
     text = path.read_text(encoding="utf-8")
     meta: dict[str, str | int] = {}
-    stories: list[dict[str, str | bool | list[str]]] = []
-    current: dict | None = None
+    stories: list[_Story] = []
+    current: _Story | None = None
     in_stories = False
     in_optional_epics = False
     for raw in text.splitlines():
@@ -91,9 +101,9 @@ def _parse_sprint_yaml(path: Path) -> tuple[dict, list[dict]]:
     return meta, stories
 
 
-def _story_title_and_body(story: dict) -> tuple[str, str]:
+def _story_title_and_body(story: _Story) -> tuple[str, str]:
     """Pull the story title (first H1) and a body excerpt from the .md file."""
-    slug = story["id"][len("story-") :]
+    slug = str(story["id"])[len("story-") :]
     md_path = STORIES_DIR / f"{story['id']}.md"
     if not md_path.exists():
         return slug, f"Story file missing: `{md_path.relative_to(REPO_ROOT)}`"
@@ -115,7 +125,7 @@ def _story_title_and_body(story: dict) -> tuple[str, str]:
         f"**Story file:** [`{repo_rel}`](../blob/main/{repo_rel})",
         "",
         f"**Epic:** {story.get('epic', '(unknown)')}",
-        f"**Depends on:** {', '.join(story.get('depends_on') or ['(none)'])}",
+        f"**Depends on:** {', '.join(_as_str_list(story.get('depends_on')) or ['(none)'])}",
     ]
     if story.get("optional"):
         parts.append("**Optional:** yes")
@@ -144,7 +154,13 @@ def _story_title_and_body(story: dict) -> tuple[str, str]:
 
 
 def _existing_issue(slug: str) -> str | None:
-    """Return URL of an existing issue for this slug, if any."""
+    """Return URL of an existing issue for this slug, if any.
+
+    Raises ``RuntimeError`` if ``gh`` itself failed or returned a shape we
+    don't recognise — a silent ``None`` here would trigger duplicate issue
+    creation downstream, which is the exact opposite of the idempotency this
+    script promises.
+    """
     cmd = [
         "gh",
         "issue",
@@ -162,14 +178,23 @@ def _existing_issue(slug: str) -> str | None:
     ]
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if out.returncode != 0:
-        return None
+        raise RuntimeError(
+            f"gh issue list failed for {slug} (rc={out.returncode}): {out.stderr.strip()}"
+        )
     try:
         items = json.loads(out.stdout)
-    except json.JSONDecodeError:
-        return None
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"gh issue list returned non-JSON for {slug}: {out.stdout[:200]!r}"
+        ) from exc
+    if not isinstance(items, list):
+        raise RuntimeError(
+            f"gh issue list returned unexpected JSON shape for {slug}: {type(items).__name__}"
+        )
     for item in items:
-        if item["title"].startswith(f"[{slug}]"):
-            return item["url"]
+        if isinstance(item, dict) and str(item.get("title", "")).startswith(f"[{slug}]"):
+            url = item.get("url")
+            return str(url) if url else None
     return None
 
 
@@ -194,13 +219,24 @@ def _create_issue(slug: str, title: str, body: str, labels: list[str]) -> str:
         cmd.extend(["--label", lbl])
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if out.returncode != 0:
-        # Likely missing label — retry without labels.
+        # First attempt failed — most likely cause is a missing label, but other
+        # failures (auth, rate-limit, duplicate title) are possible. Print the
+        # real stderr so the retry path is visible in CI logs, then retry
+        # without labels to give the script a best-effort completion path.
+        print(
+            f"_create_issue: first attempt failed for {slug} (rc={out.returncode}); "
+            f"stderr: {out.stderr.strip()}. Retrying without labels…",
+            file=sys.stderr,
+        )
         cmd_no_label = [c for c in cmd if c != "--label" and c not in labels]
         out2 = subprocess.run(cmd_no_label, capture_output=True, text=True, check=False)
         if out2.returncode != 0:
             raise RuntimeError(f"gh issue create failed for {slug}:\n{out.stderr}\n{out2.stderr}")
-        url = out2.stdout.strip()
-        return url
+        print(
+            f"_create_issue: created {slug} WITHOUT labels {labels} — fix labels manually.",
+            file=sys.stderr,
+        )
+        return out2.stdout.strip()
     return out.stdout.strip()
 
 
@@ -246,7 +282,7 @@ def _ensure_labels() -> None:
         )
 
 
-def _write_sprint_with_urls(meta: dict, stories: list[dict]) -> None:
+def _write_sprint_with_urls(meta: dict[str, str | int], stories: list[_Story]) -> None:
     """Re-render sprint-status.yaml in place with updated issue_url values."""
     text = SPRINT_PATH.read_text(encoding="utf-8")
     lines = text.splitlines(keepends=True)
@@ -276,12 +312,17 @@ def main() -> int:
     skipped = 0
     failed: list[str] = []
     for story in stories:
-        slug = story["id"][len("story-") :]
+        slug = str(story["id"])[len("story-") :]
         if story.get("issue_url"):
             print(f"  ✓ skip (already has url): {slug}")
             skipped += 1
             continue
-        existing = _existing_issue(slug)
+        try:
+            existing = _existing_issue(slug)
+        except RuntimeError as exc:
+            failed.append(slug)
+            print(f"  ✗ FAILED to query existing issue for {slug}: {exc}", file=sys.stderr)
+            continue
         if existing:
             story["issue_url"] = existing
             print(f"  ✓ found existing: {slug} → {existing}")

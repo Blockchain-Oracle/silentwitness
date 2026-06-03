@@ -1,0 +1,252 @@
+# .github/workflows/ci.yml — verbatim from CICD_SPEC §4.1 except for the
+# audit-driven deviations enumerated below.
+#
+# Audit-driven deviations from spec text — each fix is documented in
+# DEEP_AUDIT_REPORT.md and pinned to a single root cause:
+#
+#   1. UV_VERSION is "0.11.18" instead of the spec's "0.5.11" (audit B-PY-2).
+#      pyproject.toml pins [tool.uv].required-version = "==0.11.18"; uv refuses
+#      to run on any other version, so the workflow must mirror the lockfile.
+#
+#   2. `test` job adds a "Per-module coverage floors" step calling
+#      scripts/coverage_gate.py between `pytest with coverage` and the artifact
+#      upload. §4.1's verbatim block omits this step but §8.2 mandates it
+#      ("coverage_gate.py called by CI test job"). coverage.py has no native
+#      per-directory floor support; the script is the single source of truth.
+#
+#   3. The `dataset-hash-verify` step's inline comment says "Full NIST 2GB
+#      image is NOT pulled in CI" while §4.1 says 20GB. The 2GB figure is the
+#      actual size of the NIST PC E01 image per DEEP_AUDIT_REPORT F-DS-2 —
+#      §4.1's "20GB" is the spec typo this PR silently corrects.
+#
+#   4. The `docker-build` job's `needs:` list adds `dataset-hash-verify` to
+#      the §4.1 list. The verify job is a stub today and gating docker-build
+#      on a no-op stub costs nothing now and ensures Epic 14's real verifier
+#      automatically becomes a docker-build prerequisite when it lands.
+#
+# The eight gated jobs below are required-status-checks for branch protection
+# on `main` (CICD_SPEC §5.1). Renaming any job here will break protection until
+# the protection rule is updated to match.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  packages: write   # for docker-build job (only used on main)
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_VERSION: "0.11.18"
+  PYTHON_VERSION_DEFAULT: "3.12"
+
+jobs:
+
+  lint:
+    name: lint (ruff + mypy)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - name: Sync deps
+        run: uv sync --all-extras --frozen
+      - name: ruff format (check only)
+        run: uv run ruff format --check .
+      - name: ruff check
+        run: uv run ruff check .
+      - name: mypy --strict
+        run: uv run mypy --strict src/
+
+  test:
+    name: test (py${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --all-extras --frozen
+      - name: pytest with coverage
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: |
+          uv run coverage run -m pytest tests/unit tests/integration -v
+          uv run coverage xml -o coverage.xml
+          uv run coverage report --fail-under=85
+      - name: Per-module coverage floors (verification 95 / audit 90)
+        # coverage.py only enforces a single global floor; per-directory floors
+        # are enforced by scripts/coverage_gate.py per CICD_SPEC §8.2.
+        run: uv run python scripts/coverage_gate.py coverage.xml
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python }}
+          path: coverage.xml
+          retention-days: 14
+
+  property-tests:
+    name: property-tests (hypothesis, slow)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - run: uv sync --all-extras --frozen
+      - name: Run Hypothesis property tests (slow profile)
+        env:
+          HYPOTHESIS_PROFILE: slow
+        run: uv run pytest tests/property -v --hypothesis-show-statistics
+
+  file-size-guard:
+    name: file-size-guard (≤400 LOC per .py file)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - name: Run file-size-guard on all tracked .py
+        run: |
+          mapfile -t FILES < <(git ls-files '*.py')
+          uv run python .pre-commit-hooks/file-size-guard.py "${FILES[@]}"
+
+  dataset-hash-verify:
+    name: dataset-hash-verify
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - run: uv sync --all-extras --frozen
+      - name: Verify dataset manifest hashes
+        # Verifies the Nitroba 60MB stub (committed under harness/datasets/stubs/).
+        # Full NIST 2GB image is NOT pulled in CI; verified locally before submission.
+        run: uv run python harness/datasets/verify_manifest.py --stub-only
+
+  sbom:
+    name: sbom (CycloneDX 1.6 JSON)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - run: uv sync --all-extras --frozen
+      - name: Generate SBOM
+        run: |
+          uv run cyclonedx-py environment \
+            --output-format JSON \
+            --output-file sbom.cdx.json \
+            --schema-version 1.6
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 90
+
+  license-check:
+    name: license-check (no AGPL / GPL-3.0)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+      - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
+      - run: uv sync --all-extras --frozen
+      - name: Audit licenses
+        run: |
+          uv run pip-licenses \
+            --format=json \
+            --output-file=licenses.json \
+            --with-license-file \
+            --no-license-path
+          uv run python scripts/license_gate.py licenses.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: licenses
+          path: licenses.json
+          retention-days: 90
+
+  docker-build:
+    name: docker-build (push to GHCR)
+    runs-on: ubuntu-24.04
+    needs: [lint, test, property-tests, file-size-guard, dataset-hash-verify, sbom, license-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Compute short SHA
+        id: sha
+        run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build + push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/silentwitness:latest
+            ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.licenses=MIT
+      - name: Run trivy scan on built image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: trivy-sarif
+          path: trivy-results.sarif
+          retention-days: 30
