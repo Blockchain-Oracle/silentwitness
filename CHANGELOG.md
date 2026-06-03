@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-06-03)
+
+### Chores
+
+- **docs**: Mark Epic 1 COMPLETE + re-sync uv.lock to v1.3.0
+  ([`58a7306`](https://github.com/Blockchain-Oracle/silentwitness/commit/58a7306bde4072b5223f3a65aedf5081fd7af589))
+
+### Features
+
+- **mcp**: Pydantic v2 shared types + audit_id generators (Epic 2, Story 6)
+  ([#92](https://github.com/Blockchain-Oracle/silentwitness/pull/92),
+  [`5ecdf63`](https://github.com/Blockchain-Oracle/silentwitness/commit/5ecdf6322707768026e359f6ec19a8222e328f5c))
+
+
 ## v1.3.0 (2026-06-03)
 
 ### Features
