@@ -7,6 +7,8 @@ shape; audit logger reads AuditEntry; agent reads ToolResponse).
 
 from __future__ import annotations
 
+import operator
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -249,13 +251,20 @@ def test_interpretation_requires_non_empty_observation_ids() -> None:
         )
 
 
-def test_confidence_raises_typeerror_on_str_comparison() -> None:
+@pytest.mark.parametrize(
+    "op",
+    [operator.lt, operator.le, operator.gt, operator.ge],
+)
+def test_confidence_raises_typeerror_on_str_comparison(
+    op: Callable[[object, object], bool],
+) -> None:
     """Regression for PR-92 review C1: StrEnum's inherited str ordering used to
-    silently fire when ``Confidence < str``. Now raises TypeError loudly."""
+    silently fire when ``Confidence`` was compared to ``str``. Parametrising
+    across all four ordering operators locks every dunder against drift."""
     with pytest.raises(TypeError):
-        _ = Confidence.HIGH < "ZZZ"  # type: ignore[operator]
+        op(Confidence.HIGH, "ZZZ")
     with pytest.raises(TypeError):
-        _ = Confidence.LOW >= "AAA"  # type: ignore[operator]
+        op(Confidence.LOW, "AAA")
 
 
 def test_finding_validate_assignment_rejects_bogus_status() -> None:
@@ -344,6 +353,40 @@ def test_sha256hex_rejects_wrong_length() -> None:
             line_end=1,
             content_sha256="a" * 32,
         )
+
+
+def test_sha256hex_rejects_non_string_input() -> None:
+    """A non-string value (int, bytes, None) must fail loudly at the type
+    layer. _lower_if_str is identity for non-strings; StringConstraints then
+    rejects the wrong type."""
+    for bad in (12345, b"a" * 64, None):
+        with pytest.raises(ValidationError):
+            CitedSpan(
+                stdout_path=Path("/x"),
+                line_start=1,
+                line_end=1,
+                content_sha256=bad,  # type: ignore[arg-type]
+            )
+
+
+def test_data_provenance_cmd_argv_roundtrip_preserves_tuple() -> None:
+    """The cmd_argv field is intentionally typed as tuple (not list) so
+    frozen=True propagates immutability. JSON round-trip must preserve
+    tuple-ness — otherwise the tightening is lost in transit."""
+    prov = _data_provenance()
+    re_parsed = DataProvenance.model_validate_json(prov.model_dump_json())
+    assert isinstance(
+        re_parsed.cmd_argv, tuple
+    ), f"cmd_argv must round-trip as tuple, got {type(re_parsed.cmd_argv).__name__}"
+
+
+def test_finding_validate_assignment_rejects_unknown_attribute() -> None:
+    """validate_assignment + extra='forbid' must reject runtime setattr to a
+    field that wasn't declared. Otherwise the assignment-time enforcement is
+    asymmetric with construction-time."""
+    finding = Finding(id="F-001", observation_id="O-007", interpretation_id="I-007")
+    with pytest.raises(ValidationError):
+        finding.bogus_new_field = "leaked"  # type: ignore[attr-defined]
 
 
 def test_pivot_roundtrips() -> None:

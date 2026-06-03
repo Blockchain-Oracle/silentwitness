@@ -38,23 +38,28 @@ from pydantic import (
 )
 
 
-def _lower_if_str(value: object) -> object:
-    """Normalise SHA-256 input to lowercase before pattern validation.
+def _normalise_hex(value: object) -> str:
+    """Normalise SHA-256 input to lowercase ``str`` before pattern validation.
 
-    Lives at module scope so the three Sha256Hex-typed fields share one
-    source of truth (PR-92 silent-failure review flagged the previous
-    triplicated ``_check_hex`` classmethods as drift-prone)."""
-    return value.lower() if isinstance(value, str) else value
+    Raises ``ValueError`` for non-``str`` inputs (including ``bytes``, which
+    Pydantic would otherwise silently UTF-8-decode and let through to the
+    StringConstraints pattern — a real silent-failure surface PR-92 round-2
+    review caught). ``ValueError`` is used over ``TypeError`` because
+    Pydantic v2 wraps it in ``ValidationError`` for the caller; ``TypeError``
+    is re-raised verbatim. Lives at module scope so the three Sha256Hex-typed
+    fields share one source of truth instead of the triplicated
+    ``_check_hex`` classmethods that previously drifted independently."""
+    if not isinstance(value, str):
+        raise ValueError(f"Sha256Hex requires str, got {type(value).__name__}")
+    return value.lower()
 
 
 # 64-char lowercase SHA-256 hex digest. Used by every model that carries the
-# citation-gate primitive. Extracts the previously-triplicated `_check_hex`
-# classmethods so the three call sites can't drift. Pydantic v2 reads the
-# `Annotated[...]` metadata and applies the BeforeValidator + StringConstraints
-# automatically.
+# citation-gate primitive. Pydantic v2 reads the ``Annotated[...]`` metadata
+# and applies the BeforeValidator + StringConstraints automatically.
 type Sha256Hex = Annotated[
     str,
-    BeforeValidator(_lower_if_str),
+    BeforeValidator(_normalise_hex),
     StringConstraints(pattern=r"^[a-f0-9]{64}$"),
 ]
 
@@ -343,9 +348,11 @@ class AuditEntry(BaseModel):
 TPayload = TypeVar("TPayload", bound=BaseModel)
 
 
-class ToolResponse(
-    BaseModel, Generic[TPayload]
-):  # Pydantic 2.x BaseModel does not yet fully interop with PEP 695 generics.
+# Pydantic <2.11 doesn't fully interop with PEP 695 generics for BaseModel
+# subclasses (model_validate_json on `class ToolResponse[T: BaseModel](BaseModel)`
+# loses the parametric type narrowing). Drop the noqa once the lockfile floor
+# reaches Pydantic 2.11+.
+class ToolResponse(BaseModel, Generic[TPayload]):
     """The envelope every MCP tool returns. architecture.md §4.3.
 
     ``success=True`` ⇒ ``data is not None``. ``success=False`` ⇒ ``data is
