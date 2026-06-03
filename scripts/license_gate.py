@@ -20,11 +20,29 @@ actual LICENSE file has been audited. Schema::
 
     {
       "package_name": {
-        "spdx_license": "Apache-2.0",
-        "rationale": "Why this is OK — must reference the audit."
+        "actual_license": "Apache-2.0",
+        "permitted_pip_licenses": ["UNKNOWN"],
+        "rationale": "Why this is OK — must reference the audit (40+ chars)."
       },
       ...
     }
+
+Two-field design (PR-93 silent-failure-hunter caught the single-field smuggling
+vector):
+
+  * ``actual_license`` is what the package REALLY licenses as (the audited
+    SPDX from the dist-info LICENSE file or upstream repo). Must NOT be in
+    the deny list — otherwise the allowlist becomes a tunnel for genuinely-
+    denied licenses.
+  * ``permitted_pip_licenses`` is the specific deny-list values the gate is
+    permitted to see for this package (e.g. ``["UNKNOWN"]`` when pip-licenses
+    reports UNKNOWN due to missing metadata). Each entry MUST itself be in
+    the deny list — otherwise the allowlist would do nothing.
+  * Other denied licenses on the same package — values NOT in
+    ``permitted_pip_licenses`` — still fire the gate. So if ``caio`` is
+    allowlisted for ``["UNKNOWN"]`` and a future version emits
+    ``"License = AGPL-3.0; UNKNOWN"``, only the UNKNOWN clears; the AGPL-3.0
+    becomes a loud offender.
 
 A gate that defaults to PASS on weird input is worse than useless — this
 script raises on an unrecognised payload shape and on entries that expose no
@@ -65,6 +83,26 @@ _DENIED: frozenset[str] = frozenset(
 # (case-insensitive) inside a single ``License`` string. Tokenise before
 # matching so e.g. ``"MIT; AGPL-3.0"`` does not slip past the gate.
 _LICENSE_SEPARATOR = re.compile(r"[;/]|\sOR\s", re.IGNORECASE)
+
+_RATIONALE_MIN_LENGTH = 40
+_RATIONALE_BANLIST: frozenset[str] = frozenset({"todo", "tbd", "fixme", "xxx", "n/a"})
+
+
+class _AllowlistEntry:
+    """Per-package allowlist record. Carries the rationale through to hit-time
+    so CI logs surface the audit trail at the point of the override."""
+
+    __slots__ = ("actual_license", "permitted_pip_licenses", "rationale")
+
+    def __init__(
+        self,
+        actual_license: str,
+        permitted_pip_licenses: frozenset[str],
+        rationale: str,
+    ) -> None:
+        self.actual_license = actual_license
+        self.permitted_pip_licenses = permitted_pip_licenses
+        self.rationale = rationale
 
 
 def _entries(payload: object) -> list[dict[str, object]]:
@@ -120,36 +158,93 @@ def _license_strings(entry: dict[str, object]) -> list[str]:
     return out
 
 
-def _load_allowlist(path: Path) -> dict[str, str]:
-    """Return ``{package_name: spdx_license}`` for the allowlist file.
+def _load_allowlist(path: Path) -> dict[str, _AllowlistEntry]:
+    """Parse the allowlist file and validate every entry.
 
-    Raises ``ValueError`` on any entry missing the required ``spdx_license``
-    or ``rationale`` keys — every override must be justified in writing.
+    Raises ``ValueError`` on any structural defect so a malformed file can't
+    silently widen the gate.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{path}: top-level must be a JSON object")
-    out: dict[str, str] = {}
+    out: dict[str, _AllowlistEntry] = {}
     for name, entry in payload.items():
         if name.startswith("_"):
             # Underscore-prefixed keys are metadata (e.g. ``_meta``).
             continue
         if not isinstance(entry, dict):
             raise ValueError(f"{path}: entry for {name!r} must be an object")
-        spdx = entry.get("spdx_license")
-        rationale = entry.get("rationale")
-        if not isinstance(spdx, str) or not spdx.strip():
-            raise ValueError(f"{path}: {name!r} missing required `spdx_license`")
-        if not isinstance(rationale, str) or not rationale.strip():
-            raise ValueError(f"{path}: {name!r} missing required `rationale`")
-        out[name] = spdx
+        out[name] = _validate_allowlist_entry(path, name, entry)
     return out
 
 
-def audit(path: Path, allowlist: dict[str, str] | None = None) -> list[tuple[str, str]]:
+def _validate_allowlist_entry(path: Path, name: str, entry: dict[str, object]) -> _AllowlistEntry:
+    """Validate a single allowlist entry and return the parsed record."""
+    actual_raw = entry.get("actual_license")
+    if not isinstance(actual_raw, str) or not actual_raw.strip():
+        raise ValueError(f"{path}: {name!r} missing required `actual_license`")
+    actual = actual_raw.strip()
+    if actual.lower() in _DENIED:
+        raise ValueError(
+            f"{path}: {name!r} declares actual_license={actual!r}, which is "
+            "itself in the deny list. The allowlist documents that the gate's "
+            "denied signal is wrong upstream; it cannot permit a genuinely-denied "
+            "license."
+        )
+
+    permitted_raw = entry.get("permitted_pip_licenses")
+    if not isinstance(permitted_raw, list) or not permitted_raw:
+        raise ValueError(
+            f"{path}: {name!r} `permitted_pip_licenses` must be a non-empty list of "
+            "deny-list values that pip-licenses is permitted to report for this "
+            'package (e.g. ["UNKNOWN"] when metadata is missing).'
+        )
+    permitted: set[str] = set()
+    for item in permitted_raw:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(
+                f"{path}: {name!r} `permitted_pip_licenses` entries must be non-empty strings"
+            )
+        normalised = item.strip().lower()
+        if normalised not in _DENIED:
+            raise ValueError(
+                f"{path}: {name!r} `permitted_pip_licenses` includes {item!r} which "
+                "is NOT in the deny list — listing it in the allowlist would do "
+                "nothing. Remove the entry or replace it with the actual denied "
+                "value pip-licenses reports."
+            )
+        permitted.add(normalised)
+
+    rationale_raw = entry.get("rationale")
+    if not isinstance(rationale_raw, str) or not rationale_raw.strip():
+        raise ValueError(f"{path}: {name!r} missing required `rationale`")
+    rationale = rationale_raw.strip()
+    if rationale.lower() in _RATIONALE_BANLIST:
+        raise ValueError(
+            f"{path}: {name!r} rationale {rationale!r} is a placeholder; write the "
+            "actual audit reasoning."
+        )
+    if len(rationale) < _RATIONALE_MIN_LENGTH:
+        raise ValueError(
+            f"{path}: {name!r} rationale must be at least "
+            f"{_RATIONALE_MIN_LENGTH} chars (got {len(rationale)}); the structured "
+            "override exists to force thinking, not to be a write-only escape hatch."
+        )
+
+    return _AllowlistEntry(
+        actual_license=actual,
+        permitted_pip_licenses=frozenset(permitted),
+        rationale=rationale,
+    )
+
+
+def audit(path: Path, allowlist: dict[str, _AllowlistEntry] | None = None) -> list[tuple[str, str]]:
     """Return a list of ``(package_name, denied_license)`` for any offenders.
 
-    Packages present in ``allowlist`` are skipped after a stderr note.
+    A package present in ``allowlist`` clears ONLY the specific denied
+    licenses its entry permits. Any OTHER denied license on the same entry
+    still fires — so a future upstream drift (e.g. caio bumps from UNKNOWN
+    to AGPL-3.0) trips the gate loudly.
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
     offenders: list[tuple[str, str]] = []
@@ -157,17 +252,24 @@ def audit(path: Path, allowlist: dict[str, str] | None = None) -> list[tuple[str
     for entry in _entries(payload):
         name_raw = entry.get("Name", "<unknown>")
         name = name_raw if isinstance(name_raw, str) else "<unknown>"
+        allow_entry = allow.get(name)
         for lic in _license_strings(entry):
-            if lic in _DENIED:
-                if name in allow:
-                    print(
-                        f"license_gate: allowlist hit — {name}: {lic.upper()} → "
-                        f"audited as {allow[name]}",
-                        file=sys.stderr,
-                    )
-                    break
-                offenders.append((name, lic))
-                break
+            if lic not in _DENIED:
+                continue
+            if allow_entry is not None and lic in allow_entry.permitted_pip_licenses:
+                # Documented override hit — log the audit trail at the point of
+                # use so CI investigators see WHY this exception exists.
+                print(
+                    f"license_gate: allowlist hit — {name}: {lic.upper()} → "
+                    f"actual_license={allow_entry.actual_license}. "
+                    f"Rationale: {allow_entry.rationale}",
+                    file=sys.stderr,
+                )
+                continue
+            offenders.append((name, lic))
+            # Don't break: a single entry can carry multiple denied licenses in
+            # a `License = "MIT; AGPL-3.0; UNKNOWN"` string; we want to see every
+            # offense, not just the first.
     return offenders
 
 
@@ -195,7 +297,7 @@ def main(argv: list[str]) -> int:
     if not licenses_path.exists():
         print(f"license_gate: {licenses_path} does not exist", file=sys.stderr)
         return 2
-    allowlist: dict[str, str] | None = None
+    allowlist: dict[str, _AllowlistEntry] | None = None
     if allowlist_path is not None:
         if not allowlist_path.exists():
             print(f"license_gate: {allowlist_path} does not exist", file=sys.stderr)

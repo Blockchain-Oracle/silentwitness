@@ -29,10 +29,12 @@
 #      `just` is missing on PATH (intentional — closes the silent-skip surface
 #      flagged in PR-91 review). setup-uv does not provision `just`.
 #
-#   6. `sbom` job uses cyclonedx-py's actual CLI flags: `--of JSON -o sbom...`
-#      (NOT the spec's `--output-format JSON --output-file ... --schema-version 1.6`
-#      — cyclonedx-bom 7.x rejects `--schema-version`; the default IS schema 1.6
-#      per the tool's --help).
+#   6. `sbom` job drops the spec's `--schema-version 1.6` flag. cyclonedx-bom
+#      7.x's `environment` subcommand accepts `--output-format` and `--output-file`
+#      (they're long aliases of `--of` / `-o`), but `--schema-version` is NOT
+#      recognised — the actual short form for spec-version is `--sv`. Schema 1.6
+#      is the default per --help, so dropping the flag is correct. Same fix
+#      applied to the Dockerfile's SBOM step.
 #
 #   7. `license-check` job passes `--allowlist .license-allowlist.json` so
 #      packages whose pip-licenses metadata reports UNKNOWN/Proprietary but
@@ -184,13 +186,13 @@ jobs:
       - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
       - run: uv sync --all-extras --frozen
       - name: Generate SBOM
-        # cyclonedx-bom 7.x CLI uses short flags `--of` / `-o`; the spec's
-        # `--output-format` / `--output-file` / `--schema-version` are NOT
-        # recognised by the actual tool. Default schema is 1.6 per --help.
+        # Drops the spec's `--schema-version 1.6` (not recognised by
+        # cyclonedx-bom 7.x; default IS 1.6). `--output-format` / `--output-file`
+        # are valid long aliases per --help — kept for readability.
         run: |
           uv run cyclonedx-py environment \
-            --of JSON \
-            -o sbom.cdx.json
+            --output-format JSON \
+            --output-file sbom.cdx.json
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:

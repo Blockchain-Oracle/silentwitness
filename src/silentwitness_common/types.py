@@ -352,7 +352,7 @@ TPayload = TypeVar("TPayload", bound=BaseModel)
 # subclasses (model_validate_json on `class ToolResponse[T: BaseModel](BaseModel)`
 # loses the parametric type narrowing). Drop the noqa once the lockfile floor
 # reaches Pydantic 2.11+.
-class ToolResponse(BaseModel, Generic[TPayload]):
+class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
     """The envelope every MCP tool returns. architecture.md §4.3.
 
     ``success=True`` ⇒ ``data is not None``. ``success=False`` ⇒ ``data is
