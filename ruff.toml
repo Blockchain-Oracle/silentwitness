@@ -8,7 +8,11 @@ extend-exclude = [
     ".venv",
     "build",
     "dist",
-    "harness/datasets",
+    # Forensic image stubs (binary blobs) live under harness/datasets/stubs/ —
+    # exclude only that subdir, not the entire harness/datasets/ tree, so that
+    # harness/datasets/verify_manifest.py (and Epic 14's real implementation)
+    # are linted normally.
+    "harness/datasets/stubs",
     "harness/case-trapdoor/output",
 ]
 

@@ -1,10 +1,28 @@
-# .github/workflows/ci.yml — verbatim from CICD_SPEC §4.1.
+# .github/workflows/ci.yml — verbatim from CICD_SPEC §4.1 except for the
+# audit-driven deviations enumerated below.
 #
-# Audit-driven deviation from spec text:
-#   UV_VERSION is "0.11.18" here, not the spec's "0.5.11". pyproject.toml pins
-#   [tool.uv].required-version = "==0.11.18" (DEEP_AUDIT_REPORT.md B-PY-2 — uv
-#   0.6+ ships breaking semantics changes vs 0.5.x). uv refuses to run when the
-#   required-version doesn't match, so the workflow must mirror the lockfile.
+# Audit-driven deviations from spec text — each fix is documented in
+# DEEP_AUDIT_REPORT.md and pinned to a single root cause:
+#
+#   1. UV_VERSION is "0.11.18" instead of the spec's "0.5.11" (audit B-PY-2).
+#      pyproject.toml pins [tool.uv].required-version = "==0.11.18"; uv refuses
+#      to run on any other version, so the workflow must mirror the lockfile.
+#
+#   2. `test` job adds a "Per-module coverage floors" step calling
+#      scripts/coverage_gate.py between `pytest with coverage` and the artifact
+#      upload. §4.1's verbatim block omits this step but §8.2 mandates it
+#      ("coverage_gate.py called by CI test job"). coverage.py has no native
+#      per-directory floor support; the script is the single source of truth.
+#
+#   3. The `dataset-hash-verify` step's inline comment says "Full NIST 2GB
+#      image is NOT pulled in CI" while §4.1 says 20GB. The 2GB figure is the
+#      actual size of the NIST PC E01 image per DEEP_AUDIT_REPORT F-DS-2 —
+#      §4.1's "20GB" is the spec typo this PR silently corrects.
+#
+#   4. The `docker-build` job's `needs:` list adds `dataset-hash-verify` to
+#      the §4.1 list. The verify job is a stub today and gating docker-build
+#      on a no-op stub costs nothing now and ensures Epic 14's real verifier
+#      automatically becomes a docker-build prerequisite when it lands.
 #
 # The eight gated jobs below are required-status-checks for branch protection
 # on `main` (CICD_SPEC §5.1). Renaming any job here will break protection until
@@ -186,7 +204,7 @@ jobs:
   docker-build:
     name: docker-build (push to GHCR)
     runs-on: ubuntu-24.04
-    needs: [lint, test, property-tests, file-size-guard, sbom, license-check]
+    needs: [lint, test, property-tests, file-size-guard, dataset-hash-verify, sbom, license-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

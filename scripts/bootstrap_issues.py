@@ -154,7 +154,13 @@ def _story_title_and_body(story: _Story) -> tuple[str, str]:
 
 
 def _existing_issue(slug: str) -> str | None:
-    """Return URL of an existing issue for this slug, if any."""
+    """Return URL of an existing issue for this slug, if any.
+
+    Raises ``RuntimeError`` if ``gh`` itself failed or returned a shape we
+    don't recognise — a silent ``None`` here would trigger duplicate issue
+    creation downstream, which is the exact opposite of the idempotency this
+    script promises.
+    """
     cmd = [
         "gh",
         "issue",
@@ -172,13 +178,19 @@ def _existing_issue(slug: str) -> str | None:
     ]
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if out.returncode != 0:
-        return None
+        raise RuntimeError(
+            f"gh issue list failed for {slug} (rc={out.returncode}): {out.stderr.strip()}"
+        )
     try:
         items = json.loads(out.stdout)
-    except json.JSONDecodeError:
-        return None
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            f"gh issue list returned non-JSON for {slug}: {out.stdout[:200]!r}"
+        ) from exc
     if not isinstance(items, list):
-        return None
+        raise RuntimeError(
+            f"gh issue list returned unexpected JSON shape for {slug}: {type(items).__name__}"
+        )
     for item in items:
         if isinstance(item, dict) and str(item.get("title", "")).startswith(f"[{slug}]"):
             url = item.get("url")
@@ -207,13 +219,24 @@ def _create_issue(slug: str, title: str, body: str, labels: list[str]) -> str:
         cmd.extend(["--label", lbl])
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if out.returncode != 0:
-        # Likely missing label — retry without labels.
+        # First attempt failed — most likely cause is a missing label, but other
+        # failures (auth, rate-limit, duplicate title) are possible. Print the
+        # real stderr so the retry path is visible in CI logs, then retry
+        # without labels to give the script a best-effort completion path.
+        print(
+            f"_create_issue: first attempt failed for {slug} (rc={out.returncode}); "
+            f"stderr: {out.stderr.strip()}. Retrying without labels…",
+            file=sys.stderr,
+        )
         cmd_no_label = [c for c in cmd if c != "--label" and c not in labels]
         out2 = subprocess.run(cmd_no_label, capture_output=True, text=True, check=False)
         if out2.returncode != 0:
             raise RuntimeError(f"gh issue create failed for {slug}:\n{out.stderr}\n{out2.stderr}")
-        url = out2.stdout.strip()
-        return url
+        print(
+            f"_create_issue: created {slug} WITHOUT labels {labels} — fix labels manually.",
+            file=sys.stderr,
+        )
+        return out2.stdout.strip()
     return out.stdout.strip()
 
 
@@ -294,7 +317,12 @@ def main() -> int:
             print(f"  ✓ skip (already has url): {slug}")
             skipped += 1
             continue
-        existing = _existing_issue(slug)
+        try:
+            existing = _existing_issue(slug)
+        except RuntimeError as exc:
+            failed.append(slug)
+            print(f"  ✗ FAILED to query existing issue for {slug}: {exc}", file=sys.stderr)
+            continue
         if existing:
             story["issue_url"] = existing
             print(f"  ✓ found existing: {slug} → {existing}")

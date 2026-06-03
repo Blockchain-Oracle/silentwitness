@@ -1,11 +1,23 @@
 """License gate — fail CI if any installed dep ships under a denied license.
 
 Invoked from .github/workflows/ci.yml `license-check` job after pip-licenses
-emits licenses.json. The deny list is the hackathon rules' AGPL-3.0 / GPL-3.0
-ban plus "UNKNOWN" / "Proprietary" — see CICD_SPEC §4.1 and architecture.md §13.
+emits licenses.json. The deny list is:
+
+  * AGPL-3.0 variants (hackathon-rules ban — see CICD_SPEC §2 and §4.3)
+  * GPL-3.0 variants  (hackathon-rules ban — same)
+  * UNKNOWN            (deny-by-default: pip-licenses emits this for deps with
+                       unparseable metadata; treating unparseable as ALLOW would
+                       be a silent supply-chain hole — see CICD_SPEC §1173 runbook)
+  * Proprietary        (same rationale — closed-source bundled deps would not
+                       satisfy the MIT/Apache submission rules)
 
 LGPL is allowed for runtime-linked deps only; Python dynamic linking means we
-never trip the LGPL static-link clause (CICD_SPEC §2).
+never trip the LGPL static-link clause (CICD_SPEC §2 + §4.3).
+
+A gate that defaults to PASS on weird input is worse than useless — this
+script raises on an unrecognised payload shape and on entries that expose no
+license keys at all, so a future pip-licenses output-format change cannot
+silently neuter the check (architecture.md §14).
 
 Usage::
 
@@ -15,6 +27,7 @@ Usage::
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -34,26 +47,52 @@ _DENIED: frozenset[str] = frozenset(
     }
 )
 
+# pip-licenses may emit multiple SPDX IDs joined by ``;``, ``/``, or ``OR``
+# (case-insensitive) inside a single ``License`` string. Tokenise before
+# matching so e.g. ``"MIT; AGPL-3.0"`` does not slip past the gate.
+_LICENSE_SEPARATOR = re.compile(r"[;/]|\sOR\s", re.IGNORECASE)
+
 
 def _entries(payload: object) -> list[dict[str, object]]:
-    """pip-licenses emits a top-level JSON array; tolerate a wrapping object too."""
+    """pip-licenses emits a top-level JSON array; tolerate a wrapping object too.
+
+    Raises ``ValueError`` on any other shape — silently returning ``[]`` would
+    convert an output-format change into a green CI run.
+    """
     if isinstance(payload, list):
         return [e for e in payload if isinstance(e, dict)]
     if isinstance(payload, dict) and isinstance(payload.get("packages"), list):
         return [e for e in payload["packages"] if isinstance(e, dict)]
-    return []
+    raise ValueError(
+        "unrecognised pip-licenses payload — expected a list of objects, or an "
+        f"object with a `packages` array. Got top-level type {type(payload).__name__}."
+    )
 
 
 def _license_strings(entry: dict[str, object]) -> list[str]:
-    """A package may list its license under `License` (pip-licenses) or as a
-    `Classifier` list. Normalise both to lowercase strings for matching."""
+    """Return every lowercased license identifier extracted from an entry.
+
+    Handles both the ``License`` (string, possibly multi-license-joined) and
+    ``LicenseClassifier`` (list) keys. Raises ``ValueError`` if neither key
+    is present in a recognisable form — an entry with no exposed license
+    surface means pip-licenses changed shape and the gate cannot evaluate it.
+    """
     out: list[str] = []
     lic = entry.get("License")
     if isinstance(lic, str):
-        out.append(lic.strip().lower())
+        for tok in _LICENSE_SEPARATOR.split(lic):
+            cleaned = tok.strip().lower()
+            if cleaned:
+                out.append(cleaned)
     classifiers = entry.get("LicenseClassifier")
     if isinstance(classifiers, list):
-        out.extend(c.strip().lower() for c in classifiers if isinstance(c, str))
+        out.extend(c.strip().lower() for c in classifiers if isinstance(c, str) and c.strip())
+    if not out:
+        name = entry.get("Name", "<unknown>")
+        raise ValueError(
+            f"entry {name!r} exposes no `License` or `LicenseClassifier` key — "
+            "pip-licenses output shape changed; gate cannot evaluate this package."
+        )
     return out
 
 
@@ -79,14 +118,21 @@ def main(argv: list[str]) -> int:
     if not path.exists():
         print(f"license_gate: {path} does not exist", file=sys.stderr)
         return 2
-    offenders = audit(path)
+    try:
+        offenders = audit(path)
+    except json.JSONDecodeError as exc:
+        print(f"license_gate: {path} is not valid JSON: {exc}", file=sys.stderr)
+        return 2
+    except ValueError as exc:
+        print(f"license_gate: gate broken — {exc}", file=sys.stderr)
+        return 2
     if offenders:
         print("license_gate: DENIED licenses detected:", file=sys.stderr)
         for name, lic in offenders:
             print(f"  - {name}: {lic.upper()}", file=sys.stderr)
         print(
             "Hackathon rules require MIT / Apache-2.0 / BSD-style; "
-            "AGPL and GPL-3.0 are release blockers (CICD_SPEC §4.1).",
+            "AGPL and GPL-3.0 are release blockers (CICD_SPEC §2 + §4.3).",
             file=sys.stderr,
         )
         return 1
