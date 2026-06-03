@@ -18,7 +18,7 @@ import pytest
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.evidence.registry import (
-    AlreadyRegisteredError,
+    EvidenceContentDriftError,
     EvidenceNotRegisteredError,
     EvidenceRegistry,
     EvidenceRegistryError,
@@ -113,7 +113,7 @@ def test_double_register_different_content_raises(tmp_path: Path) -> None:
     reg.register(path=fixture, evidence_type=EvidenceType.DISK_IMAGE, audit_id=_AUDIT_ID)
 
     fixture.write_bytes(b"tampered content\n")
-    with pytest.raises(AlreadyRegisteredError) as excinfo:
+    with pytest.raises(EvidenceContentDriftError) as excinfo:
         reg.register(
             path=fixture,
             evidence_type=EvidenceType.DISK_IMAGE,
@@ -269,14 +269,17 @@ def test_load_malformed_manifest_raises(tmp_path: Path) -> None:
     case_dir.mkdir()
     (case_dir / "evidence.json").write_text("not even close to json", encoding="utf-8")
     reg = EvidenceRegistry(case_dir=case_dir)
-    with pytest.raises(json.JSONDecodeError):
+    with pytest.raises(EvidenceRegistryError, match="unreadable or malformed") as excinfo:
         reg.list_all()
+    assert isinstance(excinfo.value.__cause__, json.JSONDecodeError)
 
 
 def test_load_manifest_wrong_shape_raises(tmp_path: Path) -> None:
     case_dir = tmp_path / "case"
     case_dir.mkdir()
-    (case_dir / "evidence.json").write_text(json.dumps({"oops": []}), encoding="utf-8")
+    (case_dir / "evidence.json").write_text(
+        json.dumps({"schema_version": 1, "oops": []}), encoding="utf-8"
+    )
     reg = EvidenceRegistry(case_dir=case_dir)
     with pytest.raises(EvidenceRegistryError, match="missing 'records'"):
         reg.list_all()
