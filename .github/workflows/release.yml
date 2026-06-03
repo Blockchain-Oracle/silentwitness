@@ -24,11 +24,11 @@ jobs:
     name: semantic-release
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: astral-sh/setup-uv@v4
+      - uses: astral-sh/setup-uv@v7
         with:
           version: "0.11.18"
           enable-cache: true
@@ -43,7 +43,7 @@ jobs:
 
       - name: Build + push versioned Docker image
         if: steps.release.outputs.released != 'none'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64,linux/arm64
