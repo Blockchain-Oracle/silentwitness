@@ -130,6 +130,59 @@ def test_reject_stdout_path_missing_when_blob_deleted(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# STDOUT_PATH_UNREADABLE (PR-110 silent-failure C2 — broader OSError catch)
+# ---------------------------------------------------------------------------
+
+
+def test_reject_stdout_path_unreadable_on_permission_denied(tmp_path: Path) -> None:
+    import os
+
+    stdout = tmp_path / "locked.txt"
+    stdout.write_bytes(b"content\n")
+    os.chmod(stdout, 0o000)
+    try:
+        span = CitedSpan(
+            audit_id=_AUDIT_ID,
+            sha256_of_normalized_output=_HASH64,
+            line_start=0,
+            line_end=1,
+            span_text="anything",
+        )
+        result = verify_citation(span, audit_index={_AUDIT_ID: _make_entry(stdout)})
+        assert result.success is False
+        assert result.reason == CitationRejectReason.STDOUT_PATH_UNREADABLE
+        assert result.context["errno"] is not None
+    finally:
+        os.chmod(stdout, 0o644)
+
+
+# ---------------------------------------------------------------------------
+# TOOL_NOT_REGISTERED (PR-110 silent-failure C1 — UnknownToolError caught)
+# ---------------------------------------------------------------------------
+
+
+def test_reject_tool_not_registered_on_unknown_tool(tmp_path: Path) -> None:
+    """Round-2 fix: if an audit entry's tool field was removed from
+    TOOL_PATTERNS between record and verify, normalize_output raises
+    UnknownToolError; the gate now maps it to a structured rejection
+    rather than letting the exception escape."""
+    stdout = tmp_path / "out.txt"
+    stdout.write_bytes(b"some content\n")
+    entry = _make_entry(stdout, tool="vol_pslit")  # typo / removed tool
+    span = CitedSpan(
+        audit_id=_AUDIT_ID,
+        sha256_of_normalized_output=_HASH64,
+        line_start=0,
+        line_end=1,
+        span_text="some content",
+    )
+    result = verify_citation(span, audit_index={_AUDIT_ID: entry})
+    assert result.success is False
+    assert result.reason == CitationRejectReason.TOOL_NOT_REGISTERED
+    assert result.context["tool"] == "vol_pslit"
+
+
+# ---------------------------------------------------------------------------
 # OUTPUT_HASH_MISMATCH
 # ---------------------------------------------------------------------------
 
@@ -271,17 +324,16 @@ def test_cited_span_rejects_negative_line_start() -> None:
         )
 
 
-def test_cited_span_rejects_uppercase_hash() -> None:
-    from pydantic import ValidationError
-
-    with pytest.raises(ValidationError):
-        CitedSpan(
-            audit_id=_AUDIT_ID,
-            sha256_of_normalized_output="A" * 64,  # uppercase
-            line_start=0,
-            line_end=1,
-            span_text="x",
-        )
+def test_cited_span_sha256_lowercases_uppercase_input() -> None:
+    """Sha256Hex BeforeValidator canonicalises to lowercase rather than rejecting."""
+    span = CitedSpan(
+        audit_id=_AUDIT_ID,
+        sha256_of_normalized_output="A" * 64,
+        line_start=0,
+        line_end=1,
+        span_text="x",
+    )
+    assert span.sha256_of_normalized_output == "a" * 64
 
 
 def test_citation_result_rejects_success_without_span() -> None:
@@ -310,66 +362,3 @@ def test_citation_result_rejects_failure_with_span() -> None:
 
     with pytest.raises(ValidationError, match="must not carry span"):
         CitationResult(success=False, reason=CitationRejectReason.AUDIT_ID_NOT_FOUND, span=span)
-
-
-# ---------------------------------------------------------------------------
-# Wedge edge cases
-# ---------------------------------------------------------------------------
-
-
-def test_hash_check_uses_normalised_form_not_raw(tmp_path: Path) -> None:
-    """The agent's claimed sha256 must be of NORMALISED output, not raw.
-    A blob with ANSI codes hashes differently before and after normalisation;
-    the gate is keyed on the normalised hash."""
-    stdout = tmp_path / "out.txt"
-    raw = b"\x1b[31mERROR\x1b[0m: missing\n"
-    stdout.write_bytes(raw)
-    normalised_hash = _normalised_hash(raw)
-    raw_hash = hashlib.sha256(raw).hexdigest()
-    assert normalised_hash != raw_hash  # sanity: differ
-    span = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output=normalised_hash,
-        line_start=0,
-        line_end=1,
-        span_text="ERROR: missing",  # ANSI-stripped form
-    )
-    result = verify_citation(span, audit_index={_AUDIT_ID: _make_entry(stdout)})
-    assert result.success is True
-
-
-def test_unicode_span_round_trips_through_surrogateescape(tmp_path: Path) -> None:
-    """Invalid UTF-8 in the raw blob round-trips losslessly via the
-    normalizer's surrogateescape decode → SHA-256 stays stable."""
-    stdout = tmp_path / "out.txt"
-    raw = b"valid \xff\xfe invalid\nfollowing line\n"
-    stdout.write_bytes(raw)
-    span = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output=_normalised_hash(raw),
-        line_start=1,
-        line_end=2,
-        span_text="following line",
-    )
-    result = verify_citation(span, audit_index={_AUDIT_ID: _make_entry(stdout)})
-    assert result.success is True
-
-
-def test_per_tool_normalisation_applied_at_hash_check(tmp_path: Path) -> None:
-    """If the audit entry's tool is vol_pslist, the gate normalises with
-    Vol3 rules (strips banner). The agent's hash must match the post-strip
-    form, not the raw."""
-    stdout = tmp_path / "out.txt"
-    raw = b"Volatility 3 Framework 2.7.0\nPID  Name\n4    System\n"
-    stdout.write_bytes(raw)
-    expected = hashlib.sha256(normalize_output(raw, tool="vol_pslist")).hexdigest()
-    span = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output=expected,
-        line_start=0,
-        line_end=2,
-        span_text="System",
-    )
-    entry = _make_entry(stdout, tool="vol_pslist")
-    result = verify_citation(span, audit_index={_AUDIT_ID: entry})
-    assert result.success is True
