@@ -155,28 +155,21 @@ _BASE_CONFIG = ConfigDict(
 
 
 class CitedSpan(BaseModel):
-    """Line-range pointer into a stored tool-output blob. The citation gate
-    (architecture.md §4.5) re-hashes the cited slice at evaluation time and
-    refuses observations whose recorded ``content_sha256`` no longer matches."""
+    """Agent-emitted citation (architecture §4.5). Line indices are 0-based
+    Python-slice semantics (half-open: ``lines[line_start:line_end]``)."""
 
     model_config = _BASE_CONFIG
 
-    stdout_path: Path = Field(
-        description="Absolute path to the normalised tool-output blob produced "
-        "by a prior MCP tool call (DataProvenance.stdout_path)."
-    )
-    line_start: int = Field(ge=1, description="1-indexed first line of the span (inclusive).")
-    line_end: int = Field(ge=1, description="1-indexed last line of the span (inclusive).")
-    content_sha256: Sha256Hex = Field(
-        description="SHA-256 hex digest of the cited byte range. "
-        "The citation gate verifies this on every observation."
-    )
+    audit_id: str = Field(min_length=1)
+    sha256_of_normalized_output: Sha256Hex
+    line_start: int = Field(ge=0)
+    line_end: int = Field(ge=0)
+    span_text: str = Field(min_length=1)
 
     @model_validator(mode="after")
     def _check_line_range(self) -> CitedSpan:
-        if self.line_end < self.line_start:
-            msg = f"line_end ({self.line_end}) must be >= line_start ({self.line_start})"
-            raise ValueError(msg)
+        if self.line_end <= self.line_start:
+            raise ValueError(f"line_end ({self.line_end}) must be > line_start ({self.line_start})")
         return self
 
 

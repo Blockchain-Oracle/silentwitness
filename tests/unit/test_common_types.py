@@ -39,10 +39,11 @@ _HASH64 = "a" * 64
 
 def _cited_span() -> CitedSpan:
     return CitedSpan(
-        stdout_path=Path("/var/lib/silentwitness/stdout/pslist-001.out"),
+        audit_id="sift-aj-20260613-007",
+        sha256_of_normalized_output=_HASH64,
         line_start=10,
         line_end=12,
-        content_sha256=_HASH64,
+        span_text="svchost.exe at PID 1208",
     )
 
 
@@ -98,27 +99,36 @@ def test_observation_rejects_unknown_field() -> None:
 def test_cited_span_rejects_negative_line_start() -> None:
     with pytest.raises(ValidationError):
         CitedSpan(
-            stdout_path=Path("/x"),
+            audit_id="sift-aj-20260613-001",
+            sha256_of_normalized_output=_HASH64,
             line_start=-1,
             line_end=5,
-            content_sha256=_HASH64,
+            span_text="x",
         )
 
 
-def test_cited_span_rejects_line_end_before_start() -> None:
+def test_cited_span_rejects_line_end_le_start() -> None:
+    """Half-open Python-slice semantics — line_end must be strictly > line_start."""
     with pytest.raises(ValidationError):
         CitedSpan(
-            stdout_path=Path("/x"),
+            audit_id="sift-aj-20260613-001",
+            sha256_of_normalized_output=_HASH64,
             line_start=10,
-            line_end=5,
-            content_sha256=_HASH64,
+            line_end=10,  # equal is now rejected (was accepted under 1-indexed inclusive)
+            span_text="x",
         )
 
 
-def test_cited_span_accepts_single_line_span() -> None:
-    """line_end == line_start is a legitimate single-line citation."""
-    span = CitedSpan(stdout_path=Path("/x"), line_start=10, line_end=10, content_sha256=_HASH64)
-    assert span.line_start == span.line_end == 10
+def test_cited_span_sha256_normalised_to_lowercase() -> None:
+    """Sha256Hex BeforeValidator lowercases uppercase hex on construction."""
+    span = CitedSpan(
+        audit_id="sift-aj-20260613-001",
+        sha256_of_normalized_output="A" * 64,
+        line_start=0,
+        line_end=1,
+        span_text="x",
+    )
+    assert span.sha256_of_normalized_output == "a" * 64
 
 
 # ---------------------------------------------------------------------------
@@ -321,52 +331,41 @@ def test_tool_response_failure_forbids_data() -> None:
         )
 
 
+def _bare_cited_span(sha: object) -> CitedSpan:
+    """Builder used by Sha256Hex tests — keeps Sha256Hex the only variable."""
+    return CitedSpan(
+        audit_id="sift-aj-20260613-001",
+        sha256_of_normalized_output=sha,  # type: ignore[arg-type]
+        line_start=0,
+        line_end=1,
+        span_text="x",
+    )
+
+
 def test_sha256hex_lowercases_uppercase_input() -> None:
     """The Sha256Hex BeforeValidator must canonicalise to lowercase before
     the StringConstraints pattern check fires."""
-    span = CitedSpan(
-        stdout_path=Path("/x"),
-        line_start=1,
-        line_end=1,
-        content_sha256="A" * 64,
-    )
-    assert span.content_sha256 == "a" * 64
+    span = _bare_cited_span("A" * 64)
+    assert span.sha256_of_normalized_output == "a" * 64
 
 
 def test_sha256hex_rejects_non_hex_characters() -> None:
     """A 64-char non-hex string (e.g. 64 'g' chars) must fail validation."""
     with pytest.raises(ValidationError):
-        CitedSpan(
-            stdout_path=Path("/x"),
-            line_start=1,
-            line_end=1,
-            content_sha256="g" * 64,
-        )
+        _bare_cited_span("g" * 64)
 
 
 def test_sha256hex_rejects_wrong_length() -> None:
     """A short hex string (e.g. 32 chars) must fail the pattern length anchor."""
     with pytest.raises(ValidationError):
-        CitedSpan(
-            stdout_path=Path("/x"),
-            line_start=1,
-            line_end=1,
-            content_sha256="a" * 32,
-        )
+        _bare_cited_span("a" * 32)
 
 
 def test_sha256hex_rejects_non_string_input() -> None:
-    """A non-string value (int, bytes, None) must fail loudly at the type
-    layer. _lower_if_str is identity for non-strings; StringConstraints then
-    rejects the wrong type."""
+    """A non-string value (int, bytes, None) must fail loudly at the type layer."""
     for bad in (12345, b"a" * 64, None):
         with pytest.raises(ValidationError):
-            CitedSpan(
-                stdout_path=Path("/x"),
-                line_start=1,
-                line_end=1,
-                content_sha256=bad,  # type: ignore[arg-type]
-            )
+            _bare_cited_span(bad)
 
 
 def test_data_provenance_cmd_argv_roundtrip_preserves_tuple() -> None:
