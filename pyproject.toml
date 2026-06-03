@@ -41,7 +41,7 @@ dependencies = [
     # NER for entity gate
     "spacy>=3.8.10,<3.9",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
-    "volatility3==2.27.0",
+    "volatility3==2.28.0",
 ]
 
 [dependency-groups]
