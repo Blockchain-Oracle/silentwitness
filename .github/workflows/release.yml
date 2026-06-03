@@ -34,6 +34,9 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --all-extras --frozen
+      - name: Compute lowercase owner (GHCR rejects mixed-case repo names)
+        id: owner
+        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
       - name: python-semantic-release version + changelog
         id: release
@@ -49,7 +52,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.release.outputs.released }}
+            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:${{ steps.release.outputs.released }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}

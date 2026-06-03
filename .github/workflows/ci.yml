@@ -249,6 +249,9 @@ jobs:
       - name: Compute short SHA
         id: sha
         run: echo "short=$(git rev-parse --short=7 HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Compute lowercase owner (GHCR rejects mixed-case repo names)
+        id: owner
+        run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
       - name: Build + push
         uses: docker/build-push-action@v6
         with:
@@ -256,8 +259,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/silentwitness:latest
-            ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
+            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:latest
+            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:${{ steps.sha.outputs.short }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -270,7 +273,7 @@ jobs:
         # latest existing tag with the correct `v` prefix as of 2026-06-03.
         uses: aquasecurity/trivy-action@v0.36.0
         with:
-          image-ref: ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
+          image-ref: ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:${{ steps.sha.outputs.short }}
           format: sarif
           output: trivy-results.sarif
           severity: HIGH,CRITICAL
