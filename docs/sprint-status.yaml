@@ -74,11 +74,11 @@ stories:
 
   - id: story-audit-logger
     epic: "Epic 2 — Common types + audit infrastructure"
-    status: PENDING
-    depends_on: [common-types]
+    status: COMPLETE
+    depends_on: [common-types, atomic-io]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/7"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/100"
+    merged_at: "2026-06-03T14:30:00Z"
 
   - id: story-evidence-registry
     epic: "Epic 2 — Common types + audit infrastructure"
@@ -98,11 +98,11 @@ stories:
 
   - id: story-atomic-io
     epic: "Epic 2 — Common types + audit infrastructure"
-    status: PENDING
-    depends_on: [common-types]
+    status: COMPLETE
+    depends_on: [scaffold-uv-pyproject]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/10"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/99"
+    merged_at: "2026-06-03T13:55:00Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 3 — Verification gates
