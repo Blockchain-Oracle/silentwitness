@@ -1,0 +1,174 @@
+[project]
+name = "silentwitness"
+version = "0.1.0"
+description = "A hypothesis-first DFIR investigator whose report writes itself, with every claim locked to the tool that produced it."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Blockchain-Oracle", email = "ajweb3dev@gmail.com" }]
+keywords = ["dfir", "incident-response", "forensics", "mcp", "agent", "sift"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+]
+dependencies = [
+    # Core MCP + agent stack — audit-corrected pins (CVE closures)
+    "mcp>=1.23.0,<2.0",
+    # `pydantic-ai` is a meta-package that already bundles every provider —
+    # anthropic, openai, google, mcp, fastmcp — via `pydantic-ai-slim[*]`. The
+    # custom extras quoted in architecture.md §1 (`[anthropic,openai,google,
+    # ollama,mcp,fastmcp]`) do NOT exist on the meta-package — uv warns about
+    # each unresolved extra. Plain `pydantic-ai` gives us the full surface
+    # including ollama (via openai-compatible). architecture.md §1 to be
+    # updated to drop the extras list.
+    "pydantic-ai>=1.105.0,<2.0.0",
+    "pydantic>=2.9",
+    # CLI + terminal UI
+    "typer>=0.15",
+    "rich>=14.1,<16",
+    # Report rendering — CVE-closing pins
+    "weasyprint>=68.1,<70.0",
+    "mistune>=3.2.1",
+    # HTTP client (replaces requests)
+    "httpx>=0.27",
+    # NER for entity gate
+    "spacy>=3.8.10,<3.9",
+    # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
+    "volatility3==2.27.0",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8",
+    "hypothesis>=6",
+    "coverage[toml]>=7.6",
+    "pre-commit>=4",
+    "detect-secrets>=1.5",
+    # The PyPI package is `cyclonedx-bom` (the SBOM generator); it installs a
+    # console script named `cyclonedx-py` which CI invokes. architecture.md §1,
+    # CICD_SPEC.md §2 and BRAINSTORM.md §3.5 each refer to the *package* as
+    # `cyclonedx-py>=4` — that's the spec slip; the unrelated `cyclonedx-py`
+    # package on PyPI tops out at 1.0.x and is not the SBOM generator.
+    "cyclonedx-bom>=7",
+    "pip-licenses>=5",
+    "python-semantic-release>=9",
+]
+
+[project.scripts]
+silentwitness = "silentwitness_agent.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/Blockchain-Oracle/silentwitness"
+Repository = "https://github.com/Blockchain-Oracle/silentwitness"
+Issues = "https://github.com/Blockchain-Oracle/silentwitness/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/silentwitness_mcp",
+    "src/silentwitness_agent",
+    "src/silentwitness_common",
+]
+
+[tool.uv]
+required-version = "==0.11.18"
+
+# Ruff config lives in ./ruff.toml — intentionally not inlined here so the
+# standalone file remains the single source of truth.
+
+# ----------------------------------------------------------------------
+# Coverage — gates per CICD_SPEC §8
+# ----------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common"]
+branch = true
+parallel = true
+data_file = ".coverage"
+# CLI entry-point and PDF renderer are smoke-tested via integration only —
+# excluding them prevents the 85% gate from being pulled down by code paths
+# that integration covers (see CICD_SPEC §8.1 / §8.2). Paths are tolerated by
+# coverage.py even before the files exist.
+omit = [
+    "src/silentwitness_agent/cli.py",
+    "src/silentwitness_agent/report/pdf.py",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+sort = "Cover"
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+fail_under = 85
+
+# ----------------------------------------------------------------------
+# python-semantic-release — verbatim per CICD_SPEC §7.3
+# ----------------------------------------------------------------------
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/silentwitness_mcp/__init__.py:__version__"]
+build_command = "uv build"
+major_on_zero = false
+upload_to_pypi = false
+upload_to_release = true
+# `[skip ci]` prevents the release commit from re-triggering the CI workflow.
+commit_message = "chore(release): {version}\n\n[skip ci]"
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    "^chore\\(release\\):",
+    "^chore\\(deps\\):",
+]
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "docs", "style", "refactor", "perf",
+                "test", "build", "ci", "chore", "revert"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+# ----------------------------------------------------------------------
+# pytest
+# ----------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "integration: end-to-end tests against real evidence (skipped by default)",
+    "property: hypothesis property-based tests",
+    "slow: takes more than 10s",
+]
+
+# ----------------------------------------------------------------------
+# hypothesis profiles
+# ----------------------------------------------------------------------
+[tool.hypothesis]
+deadline = 5000
