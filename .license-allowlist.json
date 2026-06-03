@@ -1,0 +1,14 @@
+{
+  "_meta": {
+    "description": "Per-package overrides for scripts/license_gate.py. Each entry must have an spdx_license (the actual SPDX identifier verified against the dist-info LICENSE file or upstream repo) and a rationale (why this audit-level exemption is sound). Add entries here ONLY after verifying the LICENSE file in `.venv/lib/python*/site-packages/<pkg>*.dist-info/licenses/LICENSE` or the upstream source.",
+    "review_cadence": "Re-audit every entry whenever the dep version bumps (Dependabot PRs trigger a fresh metadata check)."
+  },
+  "mistralai": {
+    "spdx_license": "Apache-2.0",
+    "rationale": "Transitive dep of pydantic-ai for the Mistral provider. pip-licenses reports UNKNOWN because mistralai 2.4.8's PyPI metadata does NOT set the License classifier — but the dist-info ships the verbatim Apache-2.0 LICENSE file (verified 2026-06-03 on mistralai 2.4.8). This is an upstream-packaging gap, not a real licensing issue. Re-verify when mistralai version bumps."
+  },
+  "caio": {
+    "spdx_license": "Apache-2.0",
+    "rationale": "Transitive dep: caio 0.9.25 is pulled in by aiofile (filetree extra). pip-licenses reports UNKNOWN because the PyPI metadata has License: NOT SET, no Trove classifier, AND no LICENSE file in the dist-info (worse packaging than mistralai). Upstream repo at https://github.com/mosquito/caio ships LICENSE = Apache-2.0 (verified 2026-06-03). Re-verify when caio version bumps."
+  }
+}

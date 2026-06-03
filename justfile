@@ -49,11 +49,13 @@ property:
     HYPOTHESIS_PROFILE=slow uv run pytest tests/property -v --hypothesis-show-statistics
 
 # Full CI gate locally (matches .github/workflows/ci.yml).
+# cyclonedx-py flags + license_gate allowlist match the CI workflow deviations
+# enumerated in `.github/workflows/ci.yml` header (items 6 + 7).
 ci: lint test property
     uv run python .pre-commit-hooks/file-size-guard.py $(git ls-files '*.py')
-    uv run cyclonedx-py environment --output-format JSON --output-file sbom.cdx.json --schema-version 1.6
+    uv run cyclonedx-py environment --of JSON -o sbom.cdx.json
     uv run pip-licenses --format=json --output-file=licenses.json
-    uv run python scripts/license_gate.py licenses.json
+    uv run python scripts/license_gate.py licenses.json --allowlist .license-allowlist.json
 
 # Clean caches + build artifacts.
 clean:

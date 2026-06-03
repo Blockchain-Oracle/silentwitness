@@ -162,6 +162,95 @@ def test_license_gate_accepts_empty_array(tmp_path: Path) -> None:
     assert result.returncode == 0
 
 
+def test_license_gate_allowlist_skips_denied_package(tmp_path: Path) -> None:
+    """A package in the allowlist must NOT count as an offender even when its
+    reported license is in the deny list (typically because pip-licenses
+    metadata reports UNKNOWN for a package whose dist-info LICENSE is
+    actually a permissive SPDX-id — like mistralai 2.4.8 on Apache-2.0)."""
+    licenses_json = tmp_path / "licenses.json"
+    licenses_json.write_text(
+        json.dumps([{"Name": "mistralai", "License": "UNKNOWN"}]), encoding="utf-8"
+    )
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text(
+        json.dumps(
+            {
+                "mistralai": {
+                    "spdx_license": "Apache-2.0",
+                    "rationale": "test fixture — dist-info LICENSE audited",
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_LICENSE_GATE),
+            str(licenses_json),
+            "--allowlist",
+            str(allowlist),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert (
+        result.returncode == 0
+    ), f"allowlist hit should clear the gate; got {result.returncode}: {result.stderr}"
+    assert "allowlist hit" in result.stderr, "stderr must log the override"
+
+
+def test_license_gate_allowlist_rejects_entry_without_rationale(tmp_path: Path) -> None:
+    """Every allowlist entry must have a non-empty rationale — otherwise the
+    file becomes a write-only escape hatch with no audit trail."""
+    licenses_json = tmp_path / "licenses.json"
+    licenses_json.write_text(json.dumps([{"Name": "pkg", "License": "MIT"}]), encoding="utf-8")
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text(
+        json.dumps({"pkg": {"spdx_license": "MIT", "rationale": ""}}),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(_LICENSE_GATE),
+            str(licenses_json),
+            "--allowlist",
+            str(allowlist),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 2, "empty-rationale allowlist must surface as gate-broken"
+    assert "rationale" in result.stderr.lower()
+
+
+def test_license_gate_allowlist_skips_underscore_prefixed_meta_keys(tmp_path: Path) -> None:
+    """``_meta`` and other underscore-prefixed keys are documentation, not
+    package overrides. They must not be validated as entries."""
+    licenses_json = tmp_path / "licenses.json"
+    licenses_json.write_text(json.dumps([{"Name": "pkg", "License": "MIT"}]), encoding="utf-8")
+    allowlist = tmp_path / "allowlist.json"
+    allowlist.write_text(
+        json.dumps(
+            {
+                "_meta": {"description": "metadata only — no spdx_license required"},
+                "pkg": {"spdx_license": "MIT", "rationale": "ok"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, str(_LICENSE_GATE), str(licenses_json), "--allowlist", str(allowlist)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+
+
 def test_license_gate_exits_2_on_missing_file(tmp_path: Path) -> None:
     result = subprocess.run(
         [sys.executable, str(_LICENSE_GATE), str(tmp_path / "nope.json")],
