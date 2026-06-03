@@ -43,6 +43,7 @@ process).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -116,21 +117,45 @@ class EntityResult(BaseModel):
 
 
 _nlp_cache: Any = None  # spacy.Language at runtime; Any to avoid import at type-check
+_NLP_LOAD_FAILED: object = object()  # sentinel — distinguishes "tried + failed" from "untried"
+
+
+class EntityGateModelError(RuntimeError):
+    """Raised when the spaCy ``en_core_web_lg`` model required by the gate
+    is not installed. Wraps the underlying ``OSError`` with an actionable
+    install command so operators see context, not a raw spaCy traceback
+    (PR-112 silent-failure HIGH-9).
+    """
 
 
 def _get_nlp() -> Any:
     """Lazy-load and cache spaCy ``en_core_web_lg``. First call: ~3 s + 750 MB.
 
-    Raises :class:`OSError` (spaCy's signal for missing model) if the model
-    isn't installed. The CI workflow ``ci.yml`` includes a
-    ``python -m spacy download en_core_web_lg`` step before running gate
-    tests.
+    Raises :class:`EntityGateModelError` if the model isn't installed. The
+    CI workflow ``ci.yml`` includes a ``python -m spacy download en_core_web_lg``
+    step before running gate tests. PR-112 code-reviewer #5 — once a load
+    attempt fails we cache the failure sentinel so subsequent calls
+    re-raise immediately instead of retrying the (expensive) filesystem
+    scan from scratch.
     """
     global _nlp_cache
+    if _nlp_cache is _NLP_LOAD_FAILED:
+        raise EntityGateModelError(
+            "spaCy en_core_web_lg model unavailable — install via "
+            "`uv run python -m spacy download en_core_web_lg`"
+        )
     if _nlp_cache is None:
         import spacy as _spacy
 
-        _nlp_cache = _spacy.load("en_core_web_lg")
+        try:
+            _nlp_cache = _spacy.load("en_core_web_lg")
+        except OSError as exc:
+            _nlp_cache = _NLP_LOAD_FAILED
+            raise EntityGateModelError(
+                "Entity gate requires spaCy model 'en_core_web_lg' (~750 MB). "
+                "Install via: uv run python -m spacy download en_core_web_lg. "
+                f"Underlying spaCy error: {exc}"
+            ) from exc
     return _nlp_cache
 
 
@@ -212,13 +237,41 @@ def _build_cited_corpus(cited_spans: Sequence[CitedSpan]) -> str:
 
 
 def _entity_in_corpus(entity: ExtractedEntity, corpus: str) -> bool:
+    """Anchored substring check (PR-112 silent-failure CRITICAL-3).
+
+    The previous ``entity.text in corpus`` permitted ``10.0.0.1`` in
+    observation to match ``10.0.0.10`` in corpus — a false-positive
+    acceptance because pure substring containment doesn't enforce token
+    equality. Now use a regex with non-word-char boundaries on either
+    side so ``10.0.0.1`` only matches when surrounded by whitespace,
+    punctuation, or end-of-string.
+
+    Path entities are still pre-normalised (case-fold + backslash →
+    forward-slash) before the boundary check.
+    """
+    needle = entity.text
+    haystack = corpus
     if entity.kind in _PATH_KINDS:
-        return _path_normalise(entity.text) in _path_normalise(corpus)
-    return entity.text.casefold() in corpus.casefold()
+        needle = _path_normalise(needle)
+        haystack = _path_normalise(haystack)
+    else:
+        needle = needle.casefold()
+        haystack = haystack.casefold()
+    # ``(?<!\w)`` / ``(?!\w)`` are non-word boundaries — exactly what we
+    # want for IPs, hashes, accounts, ports, etc. that may contain dots,
+    # slashes, or backslashes (none of which are ``\w``).
+    pattern = re.compile(r"(?<!\w)" + re.escape(needle) + r"(?!\w)")
+    return pattern.search(haystack) is not None
 
 
 def _path_normalise(text: str) -> str:
     return text.replace("\\", "/").casefold()
 
 
-__all__ = ["EntityResult", "ExtractedEntity", "verify_entities"]
+__all__ = [
+    "EntityGateModelError",
+    "EntityKind",
+    "EntityResult",
+    "ExtractedEntity",
+    "verify_entities",
+]

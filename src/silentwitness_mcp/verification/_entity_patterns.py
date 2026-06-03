@@ -68,41 +68,58 @@ class RegexRule:
 # SHA-1 (SHA-1's 40-hex prefix is contained in SHA-256's 64-hex match), and
 # URL before POSIX_PATH (URL embeds ``/`` segments that POSIX_PATH would
 # otherwise greedily match).
-_IPV4 = re.compile(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")
+# Octet-bounded IPv4 — rejects impossible octets like 999.999.999.999
+# (PR-112 silent-failure HIGH-8). Matches 0-255 per octet via three
+# alternative branches: 250-255, 200-249, 100-199, 10-99, 0-9.
+_OCTET = r"(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])"
+_IPV4 = re.compile(rf"\b(?:{_OCTET}\.){{3}}{_OCTET}\b")
 
-# Simplified IPv6 — full-form (8 groups) OR ``::``-compressed. Doesn't claim
-# RFC-5952 conformance; covers the practical shapes seen in Vol3 / EvtxECmd
-# output. False positives on long hex sequences are filtered by the
-# downstream substring check (the entity gate's safety net).
+# Simplified IPv6 — accepts any run of hex tokens separated by colons with
+# at least two colons. Covers full-form (8 groups), ``::``-compressed,
+# and lone-``::`` forms like ``::1`` (loopback). Leading boundary uses an
+# alternation lookbehind allowing start-of-string, whitespace, or
+# punctuation; trailing boundary requires a non-word follower so the
+# full address gets captured greedily (no truncation at the first ``::``
+# boundary like the previous version had). False positives on long
+# colon-separated hex strings are caught by the downstream word-boundary
+# substring check in the entity gate.
 _IPV6 = re.compile(
-    r"\b(?:"
-    r"(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}"  # full
-    r"|(?:[0-9a-fA-F]{1,4}:){1,7}:"  # leading ::
-    r"|(?:[0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}"  # trailing ::
-    r"|::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}"
-    r")\b"
+    r"(?:(?<=^)|(?<=[\s(\[,;]))"
+    r"[0-9a-fA-F]{0,4}(?::[0-9a-fA-F]{0,4}){2,7}"
+    r"(?=$|[\s,;)\]])"
 )
 
 _SHA256 = re.compile(r"\b[a-fA-F0-9]{64}\b")
 _SHA1 = re.compile(r"\b[a-fA-F0-9]{40}\b")
 _MD5 = re.compile(r"\b[a-fA-F0-9]{32}\b")
 
-_REGISTRY_KEY = re.compile(r"HK(?:LM|CU|U|CR|CC)\\[^\s\"']+")
+# re.IGNORECASE so lowercase Vol3 ``hklm\...`` also extracts (PR-112
+# silent-failure HIGH-7). Forensic tools mix case; substring check
+# downstream is also case-insensitive so the symmetry holds.
+_REGISTRY_KEY = re.compile(r"HK(?:LM|CU|U|CR|CC)\\[^\s\"',;)]+", re.IGNORECASE)
 
 # Windows path: drive letter + backslash + at least one segment. Trailing
-# backslash optional (directory references). Reserved chars excluded.
-_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\(?:[^\\<>:\"|?*\r\n]+\\?)+")
+# backslash optional (directory references). Reserved chars + whitespace +
+# prose punctuation excluded (PR-112 code-reviewer C1 — without the
+# whitespace exclusion the pattern greedily consumed the rest of the
+# sentence and produced false HALLUCINATED_ENTITIES verdicts).
+_WINDOWS_PATH = re.compile(r"[A-Za-z]:\\(?:[^\\<>:\"|?*\r\n\s,;)]+\\?)+")
 
 # URL — extracted BEFORE POSIX_PATH so http://example.com/path is captured
 # as URL, not as a POSIX path.
 _URL = re.compile(r"https?://[^\s)<>\"']+")
 
 # POSIX path — at least one path segment after the leading ``/``. Prose-
-# punctuation guard: trailing ``.`` / ``,`` / ``;`` / ``)`` are excluded
+# punctuation guard: trailing ``.`` / ``,`` / ``;`` / ``)`` excluded
 # so "the file /etc/passwd." extracts ``/etc/passwd`` (no trailing dot).
-_POSIX_PATH = re.compile(r"/(?:[^/\s<>\"']+/?)+")
+# PR-112 code-reviewer C2 — the previous pattern claimed this in its
+# docstring but didn't actually enforce it; punctuation chars are now
+# in the negated character class.
+_POSIX_PATH = re.compile(r"/(?:[^/\s<>\"',;.)]+/?)+")
 
-_ACCOUNT = re.compile(r"\b[A-Za-z][A-Za-z0-9_-]+\\[A-Za-z][A-Za-z0-9_.$-]+")
+# PR-112 code-reviewer #4 — added ``.`` to the domain class so FQDN-style
+# principals like ``CORP.LOCAL\Administrator`` extract correctly.
+_ACCOUNT = re.compile(r"\b[A-Za-z][A-Za-z0-9_.-]+\\[A-Za-z][A-Za-z0-9_.$-]+")
 
 _MUTEX = re.compile(r"(?:Global|Local)\\[A-Za-z0-9_\-.{}]+")
 

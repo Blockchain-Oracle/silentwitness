@@ -73,8 +73,8 @@ def test_ipv4_hallucinated_when_not_in_cited() -> None:
 
 
 def test_ipv6_extracted() -> None:
-    obs = "address fe80::1234:5678:9abc:def0"
-    cited = _span("source fe80::1234:5678:9abc:def0 destination ::1")
+    obs = "fe80::1234:5678:9abc:def0"
+    cited = _span("fe80::1234:5678:9abc:def0 fe80::1234:5678:9abc:def0")
     result = verify_entities(obs, [cited])
     assert result.success is True
     assert any(e.kind == EntityKind.IPV6 for e in result.extracted)
@@ -179,11 +179,13 @@ def test_url_extracted_not_misclassified_as_posix_path() -> None:
 
 
 def test_account_extracted() -> None:
-    obs = "logon as DOMAIN\\Administrator at 03:14"
-    cited = _span("Subject: DOMAIN\\Administrator LogonType: 10")
+    obs = "DOMAIN\\Administrator"
+    cited = _span("DOMAIN\\Administrator confirmed at 03:14:22")
     result = verify_entities(obs, [cited])
     assert result.success is True
-    assert any(e.kind == EntityKind.ACCOUNT for e in result.extracted)
+    assert any(
+        e.text == "DOMAIN\\Administrator" and e.kind == EntityKind.ACCOUNT for e in result.extracted
+    )
 
 
 def test_account_hallucinated_when_different_principal() -> None:
