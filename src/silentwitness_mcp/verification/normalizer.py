@@ -9,74 +9,108 @@ wedge silently.
 
 The six rules (architecture §4.6) applied in execution order:
 
-* **(6) Line-ending normalization** — ``\\r\\n`` and standalone ``\\r``
-  collapse to ``\\n`` first so every subsequent line-based rule can
-  ``str.split("\\n")`` without surprises. Spec lists this as rule 6; we
-  apply it first because the rest of the pipeline is line-aware. The
-  visible effect is identical to applying it last (idempotent).
-* **(5) ANSI escape strip** — CSI sequences (``\\x1B[...m`` /
-  ``\\x1B[...K``) erased regardless of tool. Modern Vol3 / EvtxECmd may
-  emit them when stdout's TTY-detection is wrong.
+* **(6) Line endings** — ``\\r\\n`` / lone ``\\r`` → ``\\n`` first so every
+  subsequent line-based rule can ``str.split("\\n")`` without splitting on
+  platform-quirks. Spec lists this as rule 6; we apply it first because
+  the rest of the pipeline is line-aware. Idempotent — second-pass on
+  ``\\n``-only text is a no-op.
+* **(5) ANSI escape strip** — Broad ECMA-48 CSI grammar (final byte
+  ``[@-~]``) + OSC (terminated by BEL or ST) + 2-byte ESC controls.
+  Catches cursor moves and hide-cursor sequences that progress bars emit
+  when stdout's TTY-detection is wrong.
 * **(1) Banner strip** — per-tool pattern matched against each line; the
   line is dropped if it matches.
-* **(2) Metadata-timestamp tokenize** — per-tool pattern matches lines
-  where wall-clock timestamps are non-evidence; matched lines have their
-  ISO-8601 timestamps replaced with the literal token ``<TS>``. Evidence
-  content (EVTX event rows) is left verbatim — the discriminator is the
-  per-tool ``metadata_timestamp_lines`` regex.
+* **(2) Metadata-timestamp tokenize** — on lines matching the per-tool
+  ``metadata_timestamp_lines`` regex, ONLY the trailing timestamp is
+  replaced with ``<TS>``. Earlier timestamps on the same line (which may
+  be embedded evidence) survive. Evidence content (EVTX event rows, CSV)
+  doesn't match the discriminator and is untouched.
 * **(4) Diagnostic path-separator normalize** — per-tool pattern matches
-  tool-internal diagnostic lines (Vol3 progress chatter); on those lines
-  backslashes become forward slashes. Evidence-content paths (e.g.
-  ``C:\\Program Files\\Ethereal\\``) are preserved verbatim because they
-  do not match the diagnostic pattern.
-* **(3) Whitespace collapse** — trailing spaces / tabs on every line
-  rstripped. Applied last so any whitespace exposed by the preceding
-  ANSI / banner / metadata transforms is cleaned in the same pass.
+  *non-evidence-bearing* diagnostic prefixes (Vol3's ``Stacking`` /
+  ``Constructing`` / ``Progress:``). On matched lines, backslashes become
+  forward slashes. Evidence-content lines (process command lines, paths
+  on ``Reading`` / ``Loading`` chatter — PR-106 silent-failure C2) are
+  preserved verbatim because they no longer match the diagnostic pattern.
+* **(3) Trailing whitespace strip** — extended set (ASCII space + tab +
+  form-feed + vertical-tab + NBSP + zero-width space) rstripped per line.
+  Applied last so any invisible bytes exposed by the preceding ANSI /
+  banner / metadata transforms are cleaned in one pass.
+
+UTF-8 handling uses ``errors="surrogateescape"`` (bijective on
+``bytes ↔ str``) so two raw inputs that differ ONLY in invalid bytes
+produce DIFFERENT normalised outputs. ``errors="replace"`` would have
+collapsed both to U+FFFD — a non-injective surface an attacker could
+exploit to collide tampered evidence with a recorded hash (PR-106
+silent-failure H5).
 
 Idempotency: ``normalize_output(normalize_output(x, t), t) ==
-normalize_output(x, t)`` for any byte payload ``x`` and tool name ``t``.
-Determinism: no time / random / locale dependencies — same input always
-maps to same output.
+normalize_output(x, t)`` for any byte payload ``x`` and any registered
+tool ``t``. Property-tested with Hypothesis.
 
-The original (pre-normalised) output is NOT retained per the architecture
-§4.6 commitment "what the model saw is what the gate verifies."
+Determinism: pure function, no time / random / locale dependencies. ASCII
+digits in regexes (``[0-9]`` not ``\\d``) so the rule set doesn't drift
+across Python builds whose Unicode ``Nd`` category differs.
+
+Unknown tool names raise :class:`UnknownToolError` rather than silently
+falling back — a typo'd ``"vol_pslit"`` would otherwise produce a
+different canonical form than the intended ``"vol_pslist"`` and break
+citation comparison with zero diagnostic signal (PR-106 silent-failure
+H1). Callers that genuinely want only universal rules pass the explicit
+``"_universal_only"`` sentinel.
 """
 
 from __future__ import annotations
 
 from silentwitness_mcp.verification._patterns import (
     ANSI_SEQUENCE,
-    EMPTY_PATTERNS,
     ISO_TIMESTAMP,
     TOOL_PATTERNS,
+    TRAILING_WHITESPACE_CHARS,
     ToolPatternSet,
 )
 
 _TIMESTAMP_PLACEHOLDER = "<TS>"
 
 
+class UnknownToolError(ValueError):
+    """Raised when ``normalize_output`` receives a tool string not in the registry.
+
+    Listing the known keys in the message helps the caller spot typos
+    immediately. The explicit ``"_universal_only"`` sentinel is the way
+    to opt out of per-tool rules without registering a new entry.
+    """
+
+
 def normalize_output(raw: bytes, tool: str) -> bytes:
     """Return the byte-stable canonical form of ``raw`` for ``tool``.
 
-    ``raw`` is decoded UTF-8 with ``errors="replace"`` so a tool that emits
-    invalid UTF-8 (rare, but possible from Vol3's plugin output when a
-    process memory string is dumped raw) still produces a deterministic
-    canonical form — the U+FFFD replacement character is itself stable.
+    ``raw`` is decoded via ``utf-8`` with ``surrogateescape`` errors so
+    invalid bytes round-trip losslessly through the pipeline — two raw
+    inputs that differ only in invalid UTF-8 produce DIFFERENT normalised
+    outputs, preserving the collision-resistance the citation gate depends
+    on.
 
     Output is bytes (not str) so the caller can ``hashlib.sha256(...)``
-    directly without re-encoding (which would introduce a normalisation
-    choice the caller could get wrong).
+    directly without re-encoding. Raises :class:`UnknownToolError` for any
+    tool name not in :data:`silentwitness_mcp.verification._patterns.TOOL_PATTERNS`.
     """
-    patterns: ToolPatternSet = TOOL_PATTERNS.get(tool, EMPTY_PATTERNS)
-    text = raw.decode("utf-8", errors="replace")
+    try:
+        patterns: ToolPatternSet = TOOL_PATTERNS[tool]
+    except KeyError as exc:
+        known = ", ".join(sorted(TOOL_PATTERNS))
+        raise UnknownToolError(
+            f"tool {tool!r} not registered in TOOL_PATTERNS. Known: {known}. "
+            "Use tool='_universal_only' for the explicit universal-rules-only path."
+        ) from exc
+    text = raw.decode("utf-8", errors="surrogateescape")
     text = _normalize_line_endings(text)
     text = _strip_ansi(text)
     lines = text.split("\n")
     lines = _strip_banner_lines(lines, patterns)
-    lines = _tokenize_metadata_timestamps(lines, patterns)
+    lines = _tokenize_trailing_metadata_timestamps(lines, patterns)
     lines = _normalize_diagnostic_paths(lines, patterns)
     lines = _rstrip_trailing_whitespace(lines)
-    return "\n".join(lines).encode("utf-8")
+    return "\n".join(lines).encode("utf-8", errors="surrogateescape")
 
 
 # ---------------------------------------------------------------------------
@@ -106,32 +140,38 @@ def _strip_banner_lines(lines: list[str], patterns: ToolPatternSet) -> list[str]
     return [line for line in lines if not banner.match(line)]
 
 
-def _tokenize_metadata_timestamps(lines: list[str], patterns: ToolPatternSet) -> list[str]:
-    """Replace ISO-8601 timestamps with ``<TS>`` on metadata-only lines.
+def _tokenize_trailing_metadata_timestamps(lines: list[str], patterns: ToolPatternSet) -> list[str]:
+    """Replace the TRAILING timestamp on metadata-matched lines with ``<TS>``.
 
-    The per-tool ``metadata_timestamp_lines`` regex is the discriminator:
-    lines that match are header/footer/progress lines whose timestamps
-    are wall-clock noise. Lines that do NOT match (typically CSV event
-    rows from EvtxECmd) keep their timestamps as evidence content.
+    Only the last timestamp on the line is replaced (PR-106 silent-failure
+    C1): EvtxECmd metadata lines may embed an evidence source-file path
+    that itself contains an ISO-8601 timestamp; only the wrapper
+    start/completion timestamp at end-of-line is non-evidence. Lines that
+    do not match the discriminator are unchanged.
     """
     pattern = patterns.metadata_timestamp_lines
     if pattern is None:
         return lines
-    return [
-        ISO_TIMESTAMP.sub(_TIMESTAMP_PLACEHOLDER, line) if pattern.match(line) else line
-        for line in lines
-    ]
+    return [_replace_trailing_timestamp(line) if pattern.match(line) else line for line in lines]
+
+
+def _replace_trailing_timestamp(line: str) -> str:
+    """Replace only the LAST ``ISO_TIMESTAMP`` match on ``line`` with ``<TS>``."""
+    matches = list(ISO_TIMESTAMP.finditer(line))
+    if not matches:
+        return line
+    last = matches[-1]
+    return line[: last.start()] + _TIMESTAMP_PLACEHOLDER + line[last.end() :]
 
 
 def _normalize_diagnostic_paths(lines: list[str], patterns: ToolPatternSet) -> list[str]:
-    """Backslash → forward slash on tool-diagnostic lines only.
+    """Backslash → forward slash on non-evidence-bearing diagnostic lines.
 
-    Vol3's ``Stacking`` / ``Progress:`` chatter includes module paths the
-    agent doesn't reason about; normalising those decouples the citation
-    gate's hash from a path-separator preference that varies by Vol3
-    version. Evidence-content lines (process command lines containing
-    ``C:\\Program Files\\...``) do NOT match the diagnostic pattern and
-    are preserved verbatim.
+    The diagnostic pattern was narrowed in PR-106 round-2 to exclude
+    ``Reading`` / ``Loading`` / ``Scanning`` — those phrases ARE evidence
+    carriers in Vol3 plugin output (``Reading from C:\\evidence\\...``),
+    so converting their backslashes would silently mutate evidence and
+    fail citation comparison downstream.
     """
     pattern = patterns.diagnostic_lines
     if pattern is None:
@@ -140,11 +180,11 @@ def _normalize_diagnostic_paths(lines: list[str], patterns: ToolPatternSet) -> l
 
 
 def _rstrip_trailing_whitespace(lines: list[str]) -> list[str]:
-    """``rstrip(" \\t")`` per line — preserves the line itself but trims
-    trailing spaces/tabs. Run last so any whitespace exposed by the
-    preceding banner / ANSI / metadata transforms is cleaned in one pass.
-    """
-    return [line.rstrip(" \t") for line in lines]
+    """Extended rstrip — ASCII space/tab + form-feed/vertical-tab + NBSP +
+    zero-width space. Newline is intentionally NOT in the set (line endings
+    are rule 6). Invisible bytes that survived prior transforms get cleaned
+    in this last pass."""
+    return [line.rstrip(TRAILING_WHITESPACE_CHARS) for line in lines]
 
 
-__all__ = ["normalize_output"]
+__all__ = ["UnknownToolError", "normalize_output"]
