@@ -70,7 +70,7 @@ def _parse_sprint_yaml(path: Path) -> tuple[dict, list[dict]]:
         if indent == 2 and stripped.startswith("- id:"):
             if current is not None:
                 stories.append(current)
-            current = {"id": stripped[len("- id:"):].strip().strip('"')}
+            current = {"id": stripped[len("- id:") :].strip().strip('"')}
         elif indent == 4 and ":" in stripped and current is not None:
             k, _, v = stripped.partition(":")
             k = k.strip()
@@ -93,7 +93,7 @@ def _parse_sprint_yaml(path: Path) -> tuple[dict, list[dict]]:
 
 def _story_title_and_body(story: dict) -> tuple[str, str]:
     """Pull the story title (first H1) and a body excerpt from the .md file."""
-    slug = story["id"][len("story-"):]
+    slug = story["id"][len("story-") :]
     md_path = STORIES_DIR / f"{story['id']}.md"
     if not md_path.exists():
         return slug, f"Story file missing: `{md_path.relative_to(REPO_ROOT)}`"
@@ -146,12 +146,19 @@ def _story_title_and_body(story: dict) -> tuple[str, str]:
 def _existing_issue(slug: str) -> str | None:
     """Return URL of an existing issue for this slug, if any."""
     cmd = [
-        "gh", "issue", "list",
-        "--repo", REPO,
-        "--state", "all",
-        "--search", f'"[{slug}]"',
-        "--json", "number,title,url",
-        "--limit", "5",
+        "gh",
+        "issue",
+        "list",
+        "--repo",
+        REPO,
+        "--state",
+        "all",
+        "--search",
+        f'"[{slug}]"',
+        "--json",
+        "number,title,url",
+        "--limit",
+        "5",
     ]
     out = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if out.returncode != 0:
@@ -173,10 +180,15 @@ def _epic_label(epic_string: str) -> str:
 
 def _create_issue(slug: str, title: str, body: str, labels: list[str]) -> str:
     cmd = [
-        "gh", "issue", "create",
-        "--repo", REPO,
-        "--title", f"[{slug}] {title}",
-        "--body", body,
+        "gh",
+        "issue",
+        "create",
+        "--repo",
+        REPO,
+        "--title",
+        f"[{slug}] {title}",
+        "--body",
+        body,
     ]
     for lbl in labels:
         cmd.extend(["--label", lbl])
@@ -216,9 +228,21 @@ def _ensure_labels() -> None:
     ]
     for name, desc, color in desired:
         subprocess.run(
-            ["gh", "label", "create", name, "--repo", REPO,
-             "--description", desc, "--color", color],
-            capture_output=True, text=True, check=False,
+            [
+                "gh",
+                "label",
+                "create",
+                name,
+                "--repo",
+                REPO,
+                "--description",
+                desc,
+                "--color",
+                color,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
 
 
@@ -232,7 +256,7 @@ def _write_sprint_with_urls(meta: dict, stories: list[dict]) -> None:
     for line in lines:
         stripped = line.strip()
         if stripped.startswith("- id:"):
-            current_id = stripped[len("- id:"):].strip().strip('"')
+            current_id = stripped[len("- id:") :].strip().strip('"')
             out_lines.append(line)
             continue
         if current_id and stripped.startswith("issue_url:"):
@@ -252,7 +276,7 @@ def main() -> int:
     skipped = 0
     failed: list[str] = []
     for story in stories:
-        slug = story["id"][len("story-"):]
+        slug = story["id"][len("story-") :]
         if story.get("issue_url"):
             print(f"  ✓ skip (already has url): {slug}")
             skipped += 1
@@ -274,7 +298,7 @@ def main() -> int:
             story["issue_url"] = url
             created += 1
             print(f"  + created: {slug} → {url}")
-        except RuntimeError as exc:  # noqa: PERF203 — one-off bootstrap script
+        except RuntimeError as exc:
             failed.append(slug)
             print(f"  ✗ FAILED: {slug}: {exc}", file=sys.stderr)
     _write_sprint_with_urls(meta, stories)

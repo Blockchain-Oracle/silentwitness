@@ -1,0 +1,40 @@
+# Ruff configuration — see architecture.md §13 (banned patterns + rule set).
+# Targets Python 3.12 per pyproject.toml requires-python floor.
+
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "harness/datasets",
+    "harness/case-trapdoor/output",
+]
+
+[lint]
+# Rule set per architecture §13: security + bugbear + style + import order +
+# naming + pyupgrade + ruff-specific.
+select = ["S", "B", "E", "W", "F", "I", "N", "UP", "RUF"]
+# S101 (assert) — keep in src/, allow in tests/ (overridden below).
+ignore = []
+
+[lint.per-file-ignores]
+# Tests use assert; that's the whole point.
+"tests/**/*.py" = ["S101"]
+# Init files frequently re-export; tolerate unused imports there.
+"**/__init__.py" = ["F401"]
+# Dev scripts shell out to known-safe binaries (gh CLI, git) with argv
+# constructed from our own YAML — S603 is a false positive there. Scripts
+# are not shipped to production; the risk model differs from src/.
+"scripts/**/*.py" = ["S603", "S607"]
+
+[lint.isort]
+known-first-party = ["silentwitness_mcp", "silentwitness_agent", "silentwitness_common"]
+combine-as-imports = true
+
+[format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
