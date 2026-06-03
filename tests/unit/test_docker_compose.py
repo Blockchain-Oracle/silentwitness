@@ -83,3 +83,42 @@ def test_healthcheck_imports_silentwitness_mcp() -> None:
     assert (
         "import silentwitness_mcp" in joined
     ), f"healthcheck command must import silentwitness_mcp: {joined!r}"
+
+
+_DOCKERIGNORE_PATH = _REPO_ROOT / ".dockerignore"
+
+
+def test_dockerignore_excludes_runtime_paths() -> None:
+    """``.dockerignore`` must exclude every runtime-only path + caches + VCS.
+
+    A regression dropping ``cases/`` here would leak evidence into the image
+    build context — the highest-stakes silent regression in this PR.
+    """
+    patterns = {
+        ln.strip()
+        for ln in _DOCKERIGNORE_PATH.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.strip().startswith("#")
+    }
+    required = {
+        "cases/",
+        "evidence/",
+        "var/lib/silentwitness/",
+        ".venv/",
+        ".git/",
+        "tests/",
+        "docs/",
+        ".pytest_cache/",
+        "htmlcov/",
+    }
+    missing = required - patterns
+    assert not missing, f".dockerignore missing required exclusions: {sorted(missing)}"
+
+
+def test_compose_declares_security_opt_no_new_privileges() -> None:
+    """Defence-in-depth: `security_opt: ["no-new-privileges:true"]` prevents setuid escalation."""
+    svc = _silentwitness_service()
+    security_opt = svc.get("security_opt", [])
+    assert isinstance(security_opt, list), f"security_opt must be a list (got {type(security_opt)})"
+    assert (
+        "no-new-privileges:true" in security_opt
+    ), f"security_opt must include no-new-privileges:true: {security_opt!r}"

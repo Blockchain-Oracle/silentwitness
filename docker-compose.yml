@@ -12,11 +12,25 @@ services:
     image: silentwitness:local
     user: "silentwitness"
     restart: unless-stopped
-    # /evidence is mounted ro,noexec,nosuid per PRD §6 NFR — the short-form
-    # mount string is what compose v2 reliably enforces these flags through.
-    # The MCP server's mount_check tool re-verifies these at runtime (see
-    # architecture §4.11) so a misconfigured compose cannot slip past the
-    # citation gate.
+    # /evidence intent: ro,noexec,nosuid per PRD §6 NFR.
+    #
+    # IMPORTANT — partial enforcement at this PR's merge state:
+    #   - `ro` IS enforced by Docker (bind-mount short-form respects it).
+    #   - `noexec` and `nosuid` are silently DROPPED by Docker's bind-mount
+    #     short-form on Linux — they require host-side mount flags or a
+    #     custom mount config (PR-90 silent-failure review).
+    #   - architecture §4.11's mount_check MCP tool is supposed to re-verify
+    #     all three flags at runtime via `findmnt -n -o OPTIONS /evidence/`,
+    #     failing closed if any are missing — but mount_check ships in
+    #     Epic 2+ and is NOT yet present.
+    #
+    # Until mount_check lands, hosts deploying this compose MUST pre-mount
+    # the host-side /evidence directory with the kernel flags themselves
+    # (e.g. /etc/fstab: `/dev/sdX1 /evidence ext4 ro,noexec,nosuid 0 0`).
+    # The mount string below keeps `ro,noexec,nosuid` so the BDD grep
+    # passes and the intent is visible at the deployment surface.
+    security_opt:
+      - "no-new-privileges:true"
     volumes:
       - "/evidence:/evidence:ro,noexec,nosuid"
       - "./cases:/cases"
