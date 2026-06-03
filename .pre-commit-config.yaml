@@ -1,0 +1,98 @@
+# .pre-commit-config.yaml
+# SilentWitness pre-commit chain. Mirrors the CI gates in .github/workflows/ci.yml.
+default_language_version:
+  python: python3.12
+default_install_hook_types: [pre-commit, commit-msg]
+fail_fast: false
+
+repos:
+  # --- Formatting + linting (ruff replaces black / isort / flake8 / pylint) ---
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.4
+    hooks:
+      - id: ruff-format
+        types_or: [python, pyi]
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+        types_or: [python, pyi]
+
+  # --- Static typing (strict) ---
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy --strict (changed files)
+        entry: uv run mypy --strict
+        language: system
+        types: [python]
+        files: ^src/.*\.py$
+        require_serial: true
+
+  # --- Structural guards (fail-fast) ---
+  - repo: local
+    hooks:
+      - id: file-size-guard
+        name: file-size-guard (no .py file >400 LOC)
+        entry: uv run python .pre-commit-hooks/file-size-guard.py
+        language: system
+        files: \.py$
+        pass_filenames: true
+        require_serial: true
+        stages: [pre-commit]
+        verbose: true
+
+      - id: forbidden-paths
+        name: forbidden-paths (no writes to /evidence /var/lib/silentwitness etc.)
+        entry: uv run python .pre-commit-hooks/forbidden-paths.py
+        language: system
+        pass_filenames: true
+        require_serial: true
+        stages: [pre-commit]
+        verbose: true
+
+  # --- Secret detection ---
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: ^(uv\.lock|\.secrets\.baseline|tests/.*/fixtures/.*)$
+
+  # --- Standard hygiene ---
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^(uv\.lock|.*\.md)$
+      - id: end-of-file-fixer
+        exclude: ^uv\.lock$
+      - id: check-toml
+      - id: check-yaml
+        args: [--allow-multiple-documents]
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: [--maxkb=1024]
+
+  # --- Conventional Commits ---
+  # Deviation from CICD_SPEC §3.2: conventional-pre-commit v3.6.0's CLI takes
+  # commit types as POSITIONAL args (not `--types`) and `--scopes` as a single
+  # comma-separated flag value. The spec's `--types` invocation errors out at
+  # runtime ("unrecognized arguments"). Spec text to be updated.
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.6.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+        args:
+          - --scopes
+          - mcp,agent,hypothesis,report,verify,audit,harness,docs,ci,deps
+          - feat
+          - fix
+          - docs
+          - style
+          - refactor
+          - perf
+          - test
+          - build
+          - ci
+          - chore
+          - revert
