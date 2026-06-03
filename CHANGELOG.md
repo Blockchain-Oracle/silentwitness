@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.3 (2026-06-03)
+
+### Bug Fixes
+
+- **ci**: Trivy-action uses v-prefix tags (v0.36.0)
+  ([#96](https://github.com/Blockchain-Oracle/silentwitness/pull/96),
+  [`6bcefc5`](https://github.com/Blockchain-Oracle/silentwitness/commit/6bcefc586b956a7cda672b7a0f73dff3466adb9a))
+
+
 ## v1.4.2 (2026-06-03)
 
 ### Bug Fixes
