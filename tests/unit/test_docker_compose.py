@@ -67,9 +67,9 @@ def test_ledger_named_volume_is_mapped() -> None:
     assert ledger, f"ledger named-volume mount not declared in volumes: {volumes!r}"
     # And the top-level volumes block declares the named volume.
     top_volumes = payload.get("volumes") or {}
-    assert (
-        "silentwitness-ledger" in top_volumes
-    ), "top-level `volumes:` block must declare `silentwitness-ledger`"
+    assert "silentwitness-ledger" in top_volumes, (
+        "top-level `volumes:` block must declare `silentwitness-ledger`"
+    )
 
 
 def test_healthcheck_imports_silentwitness_mcp() -> None:
@@ -80,9 +80,9 @@ def test_healthcheck_imports_silentwitness_mcp() -> None:
     test_cmd = healthcheck.get("test")
     assert isinstance(test_cmd, list), f"healthcheck.test must be a list (got {type(test_cmd)})"
     joined = " ".join(str(t) for t in test_cmd)
-    assert (
-        "import silentwitness_mcp" in joined
-    ), f"healthcheck command must import silentwitness_mcp: {joined!r}"
+    assert "import silentwitness_mcp" in joined, (
+        f"healthcheck command must import silentwitness_mcp: {joined!r}"
+    )
 
 
 _DOCKERIGNORE_PATH = _REPO_ROOT / ".dockerignore"
@@ -119,6 +119,6 @@ def test_compose_declares_security_opt_no_new_privileges() -> None:
     svc = _silentwitness_service()
     security_opt = svc.get("security_opt", [])
     assert isinstance(security_opt, list), f"security_opt must be a list (got {type(security_opt)})"
-    assert (
-        "no-new-privileges:true" in security_opt
-    ), f"security_opt must include no-new-privileges:true: {security_opt!r}"
+    assert "no-new-privileges:true" in security_opt, (
+        f"security_opt must include no-new-privileges:true: {security_opt!r}"
+    )

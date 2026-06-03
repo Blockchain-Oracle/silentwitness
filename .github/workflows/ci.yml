@@ -24,6 +24,24 @@
 #      on a no-op stub costs nothing now and ensures Epic 14's real verifier
 #      automatically becomes a docker-build prerequisite when it lands.
 #
+#   5. `test` jobs install `just` via taiki-e/install-action@v2. story-justfile-
+#      targets ships tests/unit/test_justfile.py which fail loudly in CI when
+#      `just` is missing on PATH (intentional — closes the silent-skip surface
+#      flagged in PR-91 review). setup-uv does not provision `just`.
+#
+#   6. `sbom` job drops the spec's `--schema-version 1.6` flag. cyclonedx-bom
+#      7.x's `environment` subcommand accepts `--output-format` and `--output-file`
+#      (they're long aliases of `--of` / `-o`), but `--schema-version` is NOT
+#      recognised — the actual short form for spec-version is `--sv`. Schema 1.6
+#      is the default per --help, so dropping the flag is correct. Same fix
+#      applied to the Dockerfile's SBOM step.
+#
+#   7. `license-check` job passes `--allowlist .license-allowlist.json` so
+#      packages whose pip-licenses metadata reports UNKNOWN/Proprietary but
+#      whose dist-info LICENSE file has been audited (e.g. mistralai 2.4.8 is
+#      Apache-2.0 — verified upstream) can be permitted with an explicit
+#      written rationale in the allowlist file.
+#
 # The eight gated jobs below are required-status-checks for branch protection
 # on `main` (CICD_SPEC §5.1). Renaming any job here will break protection until
 # the protection rule is updated to match.
@@ -85,6 +103,10 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
+      - name: Install just (tests/unit/test_justfile.py exercises it via subprocess)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: just
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --all-extras --frozen
       - name: pytest with coverage
@@ -164,11 +186,13 @@ jobs:
       - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
       - run: uv sync --all-extras --frozen
       - name: Generate SBOM
+        # Drops the spec's `--schema-version 1.6` (not recognised by
+        # cyclonedx-bom 7.x; default IS 1.6). `--output-format` / `--output-file`
+        # are valid long aliases per --help — kept for readability.
         run: |
           uv run cyclonedx-py environment \
             --output-format JSON \
-            --output-file sbom.cdx.json \
-            --schema-version 1.6
+            --output-file sbom.cdx.json
       - name: Upload SBOM artifact
         uses: actions/upload-artifact@v4
         with:
@@ -194,7 +218,8 @@ jobs:
             --output-file=licenses.json \
             --with-license-file \
             --no-license-path
-          uv run python scripts/license_gate.py licenses.json
+          uv run python scripts/license_gate.py licenses.json \
+            --allowlist .license-allowlist.json
       - uses: actions/upload-artifact@v4
         with:
           name: licenses

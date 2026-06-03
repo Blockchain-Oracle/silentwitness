@@ -7,12 +7,17 @@ fail_fast: false
 
 repos:
   # --- Formatting + linting (ruff replaces black / isort / flake8 / pylint) ---
+  # Pinned to match the ruff version the project's lockfile installs (currently
+  # 0.15.x; pyproject pins `ruff>=0.8`). PR-93 audit moment surfaced that the
+  # CICD_SPEC §3.2 verbatim pin of v0.8.4 was 7 minor versions behind, so
+  # pre-commit's ruff-format reformatted differently than `uv run ruff format`
+  # — the staged version would be stale and the commit would abort silently.
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.15
     hooks:
       - id: ruff-format
         types_or: [python, pyi]
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix]
         types_or: [python, pyi]
 

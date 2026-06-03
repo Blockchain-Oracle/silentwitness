@@ -375,9 +375,9 @@ def test_data_provenance_cmd_argv_roundtrip_preserves_tuple() -> None:
     tuple-ness — otherwise the tightening is lost in transit."""
     prov = _data_provenance()
     re_parsed = DataProvenance.model_validate_json(prov.model_dump_json())
-    assert isinstance(
-        re_parsed.cmd_argv, tuple
-    ), f"cmd_argv must round-trip as tuple, got {type(re_parsed.cmd_argv).__name__}"
+    assert isinstance(re_parsed.cmd_argv, tuple), (
+        f"cmd_argv must round-trip as tuple, got {type(re_parsed.cmd_argv).__name__}"
+    )
 
 
 def test_finding_validate_assignment_rejects_unknown_attribute() -> None:

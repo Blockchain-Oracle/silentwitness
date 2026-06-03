@@ -86,9 +86,9 @@ def test_just_list_advertises_all_required_recipes() -> None:
         if line.startswith("    ")
     }
     missing = _EXPECTED_TARGETS - listed
-    assert (
-        not missing
-    ), f"justfile missing required recipes: {sorted(missing)} (listed: {sorted(listed)})"
+    assert not missing, (
+        f"justfile missing required recipes: {sorted(missing)} (listed: {sorted(listed)})"
+    )
 
 
 def test_justfile_declares_strict_shell_and_dotenv_load() -> None:
@@ -99,9 +99,9 @@ def test_justfile_declares_strict_shell_and_dotenv_load() -> None:
     process (CICD_SPEC §9.2).
     """
     text = _JUSTFILE_PATH.read_text(encoding="utf-8")
-    assert (
-        'set shell := ["bash", "-cu"]' in text
-    ), 'missing `set shell := ["bash", "-cu"]` directive'
+    assert 'set shell := ["bash", "-cu"]' in text, (
+        'missing `set shell := ["bash", "-cu"]` directive'
+    )
     assert "set dotenv-load := true" in text, "missing `set dotenv-load := true` directive"
 
 
@@ -113,9 +113,9 @@ def test_ci_recipe_depends_on_lint_test_property() -> None:
     "run these in order, fail fast."
     """
     text = _JUSTFILE_PATH.read_text(encoding="utf-8")
-    assert (
-        "ci: lint test property" in text
-    ), "ci recipe must declare `ci: lint test property` so the gates fire in order"
+    assert "ci: lint test property" in text, (
+        "ci recipe must declare `ci: lint test property` so the gates fire in order"
+    )
 
 
 def test_build_recipe_invokes_docker_build() -> None:

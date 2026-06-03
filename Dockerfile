@@ -35,10 +35,13 @@ RUN uv sync --frozen --no-dev
 # whole dev group into the runtime venv. Spec (§11.1) invokes plain
 # `uv run cyclonedx-py …` but that fails on the `--no-dev` venv produced
 # above — PR-90 silent-failure review surfaced this.
+# cyclonedx-bom 7.x's `environment` subcommand accepts `--output-format` and
+# `--output-file` as long aliases of `--of` / `-o`, but `--schema-version` is
+# NOT a valid flag (the spec is wrong about this — it's `--sv` in the actual
+# CLI). Default spec-version is 1.6 per --help, so we drop it entirely.
 RUN uv run --with 'cyclonedx-bom>=7' cyclonedx-py environment \
         --output-format JSON \
-        --output-file /app/sbom.cdx.json \
-        --schema-version 1.6
+        --output-file /app/sbom.cdx.json
 
 # ---------- runtime stage ----------
 FROM python:${PYTHON_VERSION}-slim-bookworm AS runtime

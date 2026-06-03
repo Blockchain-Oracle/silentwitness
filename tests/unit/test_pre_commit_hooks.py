@@ -60,9 +60,9 @@ def test_file_size_guard_rejects_401_loc(tmp_path: Path) -> None:
     assert result.returncode == 1, f"expected exit 1, got {result.returncode}: {result.stderr}"
     assert "401" in result.stderr, f"stderr should name the offending count: {result.stderr!r}"
     assert str(target) in result.stderr, "stderr should name the offending file"
-    assert (
-        "split at a natural module boundary" in result.stderr
-    ), "stderr should include the canonical split hint from CICD_SPEC §6.1"
+    assert "split at a natural module boundary" in result.stderr, (
+        "stderr should include the canonical split hint from CICD_SPEC §6.1"
+    )
 
 
 def test_file_size_guard_skips_uv_lock(tmp_path: Path) -> None:
