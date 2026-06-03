@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,7 +20,7 @@ from silentwitness_mcp.audit.logger import AuditLogger
 _HASH64 = "a" * 64
 
 
-def _frozen_clock(when: datetime) -> callable:  # type: ignore[type-arg]
+def _frozen_clock(when: datetime) -> Callable[[], datetime]:
     """Return a clock callable that always returns ``when``."""
     return lambda: when
 
@@ -250,15 +251,8 @@ def test_concurrent_emit_produces_100_well_formed_unique_lines(tmp_path: Path) -
 
 
 # ---------------------------------------------------------------------------
-# audit_id_of accessor + properties
-# ---------------------------------------------------------------------------
-
-
-def test_audit_id_of_returns_entry_field(tmp_path: Path) -> None:
-    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
-    logger = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
-    entry = _emit(logger)
-    assert logger.audit_id_of(entry) == entry.audit_id
+# audit_id_of accessor was dropped (pure passthrough, see PR-100 review)
+# ----------------------------------------------------------------------------
 
 
 def test_logger_properties_round_trip(tmp_path: Path) -> None:
@@ -266,3 +260,100 @@ def test_logger_properties_round_trip(tmp_path: Path) -> None:
     logger = AuditLogger(case_dir=tmp_path, examiner="ajweb3", clock=_frozen_clock(today))
     assert logger.case_dir == tmp_path
     assert logger.examiner == "ajweb3"
+
+
+# ---------------------------------------------------------------------------
+# Singleton-per-case (flock) — PR-100 silent-failure #8
+# ---------------------------------------------------------------------------
+
+
+def test_second_logger_for_same_case_dir_raises(tmp_path: Path) -> None:
+    """Two live AuditLoggers for the same case_dir would dispense colliding
+    audit_ids. The flock contract must reject the second."""
+    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
+    first = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    try:
+        with pytest.raises(RuntimeError, match="singleton"):
+            AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    finally:
+        first.close()
+
+
+def test_logger_after_close_can_be_re_acquired(tmp_path: Path) -> None:
+    """Releasing the flock via close() must allow a fresh logger to acquire."""
+    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
+    first = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    first.close()
+    second = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    second.close()
+
+
+# ---------------------------------------------------------------------------
+# I/O failure preservation — code-reviewer #1 / silent-failure N4
+# ---------------------------------------------------------------------------
+
+
+def test_emit_does_not_consume_seq_on_disk_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """If append_jsonl_line raises (disk full, EIO, etc.) the seq number is
+    NOT consumed — the next successful emit returns the same number."""
+    from silentwitness_mcp.audit import logger as _logger_mod
+
+    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
+    logger = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+
+    call_count = {"n": 0}
+    real_append = _logger_mod.append_jsonl_line
+
+    def flaky_append(*args: object, **kwargs: object) -> None:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise OSError("simulated disk-full")
+        real_append(*args, **kwargs)
+
+    monkeypatch.setattr(_logger_mod, "append_jsonl_line", flaky_append)
+    with pytest.raises(OSError, match="simulated"):
+        _emit(logger)
+    entry = _emit(logger)
+    assert entry.audit_id == "sift-aj-20260613-001"
+    logger.close()
+
+
+# ---------------------------------------------------------------------------
+# Startup tolerance — silent-failure #1, N2
+# ---------------------------------------------------------------------------
+
+
+def test_load_sequence_state_propagates_oserror_on_unreadable_file(tmp_path: Path) -> None:
+    """A glob-matched file we cannot open is a real corruption — silent skip
+    would let an unreadable file with seq=999 reset the sequence to 1."""
+    audit_dir = tmp_path / "audit"
+    audit_dir.mkdir()
+    target = audit_dir / "memory.jsonl"
+    target.write_text(json.dumps({"audit_id": "sift-aj-20260613-999"}) + "\n", encoding="utf-8")
+    target.chmod(0o000)
+    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
+    try:
+        with pytest.raises((PermissionError, OSError)):
+            AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    finally:
+        target.chmod(0o644)
+
+
+def test_load_sequence_state_ignores_non_backend_jsonl(tmp_path: Path) -> None:
+    """`.swap.jsonl` and other non-backend-pattern files must NOT be parsed."""
+    audit_dir = tmp_path / "audit"
+    audit_dir.mkdir()
+    (audit_dir / "memory.jsonl").write_text(
+        json.dumps({"audit_id": "sift-aj-20260613-005"}) + "\n", encoding="utf-8"
+    )
+    (audit_dir / ".swap.jsonl").write_text(
+        json.dumps({"audit_id": "sift-aj-20260613-999"}) + "\n", encoding="utf-8"
+    )
+    today = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
+    logger = AuditLogger(case_dir=tmp_path, examiner="aj", clock=_frozen_clock(today))
+    try:
+        assert logger.next_audit_id() == "sift-aj-20260613-006"
+    finally:
+        logger.close()

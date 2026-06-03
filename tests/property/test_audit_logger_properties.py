@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import tempfile
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -16,14 +17,31 @@ _HASH64 = "a" * 64
 _FROZEN_DAY = datetime(2026, 6, 13, 14, 27, tzinfo=UTC)
 _BACKENDS = st.sampled_from(["memory", "disk", "network", "log"])
 
+# Audit string fields end up serialised into JSONL lines. Pydantic v2
+# model_dump_json uses ensure_ascii=False, so chars like U+0085 (NEL) survive
+# raw into the JSON. atomic_io.append_jsonl_line rejects every str.splitlines()
+# terminator (Cc/Zl/Zp categories). Realistic MCP tool names don't contain
+# them, so the test alphabet excludes them too.
+_AUDIT_TEXT = (
+    st.text(
+        alphabet=st.characters(blacklist_categories=("Cc", "Cs", "Zl", "Zp")),
+        min_size=1,
+        max_size=20,
+    )
+    # Pydantic str_strip_whitespace=True strips, then min_length=1 rejects
+    # empty — so a pure-whitespace string would fail AuditEntry construction.
+    # Realistic tool / param strings never strip to empty.
+    .filter(lambda s: s.strip())
+)
 
-def _frozen_clock(when: datetime) -> callable:  # type: ignore[type-arg]
+
+def _frozen_clock(when: datetime) -> Callable[[], datetime]:
     return lambda: when
 
 
 @given(
     emissions=st.lists(
-        st.tuples(_BACKENDS, st.text(min_size=1, max_size=20)),
+        st.tuples(_BACKENDS, _AUDIT_TEXT),
         min_size=1,
         max_size=30,
     )
@@ -83,7 +101,7 @@ def test_load_sequence_state_recovers_max(prior_audit_ids: list[str]) -> None:
 
 @given(
     lines=st.lists(
-        st.tuples(_BACKENDS, st.text(min_size=1, max_size=20)),
+        st.tuples(_BACKENDS, _AUDIT_TEXT),
         min_size=1,
         max_size=10,
     )
