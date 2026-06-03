@@ -109,11 +109,11 @@ stories:
   # ─────────────────────────────────────────────────────────────────────
   - id: story-output-normalizer
     epic: "Epic 3 — Verification gates"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/11"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/106"
+    merged_at: "2026-06-03T18:30:00Z"
 
   - id: story-citation-gate
     epic: "Epic 3 — Verification gates"
