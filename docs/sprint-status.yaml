@@ -31,11 +31,11 @@ stories:
 
   - id: story-ci-workflows
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
-    status: PENDING
+    status: COMPLETE
     depends_on: [scaffold-uv-pyproject]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/2"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/86"
+    merged_at: "2026-06-03T07:43:00Z"
 
   - id: story-pre-commit-hooks
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
