@@ -82,11 +82,11 @@ stories:
 
   - id: story-evidence-registry
     epic: "Epic 2 — Common types + audit infrastructure"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/8"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/102"
+    merged_at: "2026-06-03T15:20:00Z"
 
   - id: story-hmac-ledger
     epic: "Epic 2 — Common types + audit infrastructure"
