@@ -47,11 +47,11 @@ stories:
 
   - id: story-docker-baseline
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
-    status: PENDING
+    status: COMPLETE
     depends_on: [scaffold-uv-pyproject]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/4"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/90"
+    merged_at: "2026-06-03T08:32:00Z"
 
   - id: story-justfile-targets
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
