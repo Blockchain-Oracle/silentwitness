@@ -1,17 +1,29 @@
 """Behavioural tests for the project ``justfile``.
 
 These tests parse the output of the real ``just`` CLI — no mocks per
-architecture §14. They cover the BDD criteria in
-story-justfile-targets.md that are testable without spawning the
-recipes themselves (which would shell out to `uv`, `docker`, `pytest`,
-etc. and turn the unit suite into an integration run).
+architecture §14.
 
-The recipe-execution BDDs (`just install` actually installs, `just lint`
-actually lints, etc.) live in the story's Shell verification block.
+Coverage split against story-justfile-targets.md's 7 BDD Givens:
+
+  * 3 BDDs covered HERE (statically verifiable):
+      - `just --list` parses + exits 0 and inventories all 8 required recipes
+      - `set shell` + `set dotenv-load` directives present
+      - the meta-BDD asserting "5 tests pass"
+  * 4 BDDs covered by the story's SHELL VERIFICATION BLOCK (require spawning
+    recipes that shell out to `uv` / `docker` / `pytest`):
+      - `just install` creates `.venv/` + `.git/hooks/pre-commit`
+      - `just lint` exits 0 on the empty src tree
+      - `just test` produces htmlcov/ without aborting on coverage gate
+      - `just clean` removes the cache directories
+
+``pytest.mark.skipif`` lets dev machines without ``just`` skip gracefully, BUT
+hard-fails when running in CI (so a runner-image change that drops ``just``
+cannot silently null all 5 tests).
 """
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -25,14 +37,27 @@ _EXPECTED_TARGETS: frozenset[str] = frozenset(
 )
 
 
-def _just_available() -> bool:
-    return shutil.which("just") is not None
+def _running_in_ci() -> bool:
+    """GitHub Actions and most CI providers set ``CI=true`` automatically."""
+    return os.environ.get("CI", "").lower() == "true" or bool(os.environ.get("GITHUB_ACTIONS"))
 
 
-pytestmark = pytest.mark.skipif(
-    not _just_available(),
-    reason="`just` CLI not installed locally; CI provisions it.",
-)
+def _just_status() -> tuple[bool, str]:
+    """Return ``(should_skip, reason)``.
+
+    In CI we never skip — letting ``subprocess.run(["just", ...])`` raise
+    ``FileNotFoundError`` surfaces a runner-image regression as a red badge,
+    instead of a silent green-skip that nulls all 5 tests.
+    """
+    if shutil.which("just"):
+        return False, ""
+    if _running_in_ci():
+        return False, ""
+    return True, "`just` CLI not installed locally; install via brew/curl."
+
+
+_SKIP, _REASON = _just_status()
+pytestmark = pytest.mark.skipif(_SKIP, reason=_REASON)
 
 
 def _run_just(*args: str) -> subprocess.CompletedProcess[str]:

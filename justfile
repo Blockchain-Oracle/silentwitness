@@ -1,6 +1,10 @@
 # justfile — SilentWitness local dev convenience.
 # https://github.com/casey/just
 #
+# Verbatim from CICD_SPEC §13.1 plus one story-mandated additions: header
+# preamble (this block), macOS Xcode pitfall comment on `install`, and the
+# `build` recipe at the bottom.
+#
 # Quickstart:
 #   curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
 #   just install
@@ -56,6 +60,6 @@ clean:
     rm -rf .ruff_cache .mypy_cache .pytest_cache .hypothesis htmlcov dist build .coverage coverage.xml sbom.cdx.json licenses.json
     find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
-# Build the Docker image locally (matches the runtime stage in Dockerfile).
+# Build the Docker image locally (final image = runtime stage from Dockerfile).
 build:
     docker build -t silentwitness:local .
