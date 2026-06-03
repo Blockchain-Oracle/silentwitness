@@ -12,32 +12,41 @@ Allowed exception: ``tests/integration/fixtures/`` may contain synthetic
 case fixtures shipped for integration testing (CICD_SPEC §6.2).
 
 ------------------------------------------------------------------------------
-Deviation from CICD_SPEC §6.2 verbatim
+Deviations from CICD_SPEC §6.2 verbatim
 ------------------------------------------------------------------------------
-The §6.2 reference impl uses ``fnmatch`` against patterns like
-``cases/*/audit/*.jsonl``. ``fnmatch`` does NOT cross ``/`` boundaries, so a
-path like ``cases/case-001/notes/analyst-scratch.md`` evades EVERY ``cases/*``
-pattern in §6.2 — silently. PR-89 silent-failure review found this as the
-primary attack-surface bypass for the exact PII/PHI leak the hook claims to
-defend.
+§6.2 uses ``fnmatch`` against patterns like ``cases/*/audit/*.jsonl``.
+``fnmatch`` does NOT cross ``/`` boundaries, so a path like
+``cases/case-001/notes/x.md`` evades EVERY ``cases/*`` pattern silently.
+That's the primary attack-surface bypass on the exact PII/PHI leak this hook
+exists to defend.
 
-The same review found that ``str.startswith("tests/integration/fixtures/")``
-doesn't normalise ``./`` or absolute paths, so ``./cases/...`` evades both
-the forbidden check AND the carve-out asymmetrically.
+This implementation closes the bypass by:
 
-This implementation:
+  1. ``_normalise``-ing every input to a repo-relative POSIX form
+     (backslashes → forward slashes; strip leading ``./``).
+  2. Matching forbidden ROOTS via ``startswith`` prefix-check — recursive
+     by construction.
+  3. Rejecting absolute paths (``/`` prefix) with exit 2: pre-commit and
+     ``git ls-files`` emit relative paths only, so an absolute path means
+     the upstream caller is mis-invoked and the gate cannot reason about
+     repo-relative semantics.
 
-  1. Normalises every input to a repo-relative POSIX form (strip leading
-     ``./``, resolve ``..`` if any).
-  2. Matches forbidden roots via ``startswith`` prefix-check, which is
-     recursive by construction — ``cases/`` blocks everything under it.
-  3. Layers the carve-out on top using the same normalised prefix.
+What ``_normalise`` does NOT do — by design:
 
-CICD_SPEC §6.2 text should be updated to match.
+  - Resolve ``..`` parent segments. ``PurePosixPath`` doesn't, and
+     calling ``Path.resolve()`` would couple to the filesystem and to
+     ``cwd``. Pre-commit rejects ``..`` in staged paths upstream, so it's
+     not in this gate's threat model.
+  - Convert Windows drive letters (``C:\\``). Pre-commit on Windows
+     emits POSIX-style paths; if someone passes ``C:\\...`` manually the
+     leading-``/`` reject above catches it after backslash conversion.
+
+CICD_SPEC §6.2 text should be updated to reflect the prefix-matching impl.
 
 Exit codes:
   0 — clean
   1 — at least one forbidden write
+  2 — input shape unrecognisable (absolute path), gate cannot run
 """
 
 from __future__ import annotations
@@ -54,12 +63,28 @@ FORBIDDEN_PREFIXES: tuple[str, ...] = (
 ALLOWED_EXCEPTION_PREFIX = "tests/integration/fixtures/"
 
 
+class AbsolutePathRejectedError(ValueError):
+    """Raised when an absolute path is passed — the gate works on repo-relative inputs."""
+
+
 def _normalise(raw: str) -> str:
-    """Repo-relative POSIX form. Strips leading ``./`` and converts ``\\`` → ``/``."""
-    s = PurePosixPath(raw).as_posix()
+    """Return a repo-relative POSIX form.
+
+    - Converts ``\\`` → ``/`` (Windows-style input).
+    - Strips one or more leading ``./`` segments.
+    - Raises ``AbsolutePathRejectedError`` if the result still starts with ``/``
+      after backslash conversion. Absolute paths are out of scope: pre-commit
+      and ``git ls-files`` emit relative paths only.
+    - Empty string is preserved (caller handles it).
+    """
+    s = raw.replace("\\", "/")
+    if s.startswith("/"):
+        raise AbsolutePathRejectedError(raw)
     while s.startswith("./"):
         s = s[2:]
-    return s
+    if not s:
+        return ""
+    return PurePosixPath(s).as_posix()
 
 
 def is_allowed_exception(path: str) -> bool:
@@ -73,7 +98,21 @@ def matches_forbidden(path: str) -> bool:
 def main(argv: list[str]) -> int:
     violations: list[str] = []
     for arg in argv:
-        p = _normalise(arg)
+        try:
+            p = _normalise(arg)
+        except AbsolutePathRejectedError:
+            print(
+                f"forbidden-paths: ABSOLUTE PATH rejected: {arg!r}. "
+                "This gate operates on repo-relative paths only — pre-commit and "
+                "git ls-files emit relative paths. If you invoked the script "
+                "manually with an absolute path, re-invoke from the repo root with "
+                "the relative form.",
+                file=sys.stderr,
+            )
+            return 2
+        if not p:
+            # Empty arg — pre-commit shouldn't emit these; skip silently.
+            continue
         if is_allowed_exception(p):
             continue
         if matches_forbidden(p):

@@ -160,3 +160,39 @@ def test_forbidden_paths_normalises_dot_slash_prefix() -> None:
     result = _run(_FORBIDDEN_PATHS, target)
     assert result.returncode == 1, f"./ prefix slipped past gate: {result.stderr}"
     assert "cases/case-001/audit/foo.jsonl" in result.stderr
+
+
+def test_forbidden_paths_rejects_absolute_path() -> None:
+    """Regression for round-2 finding A: absolute paths used to silently PASS.
+
+    ``/abs/path/cases/x`` would not start with ``cases/`` after PurePosixPath
+    conversion, so the prefix match returned False → silent allow on what is
+    very likely an attempt to commit a real case path. Gate now exits 2 (gate
+    broken: pre-commit doesn't emit absolute paths).
+    """
+    target = "/abs/path/cases/case-001/audit/x.jsonl"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 2, f"absolute path slipped past gate: {result.stderr}"
+    assert "ABSOLUTE PATH" in result.stderr
+
+
+def test_forbidden_paths_normalises_backslash_separators() -> None:
+    """Regression for round-2 finding A2: Windows-style backslash paths used to slip.
+
+    ``cases\\foo\\x.txt`` would not start with ``cases/`` (PurePosixPath
+    preserves backslashes literally), so the prefix match returned False →
+    silent allow. Gate now normalises ``\\`` → ``/`` before the match.
+    """
+    target = "cases\\case-001\\audit\\x.jsonl"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 1, f"backslash path slipped past gate: {result.stderr}"
+
+
+def test_forbidden_paths_handles_empty_arg() -> None:
+    """Regression for round-2 finding A3: empty-string arg should not blow up.
+
+    Pre-commit shouldn't pass empty strings, but if it ever does, the script
+    must not raise — it should treat the arg as out-of-scope and exit 0.
+    """
+    result = _run(_FORBIDDEN_PATHS, "")
+    assert result.returncode == 0
