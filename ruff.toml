@@ -16,7 +16,6 @@ extend-exclude = [
 # Rule set per architecture §13: security + bugbear + style + import order +
 # naming + pyupgrade + ruff-specific.
 select = ["S", "B", "E", "W", "F", "I", "N", "UP", "RUF"]
-# S101 (assert) — keep in src/, allow in tests/ (overridden below).
 ignore = []
 
 [lint.per-file-ignores]

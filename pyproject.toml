@@ -21,12 +21,13 @@ classifiers = [
 dependencies = [
     # Core MCP + agent stack — audit-corrected pins (CVE closures)
     "mcp>=1.23.0,<2.0",
-    # NOTE: `pydantic-ai` is a meta-package that already bundles all providers
-    # (anthropic + openai + google + mcp + fastmcp + …) via `pydantic-ai-slim[*]`.
-    # The custom extras spec'd in architecture.md (`[anthropic,openai,google,ollama,mcp,fastmcp]`)
-    # don't exist on the meta-package — uv warns about each. Using the meta-package
-    # plain gets us everything we need, including ollama via openai-compatible.
-    # See audit B-PYAI / PR #1 for the correction trail.
+    # `pydantic-ai` is a meta-package that already bundles every provider —
+    # anthropic, openai, google, mcp, fastmcp — via `pydantic-ai-slim[*]`. The
+    # custom extras quoted in architecture.md §1 (`[anthropic,openai,google,
+    # ollama,mcp,fastmcp]`) do NOT exist on the meta-package — uv warns about
+    # each unresolved extra. Plain `pydantic-ai` gives us the full surface
+    # including ollama (via openai-compatible). architecture.md §1 to be
+    # updated to drop the extras list.
     "pydantic-ai>=1.105.0,<2.0.0",
     "pydantic>=2.9",
     # CLI + terminal UI
@@ -52,7 +53,12 @@ dev = [
     "coverage[toml]>=7.6",
     "pre-commit>=4",
     "detect-secrets>=1.5",
-    "cyclonedx-bom>=7",  # PyPI package is `cyclonedx-bom`; ships the `cyclonedx-py` CLI binary (architecture.md called it `cyclonedx-py` for the package name — a spec slip; the CLI we invoke is still `cyclonedx-py`)
+    # The PyPI package is `cyclonedx-bom` (the SBOM generator); it installs a
+    # console script named `cyclonedx-py` which CI invokes. architecture.md §1,
+    # CICD_SPEC.md §2 and BRAINSTORM.md §3.5 each refer to the *package* as
+    # `cyclonedx-py>=4` — that's the spec slip; the unrelated `cyclonedx-py`
+    # package on PyPI tops out at 1.0.x and is not the SBOM generator.
+    "cyclonedx-bom>=7",
     "pip-licenses>=5",
     "python-semantic-release>=9",
 ]
@@ -79,10 +85,8 @@ packages = [
 [tool.uv]
 required-version = "==0.11.18"
 
-# ----------------------------------------------------------------------
-# ruff — see ruff.toml for the actual rule set; we keep tool.ruff minimal
-# here so the standalone ruff.toml stays the source of truth.
-# ----------------------------------------------------------------------
+# Ruff config lives in ./ruff.toml — intentionally not inlined here so the
+# standalone file remains the single source of truth.
 
 # ----------------------------------------------------------------------
 # Coverage — gates per CICD_SPEC §8
@@ -92,6 +96,14 @@ source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness
 branch = true
 parallel = true
 data_file = ".coverage"
+# CLI entry-point and PDF renderer are smoke-tested via integration only —
+# excluding them prevents the 85% gate from being pulled down by code paths
+# that integration covers (see CICD_SPEC §8.1 / §8.2). Paths are tolerated by
+# coverage.py even before the files exist.
+omit = [
+    "src/silentwitness_agent/cli.py",
+    "src/silentwitness_agent/report/pdf.py",
+]
 
 [tool.coverage.report]
 precision = 2
@@ -107,27 +119,33 @@ exclude_lines = [
 fail_under = 85
 
 # ----------------------------------------------------------------------
-# python-semantic-release — see CICD_SPEC §7.3
+# python-semantic-release — verbatim per CICD_SPEC §7.3
 # ----------------------------------------------------------------------
 [tool.semantic_release]
-version_variables = ["src/silentwitness_mcp/__init__.py:__version__"]
 version_toml = ["pyproject.toml:project.version"]
+version_variables = ["src/silentwitness_mcp/__init__.py:__version__"]
 build_command = "uv build"
+major_on_zero = false
 upload_to_pypi = false
 upload_to_release = true
-commit_parser = "conventional"
-allowed_tags = [
-    "feat", "fix", "perf", "refactor", "docs", "test",
-    "build", "ci", "chore", "style", "revert",
-]
-allowed_scopes = [
-    "mcp", "agent", "hypothesis", "report", "verify",
-    "audit", "harness", "docs", "ci", "deps",
-]
+# `[skip ci]` prevents the release commit from re-triggering the CI workflow.
+commit_message = "chore(release): {version}\n\n[skip ci]"
 
 [tool.semantic_release.branches.main]
 match = "main"
 prerelease = false
+
+[tool.semantic_release.changelog]
+exclude_commit_patterns = [
+    "^chore\\(release\\):",
+    "^chore\\(deps\\):",
+]
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "docs", "style", "refactor", "perf",
+                "test", "build", "ci", "chore", "revert"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
 
 # ----------------------------------------------------------------------
 # pytest
