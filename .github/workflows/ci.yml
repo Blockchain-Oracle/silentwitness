@@ -263,10 +263,12 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
       - name: Run trivy scan on built image
-        # CICD_SPEC §4.1 pins aquasecurity/trivy-action@0.28.0 but that version
-        # does not exist (latest as of 2026-06-03 is 0.36.0; the spec value was
-        # hallucinated). Bumped to the current major-pin; CICD_SPEC to be updated.
-        uses: aquasecurity/trivy-action@0.36.0
+        # CICD_SPEC §4.1 pins `aquasecurity/trivy-action@0.28.0` but
+        # `git ls-remote .../trivy-action 'refs/tags/*'` shows the tags use a
+        # `v` prefix (e.g. `v0.36.0`) AND that 0.28.0 was never released. The
+        # bare-number form the spec uses does not resolve. Pinned to the
+        # latest existing tag with the correct `v` prefix as of 2026-06-03.
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
           format: sarif
