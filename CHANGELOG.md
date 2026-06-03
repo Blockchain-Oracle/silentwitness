@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-06-03)
+
+### Features
+
+- **ci**: Dockerfile + docker-compose.yml + .dockerignore (Epic 1, Story 4)
+  ([#90](https://github.com/Blockchain-Oracle/silentwitness/pull/90),
+  [`a066663`](https://github.com/Blockchain-Oracle/silentwitness/commit/a0666630ffebf18cb9283a827532998adc13ccde))
+
+
 ## v1.1.0 (2026-06-03)
 
 ### Chores
