@@ -49,11 +49,16 @@ def slug_examiner(name: str) -> str:
 
 
 def _pad(seq: int, width: int = 3) -> str:
-    """Zero-pad ``seq`` to at least ``width`` digits; auto-widen for larger."""
+    """Zero-pad ``seq`` to at least ``width`` digits; auto-widen for larger.
+
+    Rejects ``bool`` explicitly (Python treats ``True < 0`` as ``False``,
+    which would let ``_pad(True)`` slip through with ``"001"``).
+    """
+    if not isinstance(seq, int) or isinstance(seq, bool):
+        raise TypeError(f"sequence must be int (not bool); got {type(seq).__name__}")
     if seq < 0:
         raise ValueError(f"sequence number must be non-negative; got {seq}")
-    digits = str(seq)
-    return digits.zfill(width)
+    return str(seq).zfill(width)
 
 
 def make_finding_id(seq: int) -> str:

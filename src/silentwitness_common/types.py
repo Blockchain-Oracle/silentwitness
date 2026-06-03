@@ -9,7 +9,9 @@ execution") mechanical.
 References:
   - architecture.md §4.3 — Response envelope (``ToolResponse[TPayload]``)
   - architecture.md §4.4 — Audit log entry shape
-  - architecture.md §5.4 — Report-as-state finding shape
+  - architecture.md §5.4 — Report-as-state (``Finding`` is the persisted
+    entity; the rendered finding in the report inherits
+    ``interpretation.confidence`` at render time, not on the model itself)
   - PRD §FR5 — audit_id format
 
 All models use ``frozen=True`` (no in-place mutation) and ``extra="forbid"``
@@ -23,9 +25,38 @@ from __future__ import annotations
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    field_validator,
+    model_validator,
+)
+
+
+def _lower_if_str(value: object) -> object:
+    """Normalise SHA-256 input to lowercase before pattern validation.
+
+    Lives at module scope so the three Sha256Hex-typed fields share one
+    source of truth (PR-92 silent-failure review flagged the previous
+    triplicated ``_check_hex`` classmethods as drift-prone)."""
+    return value.lower() if isinstance(value, str) else value
+
+
+# 64-char lowercase SHA-256 hex digest. Used by every model that carries the
+# citation-gate primitive. Extracts the previously-triplicated `_check_hex`
+# classmethods so the three call sites can't drift. Pydantic v2 reads the
+# `Annotated[...]` metadata and applies the BeforeValidator + StringConstraints
+# automatically.
+type Sha256Hex = Annotated[
+    str,
+    BeforeValidator(_lower_if_str),
+    StringConstraints(pattern=r"^[a-f0-9]{64}$"),
+]
 
 # ---------------------------------------------------------------------------
 # Enums — string-valued so JSON round-trips preserve them as readable strings
@@ -34,7 +65,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class Confidence(StrEnum):
-    """How strongly an interpretation is supported by its observations."""
+    """How strongly an interpretation is supported by its observations.
+
+    Ordering note: StrEnum inherits from ``str``, so the default ``<`` /
+    ``>`` are alphabetical (``HIGH`` < ``LOW`` < ``MEDIUM``). The four
+    dunder overrides below replace that with semantic rank. They raise
+    ``TypeError`` on non-Confidence comparands instead of returning
+    ``NotImplemented`` because Python's reflected-operator fallback would
+    otherwise re-dispatch to ``str.__lt__`` (StrEnum's superclass) and
+    silently compare alphabetically — exactly the silent-failure surface
+    PR-92 review caught.
+    """
 
     LOW = "LOW"
     MEDIUM = "MEDIUM"
@@ -44,25 +85,24 @@ class Confidence(StrEnum):
     def rank(self) -> int:
         return {"LOW": 0, "MEDIUM": 1, "HIGH": 2}[self.value]
 
-    def __lt__(self, other: object) -> bool:
+    def _ranked(self, other: object) -> int:
         if not isinstance(other, Confidence):
-            return NotImplemented
-        return self.rank < other.rank
+            raise TypeError(
+                f"Confidence comparison expects another Confidence, got {type(other).__name__}"
+            )
+        return other.rank
+
+    def __lt__(self, other: object) -> bool:
+        return self.rank < self._ranked(other)
 
     def __le__(self, other: object) -> bool:
-        if not isinstance(other, Confidence):
-            return NotImplemented
-        return self.rank <= other.rank
+        return self.rank <= self._ranked(other)
 
     def __gt__(self, other: object) -> bool:
-        if not isinstance(other, Confidence):
-            return NotImplemented
-        return self.rank > other.rank
+        return self.rank > self._ranked(other)
 
     def __ge__(self, other: object) -> bool:
-        if not isinstance(other, Confidence):
-            return NotImplemented
-        return self.rank >= other.rank
+        return self.rank >= self._ranked(other)
 
 
 class EvidenceType(StrEnum):
@@ -141,11 +181,9 @@ class CitedSpan(BaseModel):
     )
     line_start: int = Field(ge=1, description="1-indexed first line of the span (inclusive).")
     line_end: int = Field(ge=1, description="1-indexed last line of the span (inclusive).")
-    content_sha256: str = Field(
-        min_length=64,
-        max_length=64,
+    content_sha256: Sha256Hex = Field(
         description="SHA-256 hex digest of the cited byte range. "
-        "The citation gate verifies this on every observation.",
+        "The citation gate verifies this on every observation."
     )
 
     @model_validator(mode="after")
@@ -155,15 +193,6 @@ class CitedSpan(BaseModel):
             raise ValueError(msg)
         return self
 
-    @field_validator("content_sha256")
-    @classmethod
-    def _check_hex(cls, value: str) -> str:
-        try:
-            int(value, 16)
-        except ValueError as exc:
-            raise ValueError(f"content_sha256 must be hex; got {value!r}") from exc
-        return value.lower()
-
 
 class DataProvenance(BaseModel):
     """Per-tool-call provenance carried inside ``ToolResponse``."""
@@ -172,25 +201,16 @@ class DataProvenance(BaseModel):
 
     tool: str = Field(min_length=1, description="snake_case tool name (e.g. `vol_pslist`).")
     stdout_path: Path = Field(description="Absolute path to the stored normalised output blob.")
-    result_sha256: str = Field(
-        min_length=64,
-        max_length=64,
-        description="SHA-256 of the full normalised output (NOT just a prefix).",
+    result_sha256: Sha256Hex = Field(
+        description="SHA-256 of the full normalised output (NOT just a prefix)."
     )
     elapsed_ms: float = Field(ge=0.0, description="Wall-clock time the tool ran for.")
     cmd_argv: tuple[str, ...] = Field(
-        description="The exact argv used to invoke the underlying CLI. "
-        "Stored as tuple so frozen=True propagates immutability."
+        description="The exact argv used to invoke the underlying CLI. Stored as "
+        "tuple so frozen=True propagates immutability — architecture.md §4.3 "
+        "types this as list[str]; the tuple is a code-level tightening since a "
+        "frozen=True model with a list field would still allow .append()."
     )
-
-    @field_validator("result_sha256")
-    @classmethod
-    def _check_hex(cls, value: str) -> str:
-        try:
-            int(value, 16)
-        except ValueError as exc:
-            raise ValueError(f"result_sha256 must be hex; got {value!r}") from exc
-        return value.lower()
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +245,8 @@ class Observation(BaseModel):
     def _non_empty_audit_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             raise ValueError("Observation.audit_ids must contain at least one audit_id")
+        if any(not a.strip() for a in value):
+            raise ValueError("Observation.audit_ids cannot contain empty/whitespace entries")
         return value
 
 
@@ -248,6 +270,10 @@ class Interpretation(BaseModel):
     def _non_empty(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             raise ValueError("Interpretation.observation_ids must be non-empty")
+        if any(not o.strip() for o in value):
+            raise ValueError(
+                "Interpretation.observation_ids cannot contain empty/whitespace entries"
+            )
         return value
 
 
@@ -271,7 +297,15 @@ class Finding(BaseModel):
     convention (the agent re-emits Findings rather than mutating in place).
     """
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        str_strip_whitespace=True,
+        # validate_assignment ensures runtime mutations (`f.status = ...`) go
+        # through the same validation as construction. Without it, the model
+        # silently accepts any value at runtime — PR-92 silent-failure review
+        # found this on the load-bearing FindingStatus transition path.
+        validate_assignment=True,
+    )
 
     id: str = Field(min_length=1, description="Finding ID (typically F-NNN).")
     observation_id: str = Field(min_length=1)
@@ -298,27 +332,20 @@ class AuditEntry(BaseModel):
     tool: str = Field(min_length=1)
     params: dict[str, object]
     result_summary: dict[str, object]
-    result_sha256: str = Field(min_length=64, max_length=64)
+    result_sha256: Sha256Hex
     stdout_path: Path
     elapsed_ms: float = Field(ge=0.0)
     examiner: str = Field(min_length=1)
     model_used: str = Field(min_length=1)
     model_token_count: dict[str, int] = Field(default_factory=dict)
 
-    @field_validator("result_sha256")
-    @classmethod
-    def _check_hex(cls, value: str) -> str:
-        try:
-            int(value, 16)
-        except ValueError as exc:
-            raise ValueError(f"result_sha256 must be hex; got {value!r}") from exc
-        return value.lower()
-
 
 TPayload = TypeVar("TPayload", bound=BaseModel)
 
 
-class ToolResponse(BaseModel, Generic[TPayload]):
+class ToolResponse(
+    BaseModel, Generic[TPayload]
+):  # Pydantic 2.x BaseModel does not yet fully interop with PEP 695 generics.
     """The envelope every MCP tool returns. architecture.md §4.3.
 
     ``success=True`` ⇒ ``data is not None``. ``success=False`` ⇒ ``data is

@@ -249,6 +249,103 @@ def test_interpretation_requires_non_empty_observation_ids() -> None:
         )
 
 
+def test_confidence_raises_typeerror_on_str_comparison() -> None:
+    """Regression for PR-92 review C1: StrEnum's inherited str ordering used to
+    silently fire when ``Confidence < str``. Now raises TypeError loudly."""
+    with pytest.raises(TypeError):
+        _ = Confidence.HIGH < "ZZZ"  # type: ignore[operator]
+    with pytest.raises(TypeError):
+        _ = Confidence.LOW >= "AAA"  # type: ignore[operator]
+
+
+def test_finding_validate_assignment_rejects_bogus_status() -> None:
+    """Regression for PR-92 review C5: validate_assignment=True enforces the
+    enum on runtime mutation, not just construction."""
+    finding = Finding(id="F-001", observation_id="O-007", interpretation_id="I-007")
+    with pytest.raises(ValidationError):
+        finding.status = "BOGUS_STATUS"  # type: ignore[assignment]
+
+
+def test_finding_accepts_each_status_transition() -> None:
+    """The status field cycles DRAFT → REVIEWED → FINAL → ARCHIVED. Each
+    target is a legitimate enum member, so assignment should succeed."""
+    finding = Finding(id="F-001", observation_id="O-007", interpretation_id="I-007")
+    for target in (
+        FindingStatus.REVIEWED,
+        FindingStatus.FINAL,
+        FindingStatus.ARCHIVED,
+        FindingStatus.DRAFT,
+    ):
+        finding.status = target
+        assert finding.status is target
+
+
+def test_observation_rejects_empty_string_audit_id_element() -> None:
+    """Regression for PR-92 review HIGH #4: an empty-string entry inside the
+    tuple used to pass the non-empty validator. Now rejected loudly."""
+    with pytest.raises(ValidationError):
+        Observation(
+            id="O-1",
+            summary="x",
+            cited_spans=(_cited_span(),),
+            audit_ids=("",),
+        )
+    with pytest.raises(ValidationError):
+        Observation(
+            id="O-1",
+            summary="x",
+            cited_spans=(_cited_span(),),
+            audit_ids=("  ",),
+        )
+
+
+def test_tool_response_failure_forbids_data() -> None:
+    """Regression for PR-92 review HIGH #6: success=False + data=Sample()
+    is a contract violation just like success=True + data=None."""
+    with pytest.raises(ValidationError):
+        ToolResponse[_Sample](
+            success=False,
+            data=_Sample(name="leaks"),
+            audit_id="sift-aj-20260613-007",
+            examiner="aj",
+            data_provenance=_data_provenance(),
+        )
+
+
+def test_sha256hex_lowercases_uppercase_input() -> None:
+    """The Sha256Hex BeforeValidator must canonicalise to lowercase before
+    the StringConstraints pattern check fires."""
+    span = CitedSpan(
+        stdout_path=Path("/x"),
+        line_start=1,
+        line_end=1,
+        content_sha256="A" * 64,
+    )
+    assert span.content_sha256 == "a" * 64
+
+
+def test_sha256hex_rejects_non_hex_characters() -> None:
+    """A 64-char non-hex string (e.g. 64 'g' chars) must fail validation."""
+    with pytest.raises(ValidationError):
+        CitedSpan(
+            stdout_path=Path("/x"),
+            line_start=1,
+            line_end=1,
+            content_sha256="g" * 64,
+        )
+
+
+def test_sha256hex_rejects_wrong_length() -> None:
+    """A short hex string (e.g. 32 chars) must fail the pattern length anchor."""
+    with pytest.raises(ValidationError):
+        CitedSpan(
+            stdout_path=Path("/x"),
+            line_start=1,
+            line_end=1,
+            content_sha256="a" * 32,
+        )
+
+
 def test_pivot_roundtrips() -> None:
     pivot = Pivot(
         from_hypothesis_id="H-001",

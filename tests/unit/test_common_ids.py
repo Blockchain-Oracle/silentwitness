@@ -62,6 +62,24 @@ def test_sequence_above_999_widens_cleanly() -> None:
     assert parts.seq == 4242
 
 
+def test_pad_rejects_bool_input() -> None:
+    """Regression for PR-92 review: ``_pad(True)`` used to return ``"001"``
+    because ``True == 1`` numerically. Now raises TypeError so the typed
+    callers fail loudly if a bool slips through."""
+    from silentwitness_common.ids import _pad
+
+    with pytest.raises(TypeError):
+        _pad(True)  # type: ignore[arg-type]
+
+
+def test_parse_audit_id_rejects_invalid_month() -> None:
+    """Invalid month/day combos must raise loudly via date() construction."""
+    with pytest.raises(ValueError):
+        parse_audit_id("sift-aj-20261301-007")  # month 13
+    with pytest.raises(ValueError):
+        parse_audit_id("sift-aj-20260229-007")  # 2026 is not a leap year
+
+
 def test_parse_audit_id_rejects_malformed_inputs() -> None:
     with pytest.raises(ValueError):
         parse_audit_id("not-a-real-id")
