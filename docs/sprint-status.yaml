@@ -1,0 +1,748 @@
+# SilentWitness — sprint status
+# This file is orchestrator-readable. Phase 1 fills issue_url; Phase 3 fills pr_url + merged_at + flips status.
+# Abu can read this file at any point to see exactly where the build stands.
+
+project: SilentWitness
+hackathon: sans-find-evil-2026
+deadline: 2026-06-15T23:45:00-04:00
+repo: ""
+thread_surface: ""
+thread_chat_id: ""
+thread_topic_id: ""
+thread_anchor: ""
+
+# Optional epics (drop if time tight). Listed but marked optional.
+optional_epics:
+  - "Epic 13 — Streaming HUD (OPTIONAL)"
+  - "Epic 15 — Adversary pair case-trapdoor (OPTIONAL)"
+
+# Total: 83 stories (76 mandatory + 5 optional HUD/adversary + 2 stretch docs)
+stories:
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 1 — Project scaffolding + CI/CD on commit 1
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-scaffold-uv-pyproject
+    epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
+    status: PENDING
+    depends_on: []
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-ci-workflows
+    epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
+    status: PENDING
+    depends_on: [scaffold-uv-pyproject]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-pre-commit-hooks
+    epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
+    status: PENDING
+    depends_on: [scaffold-uv-pyproject]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-docker-baseline
+    epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
+    status: PENDING
+    depends_on: [scaffold-uv-pyproject]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-justfile-targets
+    epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
+    status: PENDING
+    depends_on: [scaffold-uv-pyproject]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 2 — Common types + audit infrastructure
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-common-types
+    epic: "Epic 2 — Common types + audit infrastructure"
+    status: PENDING
+    depends_on: [scaffold-uv-pyproject]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-audit-logger
+    epic: "Epic 2 — Common types + audit infrastructure"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-evidence-registry
+    epic: "Epic 2 — Common types + audit infrastructure"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hmac-ledger
+    epic: "Epic 2 — Common types + audit infrastructure"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-atomic-io
+    epic: "Epic 2 — Common types + audit infrastructure"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 3 — Verification gates
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-output-normalizer
+    epic: "Epic 3 — Verification gates"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-citation-gate
+    epic: "Epic 3 — Verification gates"
+    status: PENDING
+    depends_on: [output-normalizer, audit-logger, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-entity-gate
+    epic: "Epic 3 — Verification gates"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-sanitizer
+    epic: "Epic 3 — Verification gates"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-gates-property-tests
+    epic: "Epic 3 — Verification gates"
+    status: PENDING
+    depends_on: [citation-gate, entity-gate, sanitizer]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 4 — MCP server skeleton + finding-state tools
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-fastmcp-server-bootstrap
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [common-types, audit-logger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-response-envelope
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-record-observation-tool
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, citation-gate, entity-gate, sanitizer]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-record-interpretation-tool
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-record-pivot-tool
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-record-narrative-tool
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-approve-finding-tool
+    epic: "Epic 4 — MCP server skeleton + finding-state tools"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, hmac-ledger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 5 — Memory tool wrappers (Vol3)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-vol-pslist
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-pstree-psscan
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-malfind
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-netscan
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-cmdline
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-dlllist-handles
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-vol-lsadump
+    epic: "Epic 5 — Memory tool wrappers (Vol3)"
+    status: PENDING
+    depends_on: [vol-pslist]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 6 — Disk + Registry tool wrappers
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-parse-mft
+    epic: "Epic 6 — Disk + Registry tool wrappers"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-parse-amcache-shimcache
+    epic: "Epic 6 — Disk + Registry tool wrappers"
+    status: PENDING
+    depends_on: [parse-mft]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-parse-prefetch
+    epic: "Epic 6 — Disk + Registry tool wrappers"
+    status: PENDING
+    depends_on: [parse-mft]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-parse-shellbags
+    epic: "Epic 6 — Disk + Registry tool wrappers"
+    status: PENDING
+    depends_on: [parse-mft]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-regripper
+    epic: "Epic 6 — Disk + Registry tool wrappers"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 7 — Log + Network tool wrappers
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-parse-evtx
+    epic: "Epic 7 — Log + Network tool wrappers"
+    status: PENDING
+    depends_on: [parse-mft]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hayabusa-timeline
+    epic: "Epic 7 — Log + Network tool wrappers"
+    status: PENDING
+    depends_on: [parse-evtx]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-chainsaw-hunt
+    epic: "Epic 7 — Log + Network tool wrappers"
+    status: PENDING
+    depends_on: [parse-evtx]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-zeek-run
+    epic: "Epic 7 — Log + Network tool wrappers"
+    status: PENDING
+    depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-suricata-run
+    epic: "Epic 7 — Log + Network tool wrappers"
+    status: PENDING
+    depends_on: [zeek-run]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 8 — Hypothesis state machine + investigator agent
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-hypothesis-types
+    epic: "Epic 8 — Hypothesis state machine + investigator agent"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hypothesis-stack
+    epic: "Epic 8 — Hypothesis state machine + investigator agent"
+    status: PENDING
+    depends_on: [hypothesis-types, audit-logger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hypothesis-budget
+    epic: "Epic 8 — Hypothesis state machine + investigator agent"
+    status: PENDING
+    depends_on: [hypothesis-stack]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-investigator-agent
+    epic: "Epic 8 — Hypothesis state machine + investigator agent"
+    status: PENDING
+    depends_on: [hypothesis-stack, record-observation-tool, record-interpretation-tool, record-pivot-tool, record-narrative-tool]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-investigator-hooks
+    epic: "Epic 8 — Hypothesis state machine + investigator agent"
+    status: PENDING
+    depends_on: [investigator-agent, audit-logger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 9 — Specialists
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-memory-specialist
+    epic: "Epic 9 — Specialists"
+    status: PENDING
+    depends_on: [investigator-agent, vol-pslist, vol-pstree-psscan, vol-malfind, vol-netscan, vol-cmdline, vol-dlllist-handles, vol-lsadump]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-disk-specialist
+    epic: "Epic 9 — Specialists"
+    status: PENDING
+    depends_on: [investigator-agent, parse-mft, parse-amcache-shimcache, parse-prefetch, parse-shellbags]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-network-specialist
+    epic: "Epic 9 — Specialists"
+    status: PENDING
+    depends_on: [investigator-agent, zeek-run, suricata-run]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-log-specialist
+    epic: "Epic 9 — Specialists"
+    status: PENDING
+    depends_on: [investigator-agent, parse-evtx, hayabusa-timeline, chainsaw-hunt]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 10 — Critic
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-critic-agent
+    epic: "Epic 10 — Critic"
+    status: PENDING
+    depends_on: [investigator-agent]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-critic-trigger
+    epic: "Epic 10 — Critic"
+    status: PENDING
+    depends_on: [critic-agent]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-critic-verdict-handling
+    epic: "Epic 10 — Critic"
+    status: PENDING
+    depends_on: [critic-agent, record-interpretation-tool]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 11 — Report-as-state
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-report-template
+    epic: "Epic 11 — Report-as-state"
+    status: PENDING
+    depends_on: [common-types]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-report-writer
+    epic: "Epic 11 — Report-as-state"
+    status: PENDING
+    depends_on: [report-template, atomic-io, approve-finding-tool]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-report-verify-links
+    epic: "Epic 11 — Report-as-state"
+    status: PENDING
+    depends_on: [report-writer, audit-logger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-report-pdf-export
+    epic: "Epic 11 — Report-as-state"
+    status: PENDING
+    depends_on: [report-writer]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 12 — CLI + Claude Code drop-in
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-cli-init
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [common-types, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-register-evidence
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-investigate
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, investigator-agent, memory-specialist, disk-specialist, network-specialist, log-specialist, critic-agent, report-writer]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-status
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, hypothesis-stack]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-review
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, record-observation-tool, record-interpretation-tool]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-approve
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, approve-finding-tool]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-verify
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, hmac-ledger]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-export
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, report-pdf-export]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-baseline-comparison
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, scorer, delta-report]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-cli-install-claude-code
+    epic: "Epic 12 — CLI + Claude Code drop-in"
+    status: PENDING
+    depends_on: [cli-init, fastmcp-server-bootstrap]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 13 — HUD (OPTIONAL)
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-hud-sse-server
+    epic: "Epic 13 — Streaming HUD (OPTIONAL)"
+    optional: true
+    status: PENDING
+    depends_on: [investigator-hooks]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hud-routes
+    epic: "Epic 13 — Streaming HUD (OPTIONAL)"
+    optional: true
+    status: PENDING
+    depends_on: [hud-sse-server]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-hud-css
+    epic: "Epic 13 — Streaming HUD (OPTIONAL)"
+    optional: true
+    status: PENDING
+    depends_on: [hud-sse-server]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 14 — Accuracy harness
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-dataset-manifests
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [evidence-registry]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-ground-truth-parsers
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [dataset-manifests]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-baseline-runner
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [dataset-manifests]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-silentwitness-runner
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [investigator-agent, dataset-manifests]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-scorer
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [ground-truth-parsers, baseline-runner, silentwitness-runner]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-delta-report
+    epic: "Epic 14 — Accuracy harness"
+    status: PENDING
+    depends_on: [scorer]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 15 — Adversary pair case-trapdoor (CUT for v1 per audit B-PY-3)
+  # NOTE: regipy + python-evtx are read-only libs → synthesis cannot ship.
+  # Story files retained on disk for future-work track; orchestrator MUST skip.
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-case-trapdoor-synthesis
+    epic: "Epic 15 — Adversary pair case-trapdoor (CUT for v1)"
+    optional: true
+    cut: true
+    status: PENDING
+    depends_on: [dataset-manifests]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-case-trapdoor-ground-truth
+    epic: "Epic 15 — Adversary pair case-trapdoor (CUT for v1)"
+    optional: true
+    cut: true
+    status: PENDING
+    depends_on: [case-trapdoor-synthesis]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Epic 16 — Documentation polish + submission
+  # ─────────────────────────────────────────────────────────────────────
+  - id: story-readme-polish
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [cli-investigate, delta-report]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-architecture-diagram-png
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: []
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-accuracy-report-writeup
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [delta-report]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-dataset-doc
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [dataset-manifests]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-try-it-out-doc
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [cli-install-claude-code, docker-baseline]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-execution-logs-export
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [cli-investigate]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-third-party-notices
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [readme-polish]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""
+
+  - id: story-devpost-submission
+    epic: "Epic 16 — Documentation polish + submission"
+    status: PENDING
+    depends_on: [readme-polish, accuracy-report-writeup, dataset-doc, try-it-out-doc, execution-logs-export, architecture-diagram-png, third-party-notices]
+    issue_url: ""
+    pr_url: ""
+    merged_at: ""

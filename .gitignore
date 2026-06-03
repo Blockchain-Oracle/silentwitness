@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Project-specific
+cases/                      # per-case audit/evidence/report — never committed
+var/lib/silentwitness/      # HMAC verification ledgers — never committed
+harness/datasets/*.E01      # binary forensic images — manifests are committed, binaries are not
+harness/datasets/*.E0[2-9]
+harness/datasets/*.pcap
+harness/datasets/*.zip
+harness/datasets/*.tar
+harness/datasets/*.tgz
+harness/datasets/*.dmg
+harness/datasets/*.iso
+harness/results/             # benchmark output — committed per-release only
+harness/case-trapdoor/output/   # synthetic adversary case (Epic 15 CUT — never used)
+
+# SBOM + license artifacts (generated)
+sbom.cdx.json
+licenses.json
+
+# Detected-secrets baseline file (committed; per-developer scan output is not)
+.secrets.scan.json
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Env vars / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Tool caches that don't belong in version control
+.cache/
+node_modules/
+package-lock.json
+yarn.lock
+
+# Sub-agent research scratch
+/tmp/
