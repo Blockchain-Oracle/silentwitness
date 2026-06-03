@@ -263,7 +263,10 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
       - name: Run trivy scan on built image
-        uses: aquasecurity/trivy-action@0.28.0
+        # CICD_SPEC §4.1 pins aquasecurity/trivy-action@0.28.0 but that version
+        # does not exist (latest as of 2026-06-03 is 0.36.0; the spec value was
+        # hallucinated). Bumped to the current major-pin; CICD_SPEC to be updated.
+        uses: aquasecurity/trivy-action@0.36.0
         with:
           image-ref: ghcr.io/${{ github.repository_owner }}/silentwitness:${{ steps.sha.outputs.short }}
           format: sarif
