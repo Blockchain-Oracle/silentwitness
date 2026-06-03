@@ -1,0 +1,48 @@
+# .dockerignore — excludes from the docker build context. Keep this tight so
+# build cache invalidation tracks only what the image actually needs.
+
+# Build artefacts + caches
+.venv/
+build/
+dist/
+*.egg-info/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+coverage.xml
+.coverage*
+*.cdx.json
+trivy-results.sarif
+
+# VCS + tooling
+.git/
+.github/
+.gitignore
+.gitattributes
+.pre-commit-config.yaml
+.pre-commit-hooks/
+.secrets.baseline
+.python-version
+
+# Test + development directories not needed at runtime
+tests/
+docs/
+scripts/
+harness/
+
+# Runtime-only paths (these must NEVER be in an image)
+cases/
+evidence/
+var/lib/silentwitness/
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
