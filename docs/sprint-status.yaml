@@ -55,11 +55,11 @@ stories:
 
   - id: story-justfile-targets
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
-    status: PENDING
+    status: COMPLETE
     depends_on: [scaffold-uv-pyproject]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/5"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/91"
+    merged_at: "2026-06-03T08:50:00Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 2 — Common types + audit infrastructure
