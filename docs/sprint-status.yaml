@@ -25,7 +25,7 @@ stories:
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
     status: PENDING
     depends_on: []
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/1"
     pr_url: ""
     merged_at: ""
 
@@ -33,7 +33,7 @@ stories:
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
     status: PENDING
     depends_on: [scaffold-uv-pyproject]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/2"
     pr_url: ""
     merged_at: ""
 
@@ -41,7 +41,7 @@ stories:
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
     status: PENDING
     depends_on: [scaffold-uv-pyproject]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/3"
     pr_url: ""
     merged_at: ""
 
@@ -49,7 +49,7 @@ stories:
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
     status: PENDING
     depends_on: [scaffold-uv-pyproject]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/4"
     pr_url: ""
     merged_at: ""
 
@@ -57,7 +57,7 @@ stories:
     epic: "Epic 1 — Project scaffolding + CI/CD on commit 1"
     status: PENDING
     depends_on: [scaffold-uv-pyproject]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/5"
     pr_url: ""
     merged_at: ""
 
@@ -68,7 +68,7 @@ stories:
     epic: "Epic 2 — Common types + audit infrastructure"
     status: PENDING
     depends_on: [scaffold-uv-pyproject]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/6"
     pr_url: ""
     merged_at: ""
 
@@ -76,7 +76,7 @@ stories:
     epic: "Epic 2 — Common types + audit infrastructure"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/7"
     pr_url: ""
     merged_at: ""
 
@@ -84,7 +84,7 @@ stories:
     epic: "Epic 2 — Common types + audit infrastructure"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/8"
     pr_url: ""
     merged_at: ""
 
@@ -92,7 +92,7 @@ stories:
     epic: "Epic 2 — Common types + audit infrastructure"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/9"
     pr_url: ""
     merged_at: ""
 
@@ -100,7 +100,7 @@ stories:
     epic: "Epic 2 — Common types + audit infrastructure"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/10"
     pr_url: ""
     merged_at: ""
 
@@ -111,7 +111,7 @@ stories:
     epic: "Epic 3 — Verification gates"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/11"
     pr_url: ""
     merged_at: ""
 
@@ -119,7 +119,7 @@ stories:
     epic: "Epic 3 — Verification gates"
     status: PENDING
     depends_on: [output-normalizer, audit-logger, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/12"
     pr_url: ""
     merged_at: ""
 
@@ -127,7 +127,7 @@ stories:
     epic: "Epic 3 — Verification gates"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/13"
     pr_url: ""
     merged_at: ""
 
@@ -135,7 +135,7 @@ stories:
     epic: "Epic 3 — Verification gates"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/14"
     pr_url: ""
     merged_at: ""
 
@@ -143,7 +143,7 @@ stories:
     epic: "Epic 3 — Verification gates"
     status: PENDING
     depends_on: [citation-gate, entity-gate, sanitizer]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/15"
     pr_url: ""
     merged_at: ""
 
@@ -154,7 +154,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [common-types, audit-logger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/16"
     pr_url: ""
     merged_at: ""
 
@@ -162,7 +162,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/17"
     pr_url: ""
     merged_at: ""
 
@@ -170,7 +170,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, citation-gate, entity-gate, sanitizer]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/18"
     pr_url: ""
     merged_at: ""
 
@@ -178,7 +178,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/19"
     pr_url: ""
     merged_at: ""
 
@@ -186,7 +186,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/20"
     pr_url: ""
     merged_at: ""
 
@@ -194,7 +194,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/21"
     pr_url: ""
     merged_at: ""
 
@@ -202,7 +202,7 @@ stories:
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, hmac-ledger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/22"
     pr_url: ""
     merged_at: ""
 
@@ -213,7 +213,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/23"
     pr_url: ""
     merged_at: ""
 
@@ -221,7 +221,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/24"
     pr_url: ""
     merged_at: ""
 
@@ -229,7 +229,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/25"
     pr_url: ""
     merged_at: ""
 
@@ -237,7 +237,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/26"
     pr_url: ""
     merged_at: ""
 
@@ -245,7 +245,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/27"
     pr_url: ""
     merged_at: ""
 
@@ -253,7 +253,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/28"
     pr_url: ""
     merged_at: ""
 
@@ -261,7 +261,7 @@ stories:
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
     status: PENDING
     depends_on: [vol-pslist]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/29"
     pr_url: ""
     merged_at: ""
 
@@ -272,7 +272,7 @@ stories:
     epic: "Epic 6 — Disk + Registry tool wrappers"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/30"
     pr_url: ""
     merged_at: ""
 
@@ -280,7 +280,7 @@ stories:
     epic: "Epic 6 — Disk + Registry tool wrappers"
     status: PENDING
     depends_on: [parse-mft]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/31"
     pr_url: ""
     merged_at: ""
 
@@ -288,7 +288,7 @@ stories:
     epic: "Epic 6 — Disk + Registry tool wrappers"
     status: PENDING
     depends_on: [parse-mft]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/32"
     pr_url: ""
     merged_at: ""
 
@@ -296,7 +296,7 @@ stories:
     epic: "Epic 6 — Disk + Registry tool wrappers"
     status: PENDING
     depends_on: [parse-mft]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/33"
     pr_url: ""
     merged_at: ""
 
@@ -304,7 +304,7 @@ stories:
     epic: "Epic 6 — Disk + Registry tool wrappers"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/34"
     pr_url: ""
     merged_at: ""
 
@@ -315,7 +315,7 @@ stories:
     epic: "Epic 7 — Log + Network tool wrappers"
     status: PENDING
     depends_on: [parse-mft]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/35"
     pr_url: ""
     merged_at: ""
 
@@ -323,7 +323,7 @@ stories:
     epic: "Epic 7 — Log + Network tool wrappers"
     status: PENDING
     depends_on: [parse-evtx]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/36"
     pr_url: ""
     merged_at: ""
 
@@ -331,7 +331,7 @@ stories:
     epic: "Epic 7 — Log + Network tool wrappers"
     status: PENDING
     depends_on: [parse-evtx]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/37"
     pr_url: ""
     merged_at: ""
 
@@ -339,7 +339,7 @@ stories:
     epic: "Epic 7 — Log + Network tool wrappers"
     status: PENDING
     depends_on: [fastmcp-server-bootstrap, response-envelope, audit-logger, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/38"
     pr_url: ""
     merged_at: ""
 
@@ -347,7 +347,7 @@ stories:
     epic: "Epic 7 — Log + Network tool wrappers"
     status: PENDING
     depends_on: [zeek-run]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/39"
     pr_url: ""
     merged_at: ""
 
@@ -358,7 +358,7 @@ stories:
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/40"
     pr_url: ""
     merged_at: ""
 
@@ -366,7 +366,7 @@ stories:
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
     status: PENDING
     depends_on: [hypothesis-types, audit-logger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/41"
     pr_url: ""
     merged_at: ""
 
@@ -374,7 +374,7 @@ stories:
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
     status: PENDING
     depends_on: [hypothesis-stack]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/42"
     pr_url: ""
     merged_at: ""
 
@@ -382,7 +382,7 @@ stories:
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
     status: PENDING
     depends_on: [hypothesis-stack, record-observation-tool, record-interpretation-tool, record-pivot-tool, record-narrative-tool]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/43"
     pr_url: ""
     merged_at: ""
 
@@ -390,7 +390,7 @@ stories:
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
     status: PENDING
     depends_on: [investigator-agent, audit-logger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/44"
     pr_url: ""
     merged_at: ""
 
@@ -401,7 +401,7 @@ stories:
     epic: "Epic 9 — Specialists"
     status: PENDING
     depends_on: [investigator-agent, vol-pslist, vol-pstree-psscan, vol-malfind, vol-netscan, vol-cmdline, vol-dlllist-handles, vol-lsadump]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/45"
     pr_url: ""
     merged_at: ""
 
@@ -409,7 +409,7 @@ stories:
     epic: "Epic 9 — Specialists"
     status: PENDING
     depends_on: [investigator-agent, parse-mft, parse-amcache-shimcache, parse-prefetch, parse-shellbags]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/46"
     pr_url: ""
     merged_at: ""
 
@@ -417,7 +417,7 @@ stories:
     epic: "Epic 9 — Specialists"
     status: PENDING
     depends_on: [investigator-agent, zeek-run, suricata-run]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/47"
     pr_url: ""
     merged_at: ""
 
@@ -425,7 +425,7 @@ stories:
     epic: "Epic 9 — Specialists"
     status: PENDING
     depends_on: [investigator-agent, parse-evtx, hayabusa-timeline, chainsaw-hunt]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/48"
     pr_url: ""
     merged_at: ""
 
@@ -436,7 +436,7 @@ stories:
     epic: "Epic 10 — Critic"
     status: PENDING
     depends_on: [investigator-agent]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/49"
     pr_url: ""
     merged_at: ""
 
@@ -444,7 +444,7 @@ stories:
     epic: "Epic 10 — Critic"
     status: PENDING
     depends_on: [critic-agent]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/50"
     pr_url: ""
     merged_at: ""
 
@@ -452,7 +452,7 @@ stories:
     epic: "Epic 10 — Critic"
     status: PENDING
     depends_on: [critic-agent, record-interpretation-tool]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/51"
     pr_url: ""
     merged_at: ""
 
@@ -463,7 +463,7 @@ stories:
     epic: "Epic 11 — Report-as-state"
     status: PENDING
     depends_on: [common-types]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/52"
     pr_url: ""
     merged_at: ""
 
@@ -471,7 +471,7 @@ stories:
     epic: "Epic 11 — Report-as-state"
     status: PENDING
     depends_on: [report-template, atomic-io, approve-finding-tool]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/53"
     pr_url: ""
     merged_at: ""
 
@@ -479,7 +479,7 @@ stories:
     epic: "Epic 11 — Report-as-state"
     status: PENDING
     depends_on: [report-writer, audit-logger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/54"
     pr_url: ""
     merged_at: ""
 
@@ -487,7 +487,7 @@ stories:
     epic: "Epic 11 — Report-as-state"
     status: PENDING
     depends_on: [report-writer]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/55"
     pr_url: ""
     merged_at: ""
 
@@ -498,7 +498,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [common-types, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/56"
     pr_url: ""
     merged_at: ""
 
@@ -506,7 +506,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/57"
     pr_url: ""
     merged_at: ""
 
@@ -514,7 +514,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, investigator-agent, memory-specialist, disk-specialist, network-specialist, log-specialist, critic-agent, report-writer]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/58"
     pr_url: ""
     merged_at: ""
 
@@ -522,7 +522,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, hypothesis-stack]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/59"
     pr_url: ""
     merged_at: ""
 
@@ -530,7 +530,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, record-observation-tool, record-interpretation-tool]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/60"
     pr_url: ""
     merged_at: ""
 
@@ -538,7 +538,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, approve-finding-tool]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/61"
     pr_url: ""
     merged_at: ""
 
@@ -546,7 +546,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, hmac-ledger]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/62"
     pr_url: ""
     merged_at: ""
 
@@ -554,7 +554,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, report-pdf-export]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/63"
     pr_url: ""
     merged_at: ""
 
@@ -562,7 +562,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, scorer, delta-report]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/64"
     pr_url: ""
     merged_at: ""
 
@@ -570,7 +570,7 @@ stories:
     epic: "Epic 12 — CLI + Claude Code drop-in"
     status: PENDING
     depends_on: [cli-init, fastmcp-server-bootstrap]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/65"
     pr_url: ""
     merged_at: ""
 
@@ -582,7 +582,7 @@ stories:
     optional: true
     status: PENDING
     depends_on: [investigator-hooks]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/66"
     pr_url: ""
     merged_at: ""
 
@@ -591,7 +591,7 @@ stories:
     optional: true
     status: PENDING
     depends_on: [hud-sse-server]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/67"
     pr_url: ""
     merged_at: ""
 
@@ -600,7 +600,7 @@ stories:
     optional: true
     status: PENDING
     depends_on: [hud-sse-server]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/68"
     pr_url: ""
     merged_at: ""
 
@@ -611,7 +611,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [evidence-registry]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/69"
     pr_url: ""
     merged_at: ""
 
@@ -619,7 +619,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [dataset-manifests]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/70"
     pr_url: ""
     merged_at: ""
 
@@ -627,7 +627,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [dataset-manifests]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/71"
     pr_url: ""
     merged_at: ""
 
@@ -635,7 +635,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [investigator-agent, dataset-manifests]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/72"
     pr_url: ""
     merged_at: ""
 
@@ -643,7 +643,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [ground-truth-parsers, baseline-runner, silentwitness-runner]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/73"
     pr_url: ""
     merged_at: ""
 
@@ -651,7 +651,7 @@ stories:
     epic: "Epic 14 — Accuracy harness"
     status: PENDING
     depends_on: [scorer]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/74"
     pr_url: ""
     merged_at: ""
 
@@ -666,7 +666,7 @@ stories:
     cut: true
     status: PENDING
     depends_on: [dataset-manifests]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/75"
     pr_url: ""
     merged_at: ""
 
@@ -676,7 +676,7 @@ stories:
     cut: true
     status: PENDING
     depends_on: [case-trapdoor-synthesis]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/76"
     pr_url: ""
     merged_at: ""
 
@@ -687,7 +687,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [cli-investigate, delta-report]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/77"
     pr_url: ""
     merged_at: ""
 
@@ -695,7 +695,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: []
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/78"
     pr_url: ""
     merged_at: ""
 
@@ -703,7 +703,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [delta-report]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/79"
     pr_url: ""
     merged_at: ""
 
@@ -711,7 +711,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [dataset-manifests]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/80"
     pr_url: ""
     merged_at: ""
 
@@ -719,7 +719,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [cli-install-claude-code, docker-baseline]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/81"
     pr_url: ""
     merged_at: ""
 
@@ -727,7 +727,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [cli-investigate]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/82"
     pr_url: ""
     merged_at: ""
 
@@ -735,7 +735,7 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [readme-polish]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/83"
     pr_url: ""
     merged_at: ""
 
@@ -743,6 +743,6 @@ stories:
     epic: "Epic 16 — Documentation polish + submission"
     status: PENDING
     depends_on: [readme-polish, accuracy-report-writeup, dataset-doc, try-it-out-doc, execution-logs-export, architecture-diagram-png, third-party-notices]
-    issue_url: ""
+    issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/84"
     pr_url: ""
     merged_at: ""
