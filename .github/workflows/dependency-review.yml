@@ -1,4 +1,22 @@
-# .github/workflows/dependency-review.yml — verbatim from CICD_SPEC §4.3.
+# .github/workflows/dependency-review.yml — verbatim from CICD_SPEC §4.3
+# except for the conditional gating documented below.
+#
+# Deviation (PR-93 audit): actions/dependency-review-action@v4 requires
+# GitHub Advanced Security (the "Dependency graph" feature) to be enabled
+# on the repository. GHAS is FREE on public repos but PAID on private repos
+# — and this repo is currently private (per STRATEGY.md, will flip to
+# public at submission time). Until the repo is public, the action fails
+# immediately with "Dependency review is not supported on this repository."
+#
+# Two paths considered:
+#   (a) Add `continue-on-error: true` — non-blocking but still red.
+#   (b) Gate the job on `if: !github.event.repository.private` — skipped
+#       cleanly when private, runs normally when public.
+# Going with (b) so the PR-checks UI shows a clean green/skip rather than
+# a permanently-red badge that masks real future failures.
+#
+# scripts/license_gate.py covers the license-deny gate on PRs to private
+# repos (with the structured allowlist for upstream-packaging gaps).
 
 name: dependency-review
 
@@ -13,6 +31,7 @@ permissions:
 jobs:
   review:
     runs-on: ubuntu-24.04
+    if: ${{ github.event.repository.private == false }}
     steps:
       - uses: actions/checkout@v4
       - name: Dependency review
