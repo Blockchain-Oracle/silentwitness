@@ -1,0 +1,37 @@
+# docker-compose.yml — convenience deploy for non-SIFT hosts (judges, CI smoke,
+# Cherry Studio / custom-agent integrations). Architecture §7.2.
+#
+# Two-command path: `docker compose up -d` → `docker compose exec silentwitness
+# silentwitness investigate <case-id>`.
+
+services:
+  silentwitness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: silentwitness:local
+    user: "silentwitness"
+    restart: unless-stopped
+    # /evidence is mounted ro,noexec,nosuid per PRD §6 NFR — the short-form
+    # mount string is what compose v2 reliably enforces these flags through.
+    # The MCP server's mount_check tool re-verifies these at runtime (see
+    # architecture §4.11) so a misconfigured compose cannot slip past the
+    # citation gate.
+    volumes:
+      - "/evidence:/evidence:ro,noexec,nosuid"
+      - "./cases:/cases"
+      - silentwitness-ledger:/var/lib/silentwitness
+    healthcheck:
+      test: ["CMD", "python", "-c", "import silentwitness_mcp"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  # Named volume so the HMAC ledger survives container restarts. NOT a bind
+  # mount — bind would inherit host permissions and break the 0700/0600 mode
+  # enforcement on /var/lib/silentwitness/verification/<case>.jsonl
+  # (architecture §4.9).
+  silentwitness-ledger:
+    driver: local
