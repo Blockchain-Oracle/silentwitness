@@ -1,23 +1,13 @@
 """Shared Pydantic v2 contracts — single source of truth across MCP + agent.
 
-Every tool wrapper, hypothesis-pivot loop, report renderer, audit logger and
-HMAC ledger imports from here. Splitting the types across packages would let
-two parallel definitions of ``Observation`` drift; centralising them is the
-forcing function that keeps the wedge ("every claim ties back to a tool
-execution") mechanical.
+Centralising every tool-wrapper, hypothesis-pivot, report-renderer, audit-
+logger, and HMAC-ledger type here prevents two parallel definitions of
+``Observation`` from drifting — the forcing function that keeps the wedge
+mechanical (architecture.md §4.3 ToolResponse; §4.4 AuditEntry; §5.4
+report-as-state; PRD §FR5).
 
-References:
-  - architecture.md §4.3 — Response envelope (``ToolResponse[TPayload]``)
-  - architecture.md §4.4 — Audit log entry shape
-  - architecture.md §5.4 — Report-as-state (``Finding`` is the persisted
-    entity; the rendered finding in the report inherits
-    ``interpretation.confidence`` at render time, not on the model itself)
-  - PRD §FR5 — audit_id format
-
-All models use ``frozen=True`` (no in-place mutation) and ``extra="forbid"``
-(unknown fields raise) except ``Finding``, which has a mutable ``status``
-field that legitimately transitions DRAFT → REVIEWED → FINAL → ARCHIVED
-across the case lifecycle.
+All models use ``frozen=True`` + ``extra="forbid"`` except ``Finding``,
+which has a mutable ``status`` (DRAFT → REVIEWED → FINAL → ARCHIVED).
 """
 
 from __future__ import annotations
@@ -129,6 +119,15 @@ class ReportSection(StrEnum):
     RECOMMENDATIONS = "recommendations"
     GAPS = "gaps"
     APPENDIX_AUDIT = "appendix_audit"
+
+
+class LedgerItemType(StrEnum):
+    """Kind of item recorded in the HMAC-signed approval ledger (architecture §4.9)."""
+
+    FINDING = "finding"
+    OBSERVATION = "observation"
+    INTERPRETATION = "interpretation"
+    TIMELINE_EVENT = "timeline_event"
 
 
 class FindingStatus(StrEnum):
@@ -278,21 +277,12 @@ class Pivot(BaseModel):
 class Finding(BaseModel):
     """A reportable finding — observation + interpretation pair with a lifecycle.
 
-    NOTE: this is the only model in this module that is NOT frozen. The
-    ``status`` field transitions DRAFT → REVIEWED → FINAL → ARCHIVED across
-    the case lifecycle. Other fields are still effectively immutable by
-    convention (the agent re-emits Findings rather than mutating in place).
+    Not frozen — ``status`` transitions DRAFT → REVIEWED → FINAL → ARCHIVED
+    over the case lifecycle. ``validate_assignment=True`` ensures runtime
+    mutations go through the same validation as construction (PR-92 fix).
     """
 
-    model_config = ConfigDict(
-        extra="forbid",
-        str_strip_whitespace=True,
-        # validate_assignment ensures runtime mutations (`f.status = ...`) go
-        # through the same validation as construction. Without it, the model
-        # silently accepts any value at runtime — PR-92 silent-failure review
-        # found this on the load-bearing FindingStatus transition path.
-        validate_assignment=True,
-    )
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, validate_assignment=True)
 
     id: str = Field(min_length=1, description="Finding ID (typically F-NNN).")
     observation_id: str = Field(min_length=1)
@@ -310,24 +300,17 @@ class Finding(BaseModel):
 
 
 class EvidenceRecord(BaseModel):
-    """A registered piece of evidence with its locked SHA-256.
-
-    Persisted as one element of ``cases/<case_id>/evidence.json`` (architecture
-    §4.10). Once written, the (path, sha256) pair is the citation gate's
-    ground truth: the MCP server refuses any tool call against an unregistered
-    path, and case-resume re-verifies the hash to catch bit-rot.
-    """
+    """Persisted entry in ``cases/<case_id>/evidence.json`` (architecture §4.10).
+    The (path, sha256) pair is the citation gate's ground truth."""
 
     model_config = _BASE_CONFIG
 
-    path: Path = Field(description="Canonical (resolved) absolute path on the analyst workstation.")
+    path: Path = Field(description="Canonical resolved absolute path.")
     type: EvidenceType
     sha256: Sha256Hex
     size_bytes: int = Field(ge=0)
     registered_at: datetime
-    registered_audit_id: str = Field(
-        min_length=1, description="audit_id of the register-evidence MCP call."
-    )
+    registered_audit_id: str = Field(min_length=1)
 
 
 class VerifyResult(BaseModel):
@@ -338,6 +321,28 @@ class VerifyResult(BaseModel):
     matches: bool
     expected: Sha256Hex
     actual: Sha256Hex
+
+
+class LedgerEntry(BaseModel):
+    """One line of HMAC-signed approval ledger (architecture §4.9). No
+    ``str_strip_whitespace`` — forensic integrity demands exact bytes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ts: datetime
+    item_id: str = Field(
+        min_length=1,
+        pattern=r"^[^\x00\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]+$",
+        description="e.g. F-001, O-042, I-007. NUL-free + line-terminator-free.",
+    )
+    item_type: LedgerItemType
+    content_hash: Sha256Hex
+    hmac: Sha256Hex
+    examiner: str = Field(
+        min_length=1,
+        pattern=r"^[^\x00\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029]+$",
+        description="Line-terminator-free so JSONL append cannot break the ledger.",
+    )
 
 
 class AuditEntry(BaseModel):
@@ -364,16 +369,9 @@ TPayload = TypeVar("TPayload", bound=BaseModel)
 # Pydantic <2.11 loses PEP 695 generic narrowing on model_validate_json — drop
 # the noqa once the lockfile floor reaches 2.11+.
 class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
-    """The envelope every MCP tool returns. architecture.md §4.3.
-
-    ``success=True`` ⇒ ``data is not None``. ``success=False`` ⇒ ``data is
-    None`` and ``caveats`` carries the failure explanation. The MCP server
-    enforces this invariant when constructing responses; downstream code can
-    rely on it without re-checking.
-
-    Aliased as ``ResponseEnvelope`` for sites that read the architecture-doc
-    name; both names refer to the same model.
-    """
+    """MCP tool envelope (architecture.md §4.3). Invariant: ``success=True``
+    ⇒ ``data`` not None; ``success=False`` ⇒ ``data=None`` and ``caveats``
+    explains. Aliased as ``ResponseEnvelope`` for arch-doc readers."""
 
     model_config = _BASE_CONFIG
 
