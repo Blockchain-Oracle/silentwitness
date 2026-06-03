@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.2 (2026-06-03)
+
+### Bug Fixes
+
+- **ci**: Bump aquasecurity/trivy-action 0.28.0 → 0.36.0 (spec hallucinated)
+  ([#94](https://github.com/Blockchain-Oracle/silentwitness/pull/94),
+  [`8dd6da7`](https://github.com/Blockchain-Oracle/silentwitness/commit/8dd6da76c9ed61170da829971ac6e6cfe9afeab9))
+
+
 ## v1.4.1 (2026-06-03)
 
 ### Bug Fixes
