@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.4 (2026-06-03)
+
+### Bug Fixes
+
+- **ci**: Lowercase GHCR owner in image tags
+  ([#97](https://github.com/Blockchain-Oracle/silentwitness/pull/97),
+  [`9534888`](https://github.com/Blockchain-Oracle/silentwitness/commit/953488852c4fdac7452c7891ea730e4cb889b817))
+
+
 ## v1.4.3 (2026-06-03)
 
 ### Bug Fixes

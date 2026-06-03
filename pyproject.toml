@@ -1,6 +1,6 @@
 [project]
 name = "silentwitness"
-version = "1.4.3"
+version = "1.4.4"
 description = "A hypothesis-first DFIR investigator whose report writes itself, with every claim locked to the tool that produced it."
 readme = "README.md"
 requires-python = ">=3.12,<3.14"
