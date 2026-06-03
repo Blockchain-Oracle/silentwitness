@@ -11,4 +11,4 @@ See ``docs/architecture.md`` §4 for the deep spec.
 # Triple-quoted strings after module-level assignments do NOT attach as
 # docstrings to the variable in CPython — keep this rationale as a real ``#``
 # comment so it survives ``help()`` / ``__doc__`` lookups truthfully.
-__version__ = "0.1.0"
+__version__ = "1.0.0"
