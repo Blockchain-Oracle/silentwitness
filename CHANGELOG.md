@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.4.5 (2026-06-03)
+
+### Bug Fixes
+
+- **ci**: Make trivy informational (will_not_fix Debian CVEs)
+  ([#98](https://github.com/Blockchain-Oracle/silentwitness/pull/98),
+  [`5b98f77`](https://github.com/Blockchain-Oracle/silentwitness/commit/5b98f77da43ddff5efacda93eed286a9fba6d97b))
+
+
 ## v1.4.4 (2026-06-03)
 
 ### Bug Fixes
