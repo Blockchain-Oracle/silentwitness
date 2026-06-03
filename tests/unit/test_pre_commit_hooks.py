@@ -1,17 +1,24 @@
 """Behavioural tests for the pre-commit hook scripts.
 
 Subprocess-driven against the real scripts under ``.pre-commit-hooks/`` — no
-mocks, per architecture §14. The 8 tests map to the BDD criteria in
-story-pre-commit-hooks.md:
+mocks, per architecture §14.
 
-  1. file-size-guard accepts a 400-LOC .py file.
-  2. file-size-guard rejects a 401-LOC .py file with a useful stderr.
-  3. file-size-guard skips ``uv.lock`` even when oversized.
-  4. file-size-guard skips ``tests/<x>/fixtures/*`` (forensic blobs).
-  5. forbidden-paths accepts ``src/silentwitness_mcp/server.py``.
-  6. forbidden-paths rejects ``cases/case-001/audit/x.jsonl``.
-  7. forbidden-paths rejects ``evidence/raw.E01``.
-  8. forbidden-paths honours the ``tests/integration/fixtures/`` carve-out.
+Coverage:
+  * The pytest-targeted BDD criteria from story-pre-commit-hooks.md (the
+    five behavioural Givens: 400-LOC pass, 401-LOC fail, cases/.../audit
+    reject, tests/integration/fixtures/ carve-out, src/ accept).
+  * Defensive coverage of SKIP_PATTERNS and FORBIDDEN_PREFIXES branches the
+    story doesn't BDD-test (``uv.lock`` skip, fixture-glob skip, ``evidence/``
+    reject, ``var/lib/silentwitness/`` reject, ``cases/*/report.md`` reject).
+  * Regression tests for the silent-failure surface that PR-89 review
+    found: deep ``cases/**`` paths bypassing the §6.2 fnmatch globs, and
+    leading-``./`` paths bypassing both the forbidden check and the
+    carve-out asymmetrically.
+
+The ``pre-commit install`` / ``pre-commit run --all-files`` / conventional-
+commit accept-reject BDDs are covered by the story's Shell verification
+block — those require a real git repo + installed hook chain and aren't
+pytest's domain.
 """
 
 from __future__ import annotations
@@ -111,3 +118,45 @@ def test_forbidden_paths_honours_integration_fixtures_carveout() -> None:
     target = "tests/integration/fixtures/cases/sample/audit/x.jsonl"
     result = _run(_FORBIDDEN_PATHS, target)
     assert result.returncode == 0, f"carve-out path was rejected: {result.stderr}"
+
+
+def test_forbidden_paths_rejects_var_lib_ledger() -> None:
+    """``var/lib/silentwitness/*`` is one of three runtime-only roots in §6.2."""
+    target = "var/lib/silentwitness/ledger.jsonl"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 1
+    assert target in result.stderr
+
+
+def test_forbidden_paths_rejects_case_report() -> None:
+    """``cases/<id>/report.md`` is forbidden — it's drafted at runtime, never committed."""
+    target = "cases/case-001/report.md"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 1
+    assert target in result.stderr
+
+
+def test_forbidden_paths_rejects_deep_cases_path() -> None:
+    """Regression for the §6.2 fnmatch hole — deep ``cases/**`` paths must NOT slip through.
+
+    The verbatim §6.2 patterns ``cases/*`` / ``cases/*/*`` only match 1-2 segments
+    after ``cases/``. A path like ``cases/case-001/notes/analyst-scratch.md``
+    evaded EVERY §6.2 pattern in the original silent-failure surface.
+    """
+    target = "cases/case-001/notes/analyst-scratch.md"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 1, f"deep cases path silently passed: {result.stderr}"
+    assert target in result.stderr
+
+
+def test_forbidden_paths_normalises_dot_slash_prefix() -> None:
+    """Regression for the leading-``./`` bypass.
+
+    ``./cases/case-001/audit/foo.jsonl`` used to evade both the forbidden check
+    AND the carve-out asymmetrically because ``str.startswith`` was applied
+    raw. Normalisation now strips the prefix before either check.
+    """
+    target = "./cases/case-001/audit/foo.jsonl"
+    result = _run(_FORBIDDEN_PATHS, target)
+    assert result.returncode == 1, f"./ prefix slipped past gate: {result.stderr}"
+    assert "cases/case-001/audit/foo.jsonl" in result.stderr

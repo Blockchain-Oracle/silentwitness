@@ -71,12 +71,17 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
         args: [--maxkb=1024]
+        # Forensic fixtures (E01 chunks, memory samples) may legitimately
+        # exceed 1MB. Mirror the detect-secrets exclude so committers aren't
+        # mysteriously blocked.
+        exclude: ^tests/.*/fixtures/.*$
 
   # --- Conventional Commits ---
   # Deviation from CICD_SPEC §3.2: conventional-pre-commit v3.6.0's CLI takes
   # commit types as POSITIONAL args (not `--types`) and `--scopes` as a single
   # comma-separated flag value. The spec's `--types` invocation errors out at
-  # runtime ("unrecognized arguments"). Spec text to be updated.
+  # runtime ("unrecognized arguments").
+  # TODO(docs): patch CICD_SPEC §3.2 to match this invocation.
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.6.0
     hooks:

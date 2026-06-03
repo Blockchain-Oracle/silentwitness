@@ -1,14 +1,34 @@
 #!/usr/bin/env python3
-"""file-size-guard.py — enforce the ≤400-LOC-per-.py invariant from BRAINSTORM §3.7.
+"""file-size-guard.py — enforce the ≤400-LOC-per-.py invariant.
 
-Counts ALL physical lines (blanks + comments included). Encourages splitting at
-natural module boundaries rather than hiding bulk in whitespace.
+The 400-LOC cap (architecture.md §14 — CI gates; rationale in BRAINSTORM
+Decisions 6 + 7) keeps modules auditable for the judges: small enough that a
+reviewer can hold every branch of a verification gate or tool wrapper in
+their head at once.
 
-Skips:
-  - uv.lock and other auto-generated files
-  - tests/<anything>/fixtures/* (forensic fixture blobs may be large)
-  - vendored/* directory (third-party drop-ins)
-  - any file path matching SKIP_PATTERNS
+Counts ALL physical lines (blanks + comments included). Encourages splitting
+at natural module boundaries rather than hiding bulk in whitespace.
+
+Skips (CICD_SPEC §6.1 SKIP_PATTERNS):
+  - ``uv.lock`` and other auto-generated files
+  - ``tests/<anything>/fixtures/*`` (forensic fixture blobs may be large)
+  - ``vendored/*`` (third-party drop-ins)
+  - ``.pre-commit-hooks/*`` (this hook is tooling, not product code)
+
+------------------------------------------------------------------------------
+Two deviations from CICD_SPEC §6.1 verbatim
+------------------------------------------------------------------------------
+1. ``count_lines`` catches ``FileNotFoundError`` (not the broader ``OSError``).
+   The verbatim version's ``except OSError`` silently swallows
+   ``PermissionError`` / ``IsADirectoryError`` / disk-read failures — a 5000-
+   LOC file chmod 000 would exit clean. The docstring's stated intent is
+   ONLY "deleted-in-this-commit (rename)," which ``FileNotFoundError``
+   covers exactly. PR-89 silent-failure review flagged this.
+
+2. ``main()`` warns to stderr when a passed path doesn't exist (instead of
+   silently skipping). Pre-commit + ``git ls-files`` only emit existing
+   paths, so this fires only when an upstream caller has a bug. Story 2's
+   version had this warning; the §6.1 rewrite lost it.
 
 Exit codes:
   0 — no offenders
@@ -30,7 +50,7 @@ SKIP_PATTERNS = (
     "tests/**/fixtures/*",
     "tests/*/fixtures/*",
     "vendored/*",
-    ".pre-commit-hooks/*",  # this file is exempted; it's tooling, not product code
+    ".pre-commit-hooks/*",
 )
 
 
@@ -40,28 +60,43 @@ def is_skipped(path: Path) -> bool:
 
 
 def count_lines(path: Path) -> int:
+    """Return raw newline count, or 0 if the file was deleted in this commit."""
     try:
         with path.open("rb") as fh:
             return sum(1 for _ in fh)
-    except OSError:
-        # Deleted in this commit (e.g. rename); treat as 0.
+    except FileNotFoundError:
         return 0
 
 
 def main(argv: list[str]) -> int:
     offenders: list[tuple[str, int]] = []
+    missing: list[str] = []
     for arg in argv:
         p = Path(arg)
+        if not p.exists():
+            missing.append(arg)
+            continue
         if not p.is_file() or is_skipped(p):
             continue
         n = count_lines(p)
         if n > MAX_LINES:
             offenders.append((arg, n))
 
+    if missing:
+        print(
+            "file-size-guard: WARN: the following paths do not exist and were skipped:",
+            file=sys.stderr,
+        )
+        for m in missing:
+            print(f"  - {m}", file=sys.stderr)
+
     if not offenders:
         return 0
 
-    print("\nfile-size-guard: the following files exceed the 400-LOC limit:\n", file=sys.stderr)
+    print(
+        "\nfile-size-guard: files exceed 400-LOC limit (architecture.md §14):\n",
+        file=sys.stderr,
+    )
     for path, n in sorted(offenders, key=lambda x: -x[1]):
         print(f"  {n:>5} lines  {path}", file=sys.stderr)
     print(
