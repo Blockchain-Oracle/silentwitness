@@ -2,6 +2,20 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-06-03)
+
+### Bug Fixes
+
+- **ci**: Close 5 failing CI jobs + structured license allowlist + pre-commit ruff version fix
+  ([#93](https://github.com/Blockchain-Oracle/silentwitness/pull/93),
+  [`c857cc3`](https://github.com/Blockchain-Oracle/silentwitness/commit/c857cc32096c8149fe9aa82955c2d7ef3d8891b1))
+
+### Chores
+
+- **docs**: Mark story-common-types COMPLETE — PR #92 merged
+  ([`ddff68e`](https://github.com/Blockchain-Oracle/silentwitness/commit/ddff68e2c8ffb5b357fcb14d843ba175f6d4fbee))
+
+
 ## v1.4.0 (2026-06-03)
 
 ### Chores
