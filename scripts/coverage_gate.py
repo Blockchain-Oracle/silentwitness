@@ -62,6 +62,9 @@ def _aggregate(xml_path: Path) -> tuple[int, dict[tuple[str, int], tuple[int, in
     for cls in tree.iter("class"):
         filename = cls.attrib.get("filename", "")
         if not filename:
+            # Defensive: real coverage.py output always has filenames. We don't
+            # count these toward class_count so an XML with only empty-filename
+            # entries still surfaces as "broken" (class_count == 0).
             continue
         class_count += 1
         # Cobertura paths can be relative or prefixed with ./ — normalise so

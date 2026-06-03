@@ -86,7 +86,17 @@ def _license_strings(entry: dict[str, object]) -> list[str]:
                 out.append(cleaned)
     classifiers = entry.get("LicenseClassifier")
     if isinstance(classifiers, list):
-        out.extend(c.strip().lower() for c in classifiers if isinstance(c, str) and c.strip())
+        # Symmetry with the `License` string branch: split classifier entries
+        # on the same separators in case a future tool emits a combined value
+        # there too. Trove classifiers don't normally carry joined strings,
+        # but applying the separator costs nothing and closes the path.
+        for c in classifiers:
+            if not isinstance(c, str):
+                continue
+            for tok in _LICENSE_SEPARATOR.split(c):
+                cleaned = tok.strip().lower()
+                if cleaned:
+                    out.append(cleaned)
     if not out:
         name = entry.get("Name", "<unknown>")
         raise ValueError(
