@@ -39,16 +39,8 @@ from pydantic import (
 
 
 def _normalise_hex(value: object) -> str:
-    """Normalise SHA-256 input to lowercase ``str`` before pattern validation.
-
-    Raises ``ValueError`` for non-``str`` inputs (including ``bytes``, which
-    Pydantic would otherwise silently UTF-8-decode and let through to the
-    StringConstraints pattern — a real silent-failure surface PR-92 round-2
-    review caught). ``ValueError`` is used over ``TypeError`` because
-    Pydantic v2 wraps it in ``ValidationError`` for the caller; ``TypeError``
-    is re-raised verbatim. Lives at module scope so the three Sha256Hex-typed
-    fields share one source of truth instead of the triplicated
-    ``_check_hex`` classmethods that previously drifted independently."""
+    """Lowercase + reject non-``str`` (incl. ``bytes``, which Pydantic would
+    otherwise UTF-8-decode silently — PR-92 silent-failure surface)."""
     if not isinstance(value, str):
         raise ValueError(f"Sha256Hex requires str, got {type(value).__name__}")
     return value.lower()
@@ -70,16 +62,10 @@ type Sha256Hex = Annotated[
 
 
 class Confidence(StrEnum):
-    """How strongly an interpretation is supported by its observations.
-
-    Ordering note: StrEnum inherits from ``str``, so the default ``<`` /
-    ``>`` are alphabetical (``HIGH`` < ``LOW`` < ``MEDIUM``). The four
-    dunder overrides below replace that with semantic rank. They raise
-    ``TypeError`` on non-Confidence comparands instead of returning
-    ``NotImplemented`` because Python's reflected-operator fallback would
-    otherwise re-dispatch to ``str.__lt__`` (StrEnum's superclass) and
-    silently compare alphabetically — exactly the silent-failure surface
-    PR-92 review caught.
+    """Interpretation strength. Overrides ``<``/``>`` to semantic rank and
+    raises ``TypeError`` on non-Confidence comparands (returning
+    ``NotImplemented`` would let the reflected fallback re-dispatch to
+    ``str.__lt__`` and silently compare alphabetically — PR-92 catch).
     """
 
     LOW = "LOW"
@@ -170,13 +156,9 @@ _BASE_CONFIG = ConfigDict(
 
 
 class CitedSpan(BaseModel):
-    """A byte- or line-range reference to a span of stored tool output.
-
-    The MCP server's citation gate (architecture.md §4.5) re-reads the
-    referenced file at evaluation time, hashes the cited slice, and refuses
-    the observation if the recorded ``content_sha256`` does not match. This
-    is the load-bearing primitive of the wedge.
-    """
+    """Line-range pointer into a stored tool-output blob. The citation gate
+    (architecture.md §4.5) re-hashes the cited slice at evaluation time and
+    refuses observations whose recorded ``content_sha256`` no longer matches."""
 
     model_config = _BASE_CONFIG
 
@@ -327,6 +309,37 @@ class Finding(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class EvidenceRecord(BaseModel):
+    """A registered piece of evidence with its locked SHA-256.
+
+    Persisted as one element of ``cases/<case_id>/evidence.json`` (architecture
+    §4.10). Once written, the (path, sha256) pair is the citation gate's
+    ground truth: the MCP server refuses any tool call against an unregistered
+    path, and case-resume re-verifies the hash to catch bit-rot.
+    """
+
+    model_config = _BASE_CONFIG
+
+    path: Path = Field(description="Canonical (resolved) absolute path on the analyst workstation.")
+    type: EvidenceType
+    sha256: Sha256Hex
+    size_bytes: int = Field(ge=0)
+    registered_at: datetime
+    registered_audit_id: str = Field(
+        min_length=1, description="audit_id of the register-evidence MCP call."
+    )
+
+
+class VerifyResult(BaseModel):
+    """Outcome of :meth:`EvidenceRegistry.verify_hash` — bit-rot detector."""
+
+    model_config = _BASE_CONFIG
+
+    matches: bool
+    expected: Sha256Hex
+    actual: Sha256Hex
+
+
 class AuditEntry(BaseModel):
     """One line of audit/<backend>.jsonl. Verbatim BRAINSTORM §4 schema."""
 
@@ -348,10 +361,8 @@ class AuditEntry(BaseModel):
 TPayload = TypeVar("TPayload", bound=BaseModel)
 
 
-# Pydantic <2.11 doesn't fully interop with PEP 695 generics for BaseModel
-# subclasses (model_validate_json on `class ToolResponse[T: BaseModel](BaseModel)`
-# loses the parametric type narrowing). Drop the noqa once the lockfile floor
-# reaches Pydantic 2.11+.
+# Pydantic <2.11 loses PEP 695 generic narrowing on model_validate_json — drop
+# the noqa once the lockfile floor reaches 2.11+.
 class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
     """The envelope every MCP tool returns. architecture.md §4.3.
 
