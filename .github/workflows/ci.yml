@@ -109,6 +109,15 @@ jobs:
           tool: just
       - run: uv python install ${{ matrix.python }}
       - run: uv sync --all-extras --frozen
+      - name: Cache spaCy en_core_web_lg model (~750 MB)
+        id: spacy-cache
+        uses: actions/cache@v4
+        with:
+          path: .venv/lib/python${{ matrix.python }}/site-packages/en_core_web_lg
+          key: spacy-en_core_web_lg-3.8.0-py${{ matrix.python }}
+      - name: Install spaCy en_core_web_lg model
+        if: steps.spacy-cache.outputs.cache-hit != 'true'
+        run: uv run python -m spacy download en_core_web_lg
       - name: pytest with coverage
         env:
           HYPOTHESIS_PROFILE: ci
