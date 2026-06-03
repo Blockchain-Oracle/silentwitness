@@ -18,7 +18,14 @@ Use: "defensible audit trail", "senior-analyst sequencing", "hypothesis pivot", 
 - One story = one branch (`story-<slug>`)
 - Read the story file in `docs/stories/`, then the architecture section it references
 - Implement → `uv run ruff check && uv run mypy --strict src/ && uv run pytest` → commit → PR
-- Update `docs/sprint-status.yaml`: `status: COMPLETE` + `merged_at:` on merge
+- **Open PR → spin up a fresh-context sub-agent invoking `pr-review-toolkit:review-pr` against the PR.** That toolkit fans out specialist reviewers (logic, security, test quality, comment quality, type design, silent-failure hunter, code-simplifier). Read the findings.
+- **Address review findings:** fix in the same branch, push amends, re-run the review pass if substantive. Once review verdict is clean → squash-merge to main → delete branch → continue on the next story's branch.
+- Update `docs/sprint-status.yaml`: `status: COMPLETE` + `merged_at:` + `pr_url:` on merge.
+- Reviewer sub-agent always has FRESH context — never reuse the implementer's context for review.
+
+## Decision-making
+- Operational/process decisions: I decide and execute. Only escalate for strategic redirects (wedge change, architectural pivot).
+- When a story spec is ambiguous: read referenced architecture + context first; web-search / Context7 / source-read the library if still unclear; document the resolved interpretation in the PR description.
 
 ## Critical pin reminders (full list in `docs/architecture.md §2`)
 - `mcp>=1.23.0,<2.0` (CVE-2025-66416 + CVE-2025-53366 closed)
