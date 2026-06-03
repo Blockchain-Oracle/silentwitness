@@ -83,8 +83,33 @@ def test_append_jsonl_line_preserves_prior_lines(tmp_path: Path) -> None:
 
 def test_append_jsonl_line_rejects_embedded_newline(tmp_path: Path) -> None:
     target = tmp_path / "audit.jsonl"
-    with pytest.raises(ValueError, match="newline"):
+    with pytest.raises(ValueError, match="line-terminator"):
         append_jsonl_line(target, '{"k":1}\nINJECTED')
+
+
+@pytest.mark.parametrize(
+    "bad_char",
+    [
+        "\r",  # CR — would split via splitlines()
+        "\v",  # VT
+        "\f",  # FF
+        "\x1c",  # FS
+        "\x1d",  # GS
+        "\x1e",  # RS — exact char that broke the v1 property test
+        "\x85",  # NEL
+        "\u2028",  # LINE SEPARATOR
+        "\u2029",  # PARAGRAPH SEPARATOR
+    ],
+)
+def test_append_jsonl_line_rejects_all_splitlines_terminators(
+    tmp_path: Path, bad_char: str
+) -> None:
+    """PR-99 silent-failure regression: production guard must match the
+    property-test character blacklist. Each str.splitlines() terminator must
+    be rejected so downstream consumers can splitlines() safely."""
+    target = tmp_path / "audit.jsonl"
+    with pytest.raises(ValueError, match="line-terminator"):
+        append_jsonl_line(target, f'{{"k":1}}{bad_char}injected')
 
 
 def test_append_jsonl_line_thread_safety(tmp_path: Path) -> None:
@@ -117,6 +142,38 @@ def test_atomic_writer_commits_on_clean_exit(tmp_path: Path) -> None:
     # No tmp artefact.
     leftovers = [p.name for p in tmp_path.iterdir() if ".tmp." in p.name]
     assert leftovers == []
+
+
+def test_atomic_writer_commits_zero_byte_file(tmp_path: Path) -> None:
+    """Empty file is a legitimate commit (e.g. empty section render). The
+    ctx-mgr must produce an empty target and clean up the tmp."""
+    target = tmp_path / "empty.bin"
+    with atomic_writer(target):
+        pass
+    assert target.read_bytes() == b""
+    leftovers = [p.name for p in tmp_path.iterdir() if ".tmp." in p.name]
+    assert leftovers == []
+
+
+def test_atomic_writer_does_not_rollback_after_replace_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """PR-99 silent-failure regression: if `os.chmod` fails AFTER `os.replace`
+    succeeds, the file IS committed — rollback must NOT delete it. Move the
+    `committed` flag to immediately after replace."""
+    target = tmp_path / "post-replace-fail.bin"
+
+    def chmod_boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated post-replace chmod failure")
+
+    monkeypatch.setattr("silentwitness_common.atomic_io.os.chmod", chmod_boom)
+    with pytest.raises(OSError, match="simulated"):
+        with atomic_writer(target) as fh:
+            fh.write(b"committed content")
+    # File MUST exist with the committed content even though chmod raised.
+    assert target.read_bytes() == b"committed content"
+    leftovers = [p.name for p in tmp_path.iterdir() if ".tmp." in p.name]
+    assert leftovers == [], f"tmp survived post-replace failure: {leftovers}"
 
 
 def test_atomic_writer_rolls_back_on_exception(tmp_path: Path) -> None:
