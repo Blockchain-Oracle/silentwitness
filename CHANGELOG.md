@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-06-03)
+
+### Features
+
+- **ci**: Justfile + 5 recipe tests (Epic 1, Story 5)
+  ([#91](https://github.com/Blockchain-Oracle/silentwitness/pull/91),
+  [`38b1ae0`](https://github.com/Blockchain-Oracle/silentwitness/commit/38b1ae01fd04641aafc4ad1691bf1957bab0ec16))
+
+
 ## v1.2.0 (2026-06-03)
 
 ### Features
