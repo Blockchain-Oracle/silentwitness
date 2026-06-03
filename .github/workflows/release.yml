@@ -1,7 +1,22 @@
-# .github/workflows/release.yml — verbatim from CICD_SPEC §4.2.
+# .github/workflows/release.yml — PR-based release flow.
 #
-# Audit-driven deviation: UV_VERSION is "0.11.18" (the spec block predates the
-# audit-locked pin in pyproject.toml). See CI workflow header for context.
+# Original CICD_SPEC §4.2 had semantic-release push the bump commit directly
+# to main. Branch protection on a user-owned repo (no Ruleset bypass-actors
+# available) blocks that path. We split into two stages so all changes flow
+# through PRs:
+#
+#   bump:    on push-to-main, compute next version, write pyproject.toml +
+#            CHANGELOG.md locally, open a "chore(release): X.Y.Z" PR via
+#            peter-evans/create-pull-request. The PR goes through the normal
+#            8 status checks like any other PR.
+#
+#   tag:     on push-to-main where the head commit is "chore(release): X.Y.Z"
+#            (i.e. the bump PR was just squash-merged), create the git tag,
+#            cut the GitHub Release, build + push the Docker image to GHCR.
+#            Tags themselves are NOT subject to branch protection.
+#
+# Audit-driven deviation: UV_VERSION="0.11.18" (the spec block predates the
+# audit-locked pin in pyproject.toml).
 
 name: release
 
@@ -11,18 +26,21 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write       # to push tags + CHANGELOG.md
-  packages: write       # to push the versioned Docker tag
-  id-token: write       # for any future OIDC publishing
+  contents: write
+  pull-requests: write
+  packages: write
+  id-token: write
 
 concurrency:
   group: release
   cancel-in-progress: false
 
 jobs:
-  release:
-    name: semantic-release
+  # -------------------------------------------------------------------- BUMP
+  bump:
+    name: open release PR
     runs-on: ubuntu-24.04
+    if: "!startsWith(github.event.head_commit.message, 'chore(release):')"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,27 +52,96 @@ jobs:
           enable-cache: true
       - run: uv python install 3.12
       - run: uv sync --all-extras --frozen
+
+      - name: Compute next version + write files (no commit/push/tag)
+        id: bump
+        run: |
+          uv run semantic-release version \
+            --no-commit --no-tag --no-push --no-vcs-release --changelog
+          if git diff --quiet; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            VER=$(uv run python -c \
+              "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+            echo "version=$VER" >> "$GITHUB_OUTPUT"
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open release PR
+        if: steps.bump.outputs.skip == 'false'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(release): ${{ steps.bump.outputs.version }}"
+          title: "chore(release): ${{ steps.bump.outputs.version }}"
+          body: |
+            Automated version bump via `python-semantic-release`.
+            Merge this PR to tag `v${{ steps.bump.outputs.version }}` and
+            cut the GitHub Release + Docker image.
+          branch: "release/v${{ steps.bump.outputs.version }}"
+          base: main
+          delete-branch: true
+
+  # ------------------------------------------------------------- TAG + RELEASE
+  tag:
+    name: tag + GitHub Release + GHCR push
+    runs-on: ubuntu-24.04
+    if: startsWith(github.event.head_commit.message, 'chore(release):')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.11.18"
+          enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --all-extras --frozen
+
+      - name: Read version from pyproject.toml
+        id: version
+        run: |
+          VER=$(uv run python -c \
+            "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Push git tag (tags are not subject to branch protection)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag "v${{ steps.version.outputs.version }}"
+          git push origin "v${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.version.outputs.version }}"
+          generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Compute lowercase owner (GHCR rejects mixed-case repo names)
         id: owner
         run: echo "lc=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
-      - name: python-semantic-release version + changelog
-        id: release
-        run: |
-          uv run semantic-release version --changelog
-          echo "released=$(uv run semantic-release version --print-last-released 2>/dev/null || echo none)" >> "$GITHUB_OUTPUT"
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build + push versioned Docker image
-        if: steps.release.outputs.released != 'none'
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:${{ steps.release.outputs.released }}
+            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:${{ steps.version.outputs.version }}
+            ghcr.io/${{ steps.owner.outputs.lc }}/silentwitness:latest
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.version=${{ steps.release.outputs.released }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.licenses=MIT
