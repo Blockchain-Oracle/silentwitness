@@ -125,11 +125,11 @@ stories:
 
   - id: story-entity-gate
     epic: "Epic 3 — Verification gates"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/13"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/112"
+    merged_at: "2026-06-03T19:35:00Z"
 
   - id: story-sanitizer
     epic: "Epic 3 — Verification gates"
