@@ -153,6 +153,21 @@ jobs:
           enable-cache: true
       - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
       - run: uv sync --all-extras --frozen
+      - name: Cache spaCy en_core_web_lg model (~750 MB)
+        id: spacy-cache
+        continue-on-error: true  # cache service 400s are transient; don't fail the job
+        uses: actions/cache@v4
+        with:
+          path: .venv/lib/python${{ env.PYTHON_VERSION_DEFAULT }}/site-packages/en_core_web_lg
+          key: spacy-en_core_web_lg-3.8.0-py${{ env.PYTHON_VERSION_DEFAULT }}
+      - name: Install spaCy en_core_web_lg model
+        # Re-check disk state — cache-hit reflects what the action THOUGHT, not
+        # what's on disk. py3.12 has hit 400-errors here that left no files
+        # despite cache-hit=true.
+        run: |
+          if ! uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
+            uv run python -m spacy download en_core_web_lg
+          fi
       - name: Run Hypothesis property tests (slow profile)
         env:
           HYPOTHESIS_PROFILE: slow
