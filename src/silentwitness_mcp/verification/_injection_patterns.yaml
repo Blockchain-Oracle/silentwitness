@@ -1,0 +1,64 @@
+# Versioned injection-pattern catalog (architecture §4.8).
+#
+# YAML-loaded by _injection_loader.py at module import. Reloadable at
+# runtime via reload_patterns() (or SIGHUP at the server level — Epic 4
+# wiring), so new patterns can ship without code change.
+#
+# Pattern IDs are stable wire identifiers — never rename existing IDs;
+# only append new entries. The audit log records the ID per strip event
+# so analysts can grep historical sanitizer output for a known vector.
+#
+# Source of truth: architecture §4.8 paragraph 3 + threat model §9 row
+# "Prompt injection in evidence" + context/technical/08 §3.5.
+
+schema_version: 1
+
+patterns:
+  - id: ignore_previous_instructions
+    regex: '(?i)ignore (?:all )?previous instructions'
+    description: >
+      Classic prompt-injection. Tries to override the system prompt by
+      asserting the model should disregard earlier context. Defended by
+      the citation gate (any false claim still fails verification) but
+      strip-and-mark is the structural belt-and-suspenders.
+
+  - id: disregard_prior
+    regex: '(?i)disregard (?:all )?prior'
+    description: >
+      Variant phrasing of ignore_previous_instructions. Same defense
+      rationale.
+
+  - id: you_are_now_role
+    regex: '(?i)you are now [a-z ]+(?:agent|assistant|investigator|model|ai)'
+    description: >
+      Role-impersonation attempt that tries to redirect the agent into a
+      different persona where prior constraints don't apply.
+
+  - id: end_of_system_prompt
+    regex: '(?i)end of (?:system|user) prompt'
+    description: >
+      Boundary-confusion attempt — pretends the system prompt has ended
+      so subsequent attacker text reads as fresh user input.
+
+  - id: forget_above
+    regex: '(?i)forget (?:everything|all) (?:above|so far)'
+    description: >
+      Cousin of ignore_previous_instructions targeting context-window
+      memory. Less common but seen in the wild.
+
+  - id: system_now_says
+    regex: '(?i)(?:the )?system now says'
+    description: >
+      Asserts a new system message via in-band text.
+
+  - id: switch_to_mode
+    regex: '(?i)(?:switch|enter|enable) (?:dev|developer|admin|root|unsafe) mode'
+    description: >
+      Pretends to flip the model into a privileged mode that lifts
+      content/refusal constraints.
+
+  - id: print_system_prompt
+    regex: '(?i)(?:print|reveal|show|output|repeat) (?:the |your )?(?:system|original) prompt'
+    description: >
+      Exfiltration attempt — tries to leak the system prompt back into
+      the agent's response.
