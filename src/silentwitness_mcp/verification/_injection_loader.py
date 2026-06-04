@@ -24,6 +24,20 @@ import yaml
 
 _PATTERNS_PATH: Path = Path(__file__).parent / "_injection_patterns.yaml"
 
+# Benign forensic-evidence smoke samples. Any catalog pattern that
+# matches any of these is rejected at load time — protects against
+# PR-114 silent-failure C3 (a ``(?i).*`` entry would otherwise
+# silently delete all evidence in production).
+_BENIGN_CORPUS: tuple[str, ...] = (
+    "PID 1208 svchost.exe parent 4172",
+    "C:\\Windows\\System32\\drivers\\nv4_mini.sys",
+    "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion",
+    "EvtxECmd version 1.5.0 started 2026-06-03T14:27:33Z",
+    "Volatility 3 Framework 2.7.0 windows.malfind",
+    "10.0.0.1 outbound destination port 4444 confirmed",
+    "MFT entry for /home/analyst/case-001/evidence.bin",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class InjectionPattern:
@@ -59,8 +73,15 @@ def reload() -> list[InjectionPattern]:
 
 
 def _load(path: Path) -> list[InjectionPattern]:
-    """Parse + compile. Raises :class:`InjectionCatalogError` on shape issues."""
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    """Parse + compile. Raises :class:`InjectionCatalogError` on shape /
+    safety issues. YAML / OS / decode errors are wrapped per PR-114
+    silent-failure M3 so callers can ``except InjectionCatalogError``
+    reliably."""
+    try:
+        text = path.read_text(encoding="utf-8")
+        raw = yaml.safe_load(text)
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise InjectionCatalogError(f"{path}: failed to read/parse YAML: {exc}") from exc
     if not isinstance(raw, dict):
         raise InjectionCatalogError(f"{path}: top-level must be a mapping")
     if raw.get("schema_version") != 1:
@@ -97,7 +118,28 @@ def _compile_entry(path: Path, idx: int, entry: Any, seen_ids: set[str]) -> Inje
         raise InjectionCatalogError(
             f"{path}: patterns[{idx}] regex {entry['regex']!r} failed to compile: {exc}"
         ) from exc
+    _validate_pattern_safety(path, idx, pattern_id, compiled)
     return InjectionPattern(id=pattern_id, pattern=compiled, description=entry["description"])
+
+
+def _validate_pattern_safety(path: Path, idx: int, pattern_id: str, pattern: Pattern[str]) -> None:
+    """Load-time catalog-safety check (PR-114 silent-failure C3).
+
+    A pattern that matches ANY benign forensic sample is rejected — one
+    bad catalog commit shouldn't be able to take down production by
+    stripping all legitimate evidence. Zero-width matches also rejected.
+    """
+    for sample in _BENIGN_CORPUS:
+        if pattern.search(sample):
+            raise InjectionCatalogError(
+                f"{path}: patterns[{idx}] (id={pattern_id!r}) matches benign sample "
+                f"{sample!r}; patterns must not consume legitimate evidence"
+            )
+    probe = pattern.search("the literal phrase that would carry an injection here")
+    if probe is not None and probe.end() == probe.start():
+        raise InjectionCatalogError(
+            f"{path}: patterns[{idx}] (id={pattern_id!r}) yields zero-width match"
+        )
 
 
 __all__ = [
