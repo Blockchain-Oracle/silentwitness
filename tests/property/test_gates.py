@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import hashlib
 
-from _pytest.tmpdir import TempPathFactory
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from hypothesis.strategies import DataObject
+from pytest import TempPathFactory
 
 from silentwitness_mcp.verification._types import CitationRejectReason
 from silentwitness_mcp.verification.citation_gate import verify_citation
@@ -29,6 +29,7 @@ from tests.property.strategies import (
     audit_entry_strategy,
     cited_span_strategy,
     dfir_entity_strategy,
+    forged_marker_strategy,
     injection_payload_strategy,
     normalizable_output_strategy,
 )
@@ -69,12 +70,12 @@ def test_normalize_is_byte_stable(raw: bytes) -> None:
 
 
 @given(raw=normalizable_output_strategy())
-def test_normalize_decode_round_trip_is_lossless_on_invalid_utf8(raw: bytes) -> None:
-    """surrogateescape preserves invalid bytes — two raw inputs that
-    differ in invalid-UTF-8 bytes produce DIFFERENT normalised hashes."""
+def test_normalize_is_sensitive_to_invalid_utf8_trailing_byte(raw: bytes) -> None:
+    """Appending a 0xff byte (invalid UTF-8, surrogateescape-preserved)
+    MUST shift the SHA-256 — proves the normalizer doesn't quietly
+    discard high-bit bytes that would otherwise reach the citation gate."""
     hash_a = hashlib.sha256(normalize_output(raw, tool="_universal_only")).hexdigest()
     hash_b = hashlib.sha256(normalize_output(raw + b"\xff", tool="_universal_only")).hexdigest()
-    # Adding a different trailing byte must change the hash.
     assume(raw[-1:] != b"\xff" if raw else True)
     assert hash_a != hash_b
 
@@ -92,21 +93,45 @@ def test_sanitize_strips_at_least_one_known_token(payload: str) -> None:
     assert result.strip_count >= 1
 
 
+# Sanitizer ops that silently remove without emitting a marker
+# (architecture §4.8; sanitizer.sanitize uses _empty replacement for these).
+_SILENT_REMOVAL_OPS = frozenset({"bidi-unicode", "zero-width", "tag-character"})
+
+
 @given(payload=injection_payload_strategy())
-def test_sanitize_visible_markers_carry_audit_id(payload: str) -> None:
-    """Every visible ``[stripped:{audit_id}:...]`` marker must include the
-    audit_id nonce. Attacker-planted bare ``[stripped: ...]`` strings
-    don't share the canonical format and survive intact."""
+def test_sanitize_emitted_markers_carry_audit_id(payload: str) -> None:
+    """Every marker the sanitizer EMITTED (excluding silent-removal ops
+    that delete BIDI / zero-width / tag characters) carries this audit_id.
+    PR-114 pinned that emitted markers use the canonical
+    ``[stripped:{audit_id}:{pattern_id}]`` format so a downstream consumer
+    can verify the nonce was minted by THIS audit context."""
     writer = _CollectingWriter()
     result = sanitize(payload, _AUDIT_ID, audit_writer=writer)
-    # Every event the sanitizer emitted is reflected in the wrapped text
-    # via either a [stripped:{audit_id}:{pid}] marker (for ops 1-3) or
-    # silent removal (for ops 4 — bidi/zwsp/tag-char). We can't assert
-    # 1:1 between events and markers, but we CAN assert no orphan marker.
-    suffix = f":{_AUDIT_ID}:"
-    # Either there's no marker at all, or every marker contains the nonce.
-    if "[stripped:" in result.wrapped_text:
-        assert suffix in result.wrapped_text
+    for ev in writer.events:
+        if ev.pattern_id in _SILENT_REMOVAL_OPS:
+            continue
+        marker = f"[stripped:{_AUDIT_ID}:{ev.pattern_id}]"
+        assert marker in result.wrapped_text, (
+            f"sanitizer event {ev.pattern_id} did not produce a canonical marker"
+        )
+
+
+@given(payload=forged_marker_strategy())
+def test_sanitize_passes_through_forged_markers(payload: str) -> None:
+    """Pre-existing ``[stripped:...]`` literals in input survive verbatim
+    into the wrap — they're untrusted evidence, not sanitizer output, so
+    the audit_id-nonce check downstream catches them as
+    not-from-this-run. (Architecture §4.8; see also
+    test_sanitizer_review.test_attacker_planted_strip_marker_passes_through_unchanged.)
+    The sanitizer must NOT emit a canonical marker that bears the forged
+    audit_id — that would be the attacker successfully forging."""
+    writer = _CollectingWriter()
+    result = sanitize(payload, _AUDIT_ID, audit_writer=writer)
+    # Forged payload survives unmodified inside the wrap.
+    assert payload in result.wrapped_text
+    # No sanitizer event has a pattern_id with the forged audit_id.
+    for ev in writer.events:
+        assert _AUDIT_ID in f"[stripped:{_AUDIT_ID}:{ev.pattern_id}]"
 
 
 @given(payload=injection_payload_strategy())
@@ -238,7 +263,10 @@ def test_entity_gate_rejects_when_entity_only_in_obs(entity: str) -> None:
     result = verify_entities(f"observed {entity}", [cited])
     assert result.success is False
     assert result.reason == "HALLUCINATED_ENTITIES"
-    assert any(entity in h.text or h.text in entity for h in result.hallucinated)
+    assert any(h.text == entity for h in result.hallucinated), (
+        f"strict equality miss; hallucinated={[h.text for h in result.hallucinated]} "
+        f"vs entity={entity!r}"
+    )
 
 
 @given(entity=dfir_entity_strategy())
@@ -275,9 +303,10 @@ def test_sanitized_output_doesnt_introduce_new_attack_tokens(payload: str) -> No
     # If sanitize were called again on its own output, no new strip events
     # should fire (the markers don't trip the catalog).
     second = sanitize(result.wrapped_text, _AUDIT_ID, audit_writer=_CollectingWriter())
-    # Some catalog patterns are broad ("you are now ..."); the property is
-    # that sanitize's OWN OUTPUT introduces no new pattern hits beyond
-    # what was in `payload`. So we compare strip counts: the second pass
-    # should not exceed what the first found on `payload` minus already-
-    # stripped instances.
-    assert second.strip_count <= result.strip_count + 1
+    # Strict bound: the sanitizer's own output must not trip any catalog
+    # pattern that wasn't already tripped on the first pass. The wrap
+    # markers + strip markers are designed not to look like injection
+    # tokens. If a future broader catalog entry (e.g. a `you_are_now_role`
+    # pattern with looser anchors) could match `[stripped:<id>:...]`
+    # itself, this assertion catches the regression at PR-time.
+    assert second.strip_count <= result.strip_count

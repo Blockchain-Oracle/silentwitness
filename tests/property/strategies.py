@@ -99,20 +99,39 @@ def dfir_entity_strategy() -> st.SearchStrategy[str]:
 _TOOL_FOR_PROPERTY_TESTS = "_universal_only"
 
 
+_ASCII_LINE = st.text(
+    alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x7E),
+    min_size=1,
+    max_size=40,
+)
+_UTF8_LINE = st.text(
+    alphabet=st.characters(
+        min_codepoint=0x20,
+        max_codepoint=0x024F,
+        blacklist_categories=("Cc", "Cs", "Zl", "Zp"),
+    ),
+    min_size=1,
+    max_size=40,
+)
+
+
 def audit_entry_strategy(tmpdir: Path) -> st.SearchStrategy[tuple[AuditEntry, bytes]]:
-    """Build an AuditEntry + the raw bytes its stdout_path points to."""
+    """Build an AuditEntry + the raw bytes its stdout_path points to.
+
+    Payload is one of:
+    * pure ASCII (Vol3-shape baseline)
+    * valid multi-byte UTF-8 (real-world IR output with accents)
+    * BOM-prefixed UTF-8 (EvtxECmd ships these)
+    """
 
     @st.composite
     def _build(draw: st.DrawFn) -> tuple[AuditEntry, bytes]:
-        line = draw(
-            st.text(
-                alphabet=st.characters(min_codepoint=0x20, max_codepoint=0x7E),
-                min_size=1,
-                max_size=40,
-            )
-        )
+        flavour = draw(st.sampled_from(("ascii", "utf8", "bom")))
+        line_strat = _ASCII_LINE if flavour == "ascii" else _UTF8_LINE
+        line = draw(line_strat)
         n_lines = draw(st.integers(min_value=1, max_value=6))
-        payload = ("\n".join(line for _ in range(n_lines))).encode("utf-8")
+        body = "\n".join(line for _ in range(n_lines)).encode("utf-8")
+        payload = b"\xef\xbb\xbf" + body if flavour == "bom" else body
         seq = draw(st.integers(min_value=1, max_value=999))
         audit_id = _AUDIT_ID_RE.format(seq)
         blob_path = tmpdir / f"{audit_id}.txt"
@@ -208,6 +227,39 @@ def injection_payload_strategy() -> st.SearchStrategy[str]:
         st.sampled_from(_INJECTION_TOKENS),
         benign,
     )
+
+
+def forged_marker_strategy() -> st.SearchStrategy[str]:
+    """Payloads carrying attacker-planted ``[stripped:<other-id>:<pid>]``
+    or bare ``[stripped: ...]`` literals. The sanitizer must NOT honour
+    them — they must survive into wrapped_text without the canonical
+    audit_id nonce, and the per-marker assertion must catch every one."""
+    other_audit_id = st.text(
+        alphabet=st.characters(min_codepoint=0x61, max_codepoint=0x7A),
+        min_size=8,
+        max_size=24,
+    ).map(lambda s: f"sift-mallory-99999999-{s}")
+    pattern_id = st.sampled_from(
+        [
+            "xml-role-tag",
+            "chat-format-token",
+            "ignore_previous_instructions",
+            "you_are_now_role",
+        ]
+    )
+    canonical_other = st.builds(
+        lambda aid, pid: f"[stripped:{aid}:{pid}]",
+        other_audit_id,
+        pattern_id,
+    )
+    bare = st.sampled_from(
+        [
+            "[stripped: xml-role-tag]",
+            "[stripped:other]",
+            "[stripped:]",
+        ]
+    )
+    return st.one_of(canonical_other, bare)
 
 
 # ---------------------------------------------------------------------------
