@@ -87,10 +87,13 @@ def test_result_discriminator_rejects_failure_without_reason() -> None:
 
 
 def test_result_discriminator_rejects_success_with_reason() -> None:
+    from datetime import UTC, datetime
+
     with pytest.raises(ValueError, match="success=True must not carry reason"):
         ApproveResult(
             success=True,
             finding_id="F-001",
+            ledger_entry_ts=datetime.now(UTC),
             reason=ApproveRejectReason.PIPELINE_INTERNAL_ERROR,
         )
 
@@ -171,16 +174,14 @@ def test_empty_findings_file_treated_as_no_findings(
     assert envelope.data.reason == ApproveRejectReason.FINDING_NOT_FOUND
 
 
-def test_findings_store_unwritable_on_findings_write_failure(
+def test_ledger_committed_findings_unflipped_on_write_failure(
     ledger_env: tuple[Path, Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A failure to atomically rewrite findings.json after appending
-    the ledger entry surfaces as FINDINGS_STORE_UNWRITABLE.
-
-    Note: the ledger entry IS already appended at this point — the
-    partial-commit state is exactly what the original_finding_id
-    preservation defends against."""
+    """write_json_atomic fail AFTER ledger.append succeeded → the
+    dedicated LEDGER_COMMITTED_FINDINGS_UNFLIPPED reason carries the
+    ledger entry's content_hash so an operator (or the verifier) can
+    reconcile manually instead of double-allocating on retry."""
     case_dir, ledger_dir, logger = ledger_env
     _seed_findings_for_approval(case_dir)
     _seed_case_salt(case_dir)
@@ -198,7 +199,16 @@ def test_findings_store_unwritable_on_findings_write_failure(
         model_used=MODEL,
     )
     assert envelope.data.success is False
-    assert envelope.data.reason == ApproveRejectReason.FINDINGS_STORE_UNWRITABLE
+    assert envelope.data.reason == ApproveRejectReason.LEDGER_COMMITTED_FINDINGS_UNFLIPPED
+    ctx = envelope.data.context
+    assert ctx["finding_id"] == "F-001"
+    # content_hash present so verifier can reconcile (64-hex sha256).
+    assert isinstance(ctx["ledger_content_hash"], str)
+    assert len(ctx["ledger_content_hash"]) == 64
+    # Ledger entry IS appended even though findings.json flip failed.
+    ledger_path = ledger_dir / f"{_CASE_ID}.jsonl"
+    assert ledger_path.exists()
+    assert len(ledger_path.read_text(encoding="utf-8").splitlines()) == 1
 
 
 def test_pipeline_internal_error_on_unexpected_exception(

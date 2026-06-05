@@ -3,14 +3,43 @@ persistence / tool-body split used by sibling findings tools."""
 
 from __future__ import annotations
 
+import fcntl
 import json
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Final
+from typing import IO, Any, Final
 
 import yaml
 
 _FINDINGS_FILENAME: Final = "findings.json"
 _CASE_YAML_FILENAME: Final = "CASE.yaml"
+_LOCK_FILENAME: Final = ".findings.lock"
+
+
+class CaseSaltMalformedError(ValueError):
+    """Raised when ``CASE.yaml`` exists but its content is broken —
+    bad YAML, salt_hex not a hex string, etc. Caller maps to the
+    dedicated CASE_SALT_MALFORMED reason instead of misattributing the
+    corruption to ``findings.json``."""
+
+
+@contextmanager
+def findings_lock(case_dir: Path) -> Iterator[None]:
+    """Exclusive flock around the read-modify-write of findings.json.
+    Same lockfile name observation_id / interpretation_id allocators
+    use, so all writers serialize across processes."""
+    lock_path = case_dir / _LOCK_FILENAME
+    lock_path.touch(exist_ok=True)
+    handle: IO[bytes] = lock_path.open("rb+")
+    try:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    finally:
+        handle.close()
 
 
 def read_findings(case_dir: Path) -> list[Any]:
@@ -30,18 +59,28 @@ def read_findings(case_dir: Path) -> list[Any]:
 
 def load_case_salt(case_dir: Path) -> bytes | None:
     """Read ``CASE.yaml`` ``salt_hex``; ``None`` if file or key absent.
-    Verifier reads the same file so signer + verifier derive
-    identical keys."""
+    Verifier reads the same file so signer + verifier derive identical
+    keys. Raises :class:`CaseSaltMalformedError` if the file exists but
+    is broken (YAML error / non-hex salt_hex) so the caller can
+    distinguish "no salt registered yet" from "salt registration
+    corrupted" — finding the wrong file at debug time is a real bug."""
     path = case_dir / _CASE_YAML_FILENAME
     if not path.exists():
         return None
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    try:
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise CaseSaltMalformedError(f"CASE.yaml is not valid YAML: {exc}") from exc
+    raw = loaded or {}
     if not isinstance(raw, dict):
         return None
     salt_hex = raw.get("salt_hex")
     if not isinstance(salt_hex, str) or not salt_hex:
         return None
-    return bytes.fromhex(salt_hex)
+    try:
+        return bytes.fromhex(salt_hex)
+    except ValueError as exc:
+        raise CaseSaltMalformedError(f"CASE.yaml salt_hex is not valid hex: {exc}") from exc
 
 
 def locate_finding(findings: list[Any], finding_id: str) -> tuple[int, dict[str, Any]] | None:
@@ -70,6 +109,8 @@ def locate_interpretation(findings: list[Any], interpretation_id: str) -> dict[s
 
 
 __all__ = [
+    "CaseSaltMalformedError",
+    "findings_lock",
     "load_case_salt",
     "locate_finding",
     "locate_interpretation",

@@ -1,27 +1,13 @@
-"""``approve_finding`` tool body — password-gated HMAC ledger transition
-(architecture §4.2 row ``approve_finding``, §4.9 HMAC ledger).
+"""``approve_finding`` — password-gated HMAC ledger transition
+(architecture §4.2, §4.9). Pipeline (under :func:`findings_lock`):
+read F-NNN → DRAFT check → CASE.yaml salt → HMACLedger bind →
+PBKDF2-SHA256 → HMAC → append → flip status → atomic rename → zero
+key → audit row. Audit row writes on EVERY path.
 
-Pipeline: read finding F-NNN from findings.json → confirm status
-DRAFT (ALREADY_APPROVED otherwise) → load case salt from CASE.yaml
-(CASE_SALT_MISSING otherwise) → confirm ledger dir mode 0700
-(LEDGER_DIR_PERMISSIONS_WEAK otherwise) → PBKDF2-SHA256(password,
-salt, 600k) → compose substantive bytes via :class:`LedgerComposer`
-finding shape → HMAC the bytes → append the sealed entry → flip
-finding status DRAFT → APPROVED in findings.json (atomic rename) →
-zero the derived key → audit row to ``audit/findings.jsonl``
-REGARDLESS of accept/reject.
-
-INVALID_PASSWORD is detected by attempting the re-verify against the
-PREVIOUS ledger entry for the same finding when one exists; on a
-fresh approval (no prior entry), the password is provisionally
-accepted and committed — the verifier (Epic 12) re-checks every
-approval offline before report rendering.
-
-The MCP tool is NOT prompted-from-stdin; the CLI wrapper owns the
-secure prompt and passes the password as a typed ``SecretStr``.
-``SecretStr.get_secret_value()`` is called exactly once, immediately
-fed into ``derive_key``, and the buffer zeroed before return.
-Password / derived-key bytes NEVER appear in the audit row.
+Zeroing is honest but partial: ``SecretStr.get_secret_value()`` and
+``HMACLedger.derive_key`` both return immutable copies we cannot
+wipe; only the bytearray buffer fed to ``ledger.append`` is zeroed.
+Password / derived key NEVER reach the audit row.
 """
 
 from __future__ import annotations
@@ -48,11 +34,14 @@ from silentwitness_mcp.audit.ledger import (
     InterpretationParts,
     LedgerComposer,
     LedgerError,
+    LedgerKeyError,
     LedgerSecurityError,
     ObservationParts,
 )
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._approval_store import (
+    CaseSaltMalformedError,
+    findings_lock,
     load_case_salt,
     locate_finding,
     locate_interpretation,
@@ -63,16 +52,20 @@ from silentwitness_mcp.findings._scrub import scrub_line_terminators
 
 
 class ApproveRejectReason(StrEnum):
-    """Closed rejection-code set — re-declared rather than aliased."""
+    """Closed rejection-code set for ``approve_finding``. Every value here
+    is produced by a code path in this module and asserted by a test.
+    The offline verifier (Epic 12) will extend this enum with its own
+    re-check codes when it lands — keeping the signer-side set minimal
+    until then per CLAUDE.md non-negotiables (no premature interfaces)."""
 
-    INVALID_PASSWORD = "INVALID_PASSWORD"  # noqa: S105 — reason code, not a credential  # pragma: allowlist secret
     FINDING_NOT_FOUND = "FINDING_NOT_FOUND"
     ALREADY_APPROVED = "ALREADY_APPROVED"
     LEDGER_DIR_PERMISSIONS_WEAK = "LEDGER_DIR_PERMISSIONS_WEAK"
     CASE_SALT_MISSING = "CASE_SALT_MISSING"
-    LEDGER_FILE_MODE_WEAK = "LEDGER_FILE_MODE_WEAK"
+    CASE_SALT_MALFORMED = "CASE_SALT_MALFORMED"
     FINDINGS_STORE_CORRUPTED = "FINDINGS_STORE_CORRUPTED"
     FINDINGS_STORE_UNWRITABLE = "FINDINGS_STORE_UNWRITABLE"
+    LEDGER_COMMITTED_FINDINGS_UNFLIPPED = "LEDGER_COMMITTED_FINDINGS_UNFLIPPED"
     PIPELINE_INTERNAL_ERROR = "PIPELINE_INTERNAL_ERROR"
 
 
@@ -83,11 +76,9 @@ _STATUS_APPROVED: Final = "APPROVED"
 
 
 class ApproveInput(BaseModel):
-    """Examiner input. ``password`` is a :class:`SecretStr` so its
-    contents are masked in ``repr`` / model_dump / logger output —
-    the ``get_secret_value()`` call happens exactly once inside
-    :func:`approve_finding`, immediately fed into PBKDF2, and the
-    derived-key buffer is zeroed before return."""
+    """``password`` is :class:`SecretStr` (masked in repr/dump). The
+    ``get_secret_value()`` call happens exactly once inside
+    :func:`approve_finding`."""
 
     model_config = _RESULT_CONFIG
 
@@ -96,13 +87,13 @@ class ApproveInput(BaseModel):
 
 
 class ApproveResult(BaseModel):
-    """Result payload. Discriminator pins success/finding_id/reason
-    exclusivity — same shape as ObservationResult / PivotResult."""
+    """Discriminator validator forbids illegal combinations of
+    (success, finding_id, reason, ledger_entry_ts)."""
 
     model_config = _RESULT_CONFIG
 
     success: bool
-    finding_id: str | None = None
+    finding_id: str | None = Field(default=None, pattern=_FINDING_ID_PATTERN)
     ledger_entry_ts: datetime | None = None
     reason: ApproveRejectReason | None = None
     context: dict[str, Any] = Field(default_factory=dict)
@@ -112,11 +103,15 @@ class ApproveResult(BaseModel):
         if self.success:
             if self.finding_id is None:
                 raise ValueError("success=True requires finding_id")
+            if self.ledger_entry_ts is None:
+                raise ValueError("success=True requires ledger_entry_ts")
             if self.reason is not None:
                 raise ValueError("success=True must not carry reason")
         else:
             if self.reason is None:
                 raise ValueError("success=False requires reason")
+            if self.ledger_entry_ts is not None:
+                raise ValueError("success=False must not carry ledger_entry_ts")
         return self
 
 
@@ -134,41 +129,54 @@ def approve_finding(
     audit_logger: AuditLogger,
     model_used: str,
 ) -> ToolResponse[ApproveResult]:
-    """Examiner-only ledger transition. The CLI is the only documented
-    entrypoint; the LLM cannot reach this tool (architecture §6.2 deny
-    rule). The caller MUST hold the password in a controlled buffer
-    and pass it via the :class:`SecretStr` field."""
+    """Examiner-only ledger transition. CLI is the only entrypoint;
+    LLM cannot reach this tool (architecture §6.2 deny rule)."""
     findings_log = case_dir / "audit" / "findings.jsonl"
     start = time.monotonic()
-    pre_audit_id = audit_logger.next_audit_id()
+    pre_audit_id: str | None = None
     result: ApproveResult | None = None
     try:
-        result = _run_pipeline(
-            payload,
-            case_dir=case_dir,
-            ledger_dir=ledger_dir,
-            case_id=case_id,
-        )
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
-        # _read_findings + yaml.safe_load raises sit here; LedgerKeyError
-        # from PBKDF2 also subclasses ValueError but it cannot fire with
-        # the constants here (600k iters is the floor).
-        result = ApproveResult(
-            success=False,
-            reason=ApproveRejectReason.FINDINGS_STORE_CORRUPTED,
-            context={"stage": "findings_read", "error_type": type(exc).__name__},
-        )
+        pre_audit_id = audit_logger.next_audit_id()
+        # findings_lock serialises writers across processes.
+        with findings_lock(case_dir):
+            result = _run_pipeline(
+                payload,
+                case_dir=case_dir,
+                ledger_dir=ledger_dir,
+                case_id=case_id,
+            )
     except LedgerSecurityError:
         result = ApproveResult(
             success=False,
             reason=ApproveRejectReason.LEDGER_DIR_PERMISSIONS_WEAK,
             context={"ledger_dir": str(ledger_dir)},
         )
+    except LedgerKeyError as exc:
+        # PBKDF2 floor breach surfaces as PIPELINE_INTERNAL_ERROR — must
+        # not mask as findings corruption (would hide the crypto weakness).
+        result = ApproveResult(
+            success=False,
+            reason=ApproveRejectReason.PIPELINE_INTERNAL_ERROR,
+            context={"stage": "key_derivation", "error_type": type(exc).__name__},
+        )
     except LedgerError as exc:
         result = ApproveResult(
             success=False,
             reason=ApproveRejectReason.PIPELINE_INTERNAL_ERROR,
             context={"stage": "ledger", "error_type": type(exc).__name__},
+        )
+    except CaseSaltMalformedError as exc:
+        result = ApproveResult(
+            success=False,
+            reason=ApproveRejectReason.CASE_SALT_MALFORMED,
+            context={"case_dir": str(case_dir), "error_type": type(exc).__name__},
+        )
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+        # Caught AFTER typed ledger errors (LedgerKeyError ⊂ ValueError).
+        result = ApproveResult(
+            success=False,
+            reason=ApproveRejectReason.FINDINGS_STORE_CORRUPTED,
+            context={"stage": "findings_read", "error_type": type(exc).__name__},
         )
     except OSError as exc:
         result = ApproveResult(
@@ -183,6 +191,8 @@ def approve_finding(
             context={"stage": "pipeline", "error_type": type(exc).__name__},
         )
     finally:
+        if pre_audit_id is None:
+            pre_audit_id = audit_logger.next_audit_id()
         if result is None:  # pragma: no cover — defensive
             result = ApproveResult(
                 success=False,
@@ -271,9 +281,7 @@ def _run_pipeline(
             context={"case_dir": str(case_dir)},
         )
 
-    # HMACLedger(__init__) raises LedgerSecurityError on weak dir mode;
-    # caught at the envelope level and mapped to
-    # LEDGER_DIR_PERMISSIONS_WEAK.
+    # LedgerSecurityError on weak dir mode → LEDGER_DIR_PERMISSIONS_WEAK.
     ledger = HMACLedger(ledger_dir=ledger_dir, case_id=case_id)
     obs_parts = ObservationParts(
         text=obs_record.get("text", ""),
@@ -286,24 +294,38 @@ def _run_pipeline(
     )
     content_bytes = LedgerComposer.finding(obs_parts, interp_parts)
 
-    derived_key = bytearray(HMACLedger.derive_key(payload.password.get_secret_value(), salt))
+    # derive_key inside try so the finally always runs zero_key.
+    derived_key: bytearray | None = None
     try:
+        derived_key = bytearray(HMACLedger.derive_key(payload.password.get_secret_value(), salt))
         entry = ledger.append(
             bytes(derived_key),
             payload.finding_id,
             LedgerItemType.FINDING,
             content_bytes,
-            examiner=case_id,  # ledger examiner == case_id slug per architecture §4.9
+            examiner=case_id,
         )
     finally:
-        HMACLedger.zero_key(derived_key)
+        if derived_key is not None:
+            HMACLedger.zero_key(derived_key)
 
-    # Flip status atomically. Even if findings.json has accumulated
-    # other records since we read it, the index we computed earlier is
-    # still valid because this tool runs under the same .findings.lock
-    # convention (caller-serialised; tests pin single-process).
+    # Partial-commit fence: if findings.json write fails after ledger
+    # seal, surface content_hash for manual reconciliation.
     findings[finding_idx] = {**finding, "status": _STATUS_APPROVED}
-    write_json_atomic(case_dir / _FINDINGS_FILENAME, findings)
+    try:
+        write_json_atomic(case_dir / _FINDINGS_FILENAME, findings)
+    except OSError as exc:
+        return ApproveResult(
+            success=False,
+            reason=ApproveRejectReason.LEDGER_COMMITTED_FINDINGS_UNFLIPPED,
+            context={
+                "finding_id": payload.finding_id,
+                "ledger_content_hash": entry.content_hash,
+                "ledger_entry_ts": entry.ts.isoformat(),
+                "stage": "findings_flip",
+                "error_type": type(exc).__name__,
+            },
+        )
 
     return ApproveResult(
         success=True,
@@ -328,10 +350,8 @@ def _write_audit_row(
     start: float,
     model_used: str,
 ) -> None:
-    """Canonical :class:`AuditEntry` (§4.4). The audit row NEVER carries
-    the password or the derived-key bytes — only the finding_id and the
-    result. U+2028 / U+2029 are scrubbed from the finding_id even though
-    it is regex-pinned, for symmetry with sibling tools."""
+    """Canonical :class:`AuditEntry` (§4.4). Audit row NEVER carries the
+    password or derived-key bytes."""
     elapsed_ms = (time.monotonic() - start) * 1000.0
     summary_json = result.model_dump_json()
     artefact_path = (
