@@ -1,0 +1,34 @@
+# gitleaks configuration for SilentWitness.
+#
+# All findings flagged by gitleaks against this repo to date have been
+# triaged as false positives:
+#
+# 1. ``.secrets.baseline`` is the detect-secrets managed baseline file —
+#    it contains hashed_secret values of already-audited findings, which
+#    gitleaks' generic-api-key heuristic mis-classifies as actual keys.
+# 2. ``ANSWER_KEY_SHA256`` and ``answer-key SHA256`` references are
+#    SHA-256 hashes of forensic ground-truth answer keys (NIST CFReDS
+#    leakage case). They are deliberately committed as integrity pins
+#    per ``docs/stories/story-ground-truth-parsers.md``; they're hashes,
+#    not credentials.
+#
+# Extend gitleaks default rule set with allowlists targeting these
+# specific surfaces. Real secrets in other files still fire.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "False-positive surfaces — see file header"
+paths = [
+    '''\.secrets\.baseline$''',
+]
+# gitleaks allowlist regexes match the matched secret value (not surrounding
+# context); allowlist by the exact hex value of the NIST CFReDS leakage
+# answer-key SHA-256 pin (committed once per story-ground-truth-parsers).
+regexes = [
+    '''218165427fcb2f490b44eccf7fbc9bf3700b938ea976004051a067e79e0da62b''',  # pragma: allowlist secret
+]
+stopwords = [
+    "218165427fcb2f490b44eccf7fbc9bf3700b938ea976004051a067e79e0da62b",  # pragma: allowlist secret
+]
