@@ -251,10 +251,11 @@ def record_observation(
                 model_used=model_used,
             )
         except Exception as audit_exc:
-            # Best-effort: rewrite the result with the audit-write error
-            # surfaced in context and retry once with scrubbing applied.
-            # If THAT also fails, the result envelope still returns to
-            # the caller — the audit-trail gap is logged in context.
+            # Audit write failed (disk full, permission, schema validation,
+            # etc.). Surface the gap inside data.context so the agent and
+            # downstream auditor can detect it. The envelope still returns
+            # to the caller — better a response with audit_write_failed=True
+            # than a raw exception leaking past the contract boundary.
             result = ObservationResult(
                 success=False,
                 reason=ObservationRejectReason.FINDINGS_STORE_UNWRITABLE,
@@ -359,15 +360,19 @@ def _write_audit_row(
 def _wrap_envelope(
     result: ObservationResult, *, audit_id: str, examiner: str
 ) -> ToolResponse[ObservationResult]:
-    """Wrap in the canonical ``ToolResponse[ObservationResult]`` envelope
-    per story-response-envelope (round-1 silent-failure H2).
+    """Wrap in the canonical ``ToolResponse[ObservationResult]`` envelope.
 
-    Semantics: ``envelope.success=True`` means "the tool ran end-to-end
-    and persisted an audit row" — ALWAYS True for record_observation
-    because every call writes a row in the ``finally`` block. The inner
-    ``data.success`` carries the gate verdict; ``data.reason`` /
-    ``data.context`` / ``data.hallucinated`` / ``data.suggested`` carry
-    the rich rejection details the agent's self-correction loop reads."""
+    Semantics: ``envelope.success`` is the *transport-layer* success flag
+    (the tool call completed and returned a well-formed payload). It is
+    ALWAYS True for record_observation — even a corrupted findings.json
+    or an audit-write failure surfaces as a structured rejection inside
+    ``data``, not as an envelope-level error. The inner ``data.success``
+    carries the gate verdict; ``data.reason`` / ``data.context`` /
+    ``data.hallucinated`` / ``data.suggested`` carry the rich rejection
+    details the agent's self-correction loop reads. When the audit row
+    itself could not be written, ``data.context`` includes
+    ``audit_write_failed=True`` so a downstream auditor can detect
+    the audit-trail gap."""
     from silentwitness_mcp.envelope import make_empty_provenance
 
     return ToolResponse[ObservationResult](
