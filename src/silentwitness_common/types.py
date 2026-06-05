@@ -27,6 +27,13 @@ from pydantic import (
     model_validator,
 )
 
+from silentwitness_common.ids import parse_audit_id
+
+
+def _validate_audit_id_format(value: str) -> str:  # architecture §4.4
+    parse_audit_id(value)
+    return value
+
 
 def _normalise_hex(value: object) -> str:
     """Lowercase + reject non-``str`` (incl. ``bytes``, which Pydantic would
@@ -377,6 +384,8 @@ class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
     corroboration: tuple[str, ...] = Field(default_factory=tuple)
     discipline_reminder: str | None = None
     data_provenance: DataProvenance
+
+    _validate_audit_id = field_validator("audit_id")(_validate_audit_id_format)
 
     @model_validator(mode="after")
     def _success_implies_data(self) -> ToolResponse[TPayload]:
