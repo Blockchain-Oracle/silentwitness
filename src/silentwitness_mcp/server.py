@@ -36,6 +36,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+from collections.abc import Sequence
 from enum import StrEnum
 from typing import Final, Literal
 
@@ -69,19 +70,27 @@ class MountValidationError(RuntimeError):
     check failed (or the lifespan never bound the AppContext). Surfaces
     a typed ``reason`` to the agent per architecture §4.11 so the
     failure is a structured rejection, not a generic ``AttributeError``
-    wrapped as an unhelpful ``ToolError`` string."""
+    wrapped as an unhelpful ``ToolError`` string.
+
+    ``advisories`` is frozen to a ``tuple`` at construction so a
+    handler cannot mutate the exception state post-raise; ``reason`` is
+    keyword-only so a positional caller cannot accidentally swap the
+    two arguments and silently bind a ``str`` reason into the
+    ``Sequence[str]`` advisories slot.
+    """
 
     def __init__(
         self,
-        advisories: list[str],
+        advisories: Sequence[str],
+        *,
         reason: MountFailureReason = "MOUNT_NOT_RO_NOEXEC_NOSUID",
     ) -> None:
         super().__init__(reason)
         self.reason: MountFailureReason = reason
-        self.advisories = advisories
+        self.advisories: tuple[str, ...] = tuple(advisories)
 
     def __str__(self) -> str:
-        return f"{self.reason}: advisories={self.advisories}"
+        return f"{self.reason}: advisories={list(self.advisories)}"
 
 
 logger = logging.getLogger(__name__)
@@ -204,7 +213,12 @@ def _guard_mount(tool_name: str, ctx: Context[ServerSession, AppContext]) -> Non
     if tool_name not in EVIDENCE_BOUND_TOOLS:
         return
     app_ctx = ctx.request_context.lifespan_context
-    if app_ctx is None:
+    # ``isinstance`` over ``is None``: defends against a MagicMock-
+    # shaped substitute that a broken test harness might leak in. A
+    # truthy MagicMock would silently pass ``is None`` and then read
+    # ``mount.ok`` as another mock with default truthy value, bypassing
+    # the guard.
+    if not isinstance(app_ctx, AppContext):
         raise MountValidationError(
             advisories=[
                 "server lifespan did not yield an AppContext; "
@@ -213,7 +227,7 @@ def _guard_mount(tool_name: str, ctx: Context[ServerSession, AppContext]) -> Non
             reason="LIFESPAN_CONTEXT_MISSING",
         )
     if not app_ctx.mount.ok:
-        raise MountValidationError(list(app_ctx.mount.advisories))
+        raise MountValidationError(app_ctx.mount.advisories)
 
 
 def _register_finding_tool_stubs(mcp: FastMCP) -> None:
@@ -340,18 +354,27 @@ def run_server(
         file=sys.stderr,
     )
     server = create_server(transport, host=host, port=port)
-    if transport is Transport.STDIO:
-        server.run(transport="stdio")
-        return
-    # Defense-in-depth: re-validate the bound host immediately before
-    # handing off to mcp.run(). FastMCP itself accepts any host string;
-    # a future refactor that moved or removed _validate_http_config (or
-    # constructed FastMCP directly outside create_server) would silently
-    # bypass the DNS-rebinding gate. Re-checking here keeps the gate
-    # load-bearing even if the upstream check drifts.
-    if server.settings.host not in LOOPBACK_ALLOWED:
-        raise ServerConfigurationError(
-            f"defense-in-depth: server.settings.host={server.settings.host!r} "
-            f"is not in {sorted(LOOPBACK_ALLOWED)}"
-        )
-    server.run(transport="streamable-http")
+    # ``match`` with explicit ``case _`` forces a future Transport
+    # variant (e.g. WEBSOCKET) to land here as a structured rejection
+    # rather than silently take the HTTP branch and get handed
+    # ``transport="streamable-http"`` for the wrong protocol.
+    match transport:
+        case Transport.STDIO:
+            server.run(transport="stdio")
+            return
+        case Transport.HTTP:
+            # Defense-in-depth: re-validate the bound host immediately
+            # before handing off to mcp.run(). FastMCP itself accepts
+            # any host string; a future refactor that moved or removed
+            # _validate_http_config (or constructed FastMCP directly
+            # outside create_server) would silently bypass the
+            # DNS-rebinding gate. Re-checking here keeps the gate
+            # load-bearing even if the upstream check drifts.
+            if server.settings.host not in LOOPBACK_ALLOWED:
+                raise ServerConfigurationError(
+                    f"defense-in-depth: server.settings.host="
+                    f"{server.settings.host!r} is not in {sorted(LOOPBACK_ALLOWED)}"
+                )
+            server.run(transport="streamable-http")
+        case _:
+            raise ServerConfigurationError(f"unhandled transport: {transport!r}")

@@ -6,10 +6,12 @@ findmnt subprocess branches. The pre-existing test only exercised the
 so each branch — happy, missing-options, timeout, nonzero return —
 needs an explicit pin.
 
-After the H1 retroactive fix, the ``findmnt`` absent + ``target.exists()``
-branch returns ``ok=False`` (fail-closed) rather than the previous
-``ok=True`` soft-skip. The ``target`` absent + ``findmnt`` absent
-combination is still a soft-skip — that's the dev/macOS environment.
+The ``findmnt`` absent + ``target.exists()`` branch returns
+``ok=False`` (fail-closed) — a production-shaped /evidence with the
+mount validator effectively disabled (util-linux stripped, PATH
+manipulated) would otherwise silently boot writable. The ``target``
+absent + ``findmnt`` absent combination is still a soft-skip —
+that's the dev/macOS environment.
 """
 
 from __future__ import annotations

@@ -274,7 +274,7 @@ def test_cli_main_returns_ex_config_on_configuration_error(
     """HTTP without the gateway token surfaces as exit code 78
     (EX_CONFIG) with the reason on stderr, not as a propagated
     exception. Supervisors can branch on the exit code without
-    scraping the traceback (retroactive PR-118 H3 fix)."""
+    scraping the traceback."""
     monkeypatch.delenv("SILENTWITNESS_GATEWAY_TOKEN", raising=False)
     rc = main(["--transport", "http"])
     assert rc == 78
@@ -351,4 +351,4 @@ def test_mount_validation_error_carries_advisories() -> None:
     silent-failure smell."""
     err = MountValidationError(["mount missing ro", "mount missing nosuid"])
     assert "ro" in str(err)
-    assert err.advisories == ["mount missing ro", "mount missing nosuid"]
+    assert err.advisories == ("mount missing ro", "mount missing nosuid")

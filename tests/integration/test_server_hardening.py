@@ -1,11 +1,11 @@
-"""Tests for the retroactive PR-118 silent-failure fixes:
+"""Server-hardening invariants — architecture §4.11 + §7.3.
 
 * ``_guard_mount`` LIFESPAN_CONTEXT_MISSING — when an evidence-bound
   tool is invoked outside the FastMCP lifespan scope (broken test
-  harness, lifespan startup race), the previous code raised a raw
-  ``AttributeError`` that FastMCP wrapped as an unhelpful ``ToolError``
-  string. The fix surfaces a structured ``MountValidationError`` with
-  ``reason="LIFESPAN_CONTEXT_MISSING"``.
+  harness, lifespan startup race), the guard surfaces a structured
+  ``MountValidationError`` with ``reason="LIFESPAN_CONTEXT_MISSING"``
+  so the agent sees the structured rejection architecture §4.11
+  specifies rather than a raw ``AttributeError``-wrapped ToolError.
 * ``MountValidationError.reason`` typed Literal — downstream code can
   branch on the reason without parsing the ``str(err)`` message.
 * ``run_server`` defense-in-depth host re-check — FastMCP itself
@@ -13,8 +13,8 @@
   ``_validate_http_config`` would silently bypass the DNS-rebinding
   gate. The re-check at handoff time keeps the gate load-bearing.
 * ``main()`` structured exit codes — ServerConfigurationError → 78
-  (EX_CONFIG), OSError → 74 (EX_IOERR). Previously these dumped raw
-  tracebacks into the JSON-RPC framing seam.
+  (EX_CONFIG), OSError → 74 (EX_IOERR). Otherwise these would dump
+  raw tracebacks into the JSON-RPC framing seam.
 """
 
 from __future__ import annotations
@@ -202,8 +202,8 @@ def test_main_returns_ex_ioerr_on_oserror(
 def test_main_still_returns_130_on_keyboard_interrupt(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """SIGINT path was already correct — pin it so the H3 fix didn't
-    regress the existing happy-shutdown behavior."""
+    """SIGINT path: pin so the structured-exit refactor did not regress
+    the existing happy-shutdown behaviour."""
     with patch("silentwitness_mcp.__main__.run_server", side_effect=KeyboardInterrupt):
         rc = main(["--transport", "stdio"])
     assert rc == 130
