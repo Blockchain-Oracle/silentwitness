@@ -1,15 +1,13 @@
 """Hypothesis property tests for the verification gates (architecture §14).
 
-Ratifies the four upstream Epic-3 stories — output_normalizer,
-citation_gate, entity_gate, sanitizer — against architectural invariants
-under random input. Profile selection: ``HYPOTHESIS_PROFILE=dev|ci|slow``
-(registered in ``tests/conftest.py``).
+Ratifies architectural invariants of the normalizer, citation gate,
+entity gate, and sanitizer under random input. Profile selection:
+``HYPOTHESIS_PROFILE=dev|ci|slow`` (registered in ``tests/conftest.py``).
 
-The strongest property in this suite: a randomly constructed valid
-observation (cited spans derived from real tmp-path blob bytes,
-SHA-256 recomputed) ALWAYS passes both gates. If Hypothesis ever
-shrinks an accept→reject inversion, the wedge has cracked and the
-demo will fail.
+Load-bearing property: any randomly constructed valid observation
+(cited spans derived from real tmp-path blob bytes, SHA-256 recomputed)
+must be accepted by both the citation gate AND the entity gate in
+conjunction — see ``test_both_gates_accept_valid_observation``.
 """
 
 from __future__ import annotations
@@ -24,8 +22,10 @@ from silentwitness_mcp.verification._types import CitationRejectReason
 from silentwitness_mcp.verification.citation_gate import verify_citation
 from silentwitness_mcp.verification.entity_gate import verify_entities
 from silentwitness_mcp.verification.normalizer import normalize_output
-from silentwitness_mcp.verification.sanitizer import sanitize
+from silentwitness_mcp.verification.sanitizer import StripEvent, sanitize
 from tests.property.strategies import (
+    FORGED_MALLORY_PREFIX,
+    ForgedMarkerPayload,
     audit_entry_strategy,
     cited_span_strategy,
     dfir_entity_strategy,
@@ -38,12 +38,13 @@ _AUDIT_ID = "sift-aj-20260613-007"
 
 
 class _CollectingWriter:
-    """Sanitizer audit_writer fake — discards events for property tests."""
+    """Sanitizer audit_writer test double — captures emitted events for
+    assertion against the canonical-marker invariant."""
 
     def __init__(self) -> None:
-        self.events: list[object] = []
+        self.events: list[StripEvent] = []
 
-    def emit(self, event: object) -> None:
+    def emit(self, event: StripEvent) -> None:
         self.events.append(event)
 
 
@@ -73,10 +74,13 @@ def test_normalize_is_byte_stable(raw: bytes) -> None:
 def test_normalize_is_sensitive_to_invalid_utf8_trailing_byte(raw: bytes) -> None:
     """Appending a 0xff byte (invalid UTF-8, surrogateescape-preserved)
     MUST shift the SHA-256 — proves the normalizer doesn't quietly
-    discard high-bit bytes that would otherwise reach the citation gate."""
+    discard high-bit bytes that would otherwise reach the citation gate.
+    Filter the precondition (raw doesn't already end in 0xff) BEFORE
+    hashing — otherwise the test asserts inequality on inputs that are
+    byte-identical after the append."""
+    assume(not raw.endswith(b"\xff"))
     hash_a = hashlib.sha256(normalize_output(raw, tool="_universal_only")).hexdigest()
     hash_b = hashlib.sha256(normalize_output(raw + b"\xff", tool="_universal_only")).hexdigest()
-    assume(raw[-1:] != b"\xff" if raw else True)
     assert hash_a != hash_b
 
 
@@ -102,7 +106,7 @@ _SILENT_REMOVAL_OPS = frozenset({"bidi-unicode", "zero-width", "tag-character"})
 def test_sanitize_emitted_markers_carry_audit_id(payload: str) -> None:
     """Every marker the sanitizer EMITTED (excluding silent-removal ops
     that delete BIDI / zero-width / tag characters) carries this audit_id.
-    PR-114 pinned that emitted markers use the canonical
+    Architecture §4.8 requires emitted markers in the canonical
     ``[stripped:{audit_id}:{pattern_id}]`` format so a downstream consumer
     can verify the nonce was minted by THIS audit context."""
     writer = _CollectingWriter()
@@ -116,22 +120,46 @@ def test_sanitize_emitted_markers_carry_audit_id(payload: str) -> None:
         )
 
 
-@given(payload=forged_marker_strategy())
-def test_sanitize_passes_through_forged_markers(payload: str) -> None:
+@given(forged_pair=forged_marker_strategy())
+def test_sanitize_passes_through_forged_markers(forged_pair: ForgedMarkerPayload) -> None:
     """Pre-existing ``[stripped:...]`` literals in input survive verbatim
     into the wrap — they're untrusted evidence, not sanitizer output, so
     the audit_id-nonce check downstream catches them as
-    not-from-this-run. (Architecture §4.8; see also
-    test_sanitizer_review.test_attacker_planted_strip_marker_passes_through_unchanged.)
-    The sanitizer must NOT emit a canonical marker that bears the forged
-    audit_id — that would be the attacker successfully forging."""
+    not-from-this-run (architecture §4.8). The sanitizer must NOT emit
+    a canonical marker that bears the forged audit_id, and any
+    canonical marker it emits (on the real injection token co-located
+    in the payload) must carry THIS audit_id, not the forged one."""
     writer = _CollectingWriter()
-    result = sanitize(payload, _AUDIT_ID, audit_writer=writer)
-    # Forged payload survives unmodified inside the wrap.
-    assert payload in result.wrapped_text
-    # No sanitizer event has a pattern_id with the forged audit_id.
+    result = sanitize(forged_pair.full_payload, _AUDIT_ID, audit_writer=writer)
+    # The forged marker substring survives verbatim into wrapped_text —
+    # the sanitizer does not consume or rewrite it.
+    assert forged_pair.forged_marker in result.wrapped_text, (
+        f"forged marker stripped: {forged_pair.forged_marker!r} absent from output"
+    )
+    # Tight invariant: the sanitizer can never mint a NEW marker
+    # carrying the forged audit_id prefix. Counting on raw strings
+    # avoids constructing a haystack that contains the needle by
+    # f-string interpolation.
+    input_forged = forged_pair.full_payload.count(FORGED_MALLORY_PREFIX)
+    output_forged = result.wrapped_text.count(FORGED_MALLORY_PREFIX)
+    assert output_forged <= input_forged, (
+        f"sanitizer minted a marker carrying the forged audit_id: "
+        f"input had {input_forged} occurrences, output has {output_forged}"
+    )
+    # Strategy precondition: events must fire — if the strategy regresses
+    # to producing payloads that don't trip the catalog, the per-event
+    # smuggling check below is dead code and the property goes vacuous.
+    assert writer.events, (
+        "strategy produced a payload that emitted no sanitizer events; "
+        "the forgery-defense per-event assertion is now dead code"
+    )
+    # Every emitted event's canonical-marker rendering must be keyed on
+    # THIS audit_id; the pattern_id itself must not embed the forged
+    # prefix (defends against pattern_id field smuggling).
     for ev in writer.events:
-        assert _AUDIT_ID in f"[stripped:{_AUDIT_ID}:{ev.pattern_id}]"
+        assert FORGED_MALLORY_PREFIX not in ev.pattern_id, (
+            f"sanitizer event pattern_id smuggled forged prefix: {ev.pattern_id!r}"
+        )
 
 
 @given(payload=injection_payload_strategy())
@@ -159,6 +187,7 @@ def test_citation_gate_accepts_valid_construction(
     entry, payload = data.draw(audit_entry_strategy(tmpdir))
     span = data.draw(cited_span_strategy(entry, payload))
     assume(span is not None)
+    assert span is not None
     result = verify_citation(span, audit_index={entry.audit_id: entry})
     assert result.success is True, (
         f"citation gate rejected a valid construction; reason={result.reason} "
@@ -222,7 +251,11 @@ def test_citation_gate_rejects_unknown_audit_id(seq: int) -> None:
 @settings(suppress_health_check=[HealthCheck.too_slow])
 def test_entity_gate_accepts_when_entity_in_cited(entity: str) -> None:
     """A DFIR entity placed verbatim in both observation_text AND a
-    cited_span MUST be accepted (no false positives)."""
+    cited_span MUST be accepted (no false positives). Also asserts that
+    the entity was actually EXTRACTED — without this, a strategy draw
+    that the regex catalog doesn't match would make the test pass
+    vacuously (extracted=[] ⇒ hallucinated=[] ⇒ success=True for the
+    wrong reason)."""
     from silentwitness_common.types import CitedSpan
 
     cited = CitedSpan(
@@ -236,6 +269,14 @@ def test_entity_gate_accepts_when_entity_in_cited(entity: str) -> None:
     assert result.success is True, (
         f"entity gate rejected a valid entity; "
         f"hallucinated={[(h.text, h.kind.value) for h in result.hallucinated]}"
+    )
+    # Defend against vacuous successes — the strategy is contracted to
+    # generate catalog-extractable shapes, but if the catalog drifts
+    # (or a future strategy branch produces a non-matching shape),
+    # extracted will be empty and success=True misleads us.
+    assert any(e.text == entity for e in result.extracted), (
+        f"entity gate did not extract {entity!r} — strategy diverged from "
+        f"the regex catalog; extracted={[(e.text, e.kind.value) for e in result.extracted]}"
     )
 
 
@@ -267,7 +308,9 @@ def test_entity_gate_rejects_when_entity_only_in_obs(entity: str) -> None:
 @settings(suppress_health_check=[HealthCheck.too_slow])
 def test_entity_gate_extracts_entity_kind_consistently(entity: str) -> None:
     """For a DFIR entity in obs+cited, the extracted-entities list
-    contains exactly one ExtractedEntity matching it (up to dedupe)."""
+    contains an ExtractedEntity whose ``text`` matches ``entity`` AND
+    whose ``source`` is ``"regex"`` (these are catalog-defined shapes,
+    not spaCy NER outputs)."""
     from silentwitness_common.types import CitedSpan
 
     cited = CitedSpan(
@@ -278,8 +321,16 @@ def test_entity_gate_extracts_entity_kind_consistently(entity: str) -> None:
         span_text=f"row data {entity} more data",
     )
     result = verify_entities(f"row data {entity}", [cited])
-    # The strict assertion is success — extraction kind is downstream.
     assert result.success is True
+    matching = [e for e in result.extracted if e.text == entity]
+    assert matching, (
+        f"entity {entity!r} not in extracted list; "
+        f"extracted={[(e.text, e.kind.value, e.source) for e in result.extracted]}"
+    )
+    assert all(e.source == "regex" for e in matching), (
+        f"DFIR entity {entity!r} extracted via non-regex source — "
+        f"regex catalog should have first-extracted this shape"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -288,19 +339,33 @@ def test_entity_gate_extracts_entity_kind_consistently(entity: str) -> None:
 
 
 @given(payload=injection_payload_strategy())
-def test_sanitized_output_doesnt_introduce_new_attack_tokens(payload: str) -> None:
-    """The wrap markers + strip markers MUST NOT themselves match the
-    injection-pattern catalog. Otherwise the sanitizer creates the
-    attack surface it's defending against."""
-    writer = _CollectingWriter()
-    result = sanitize(payload, _AUDIT_ID, audit_writer=writer)
-    # If sanitize were called again on its own output, no new strip events
-    # should fire (the markers don't trip the catalog).
+def test_sanitize_is_idempotent_on_its_own_output(payload: str) -> None:
+    """Sanitising the sanitiser's own output must be a no-op modulo the
+    outer wrap. Strict idempotency — not just ``second.strip_count <=
+    first.strip_count`` — catches the case where re-sanitising would
+    accumulate nested ``[UNTRUSTED EVIDENCE BEGIN]`` envelopes, double-
+    strip canonical markers, or trip a future broader catalog pattern
+    on the wrap/strip text itself."""
+    result = sanitize(payload, _AUDIT_ID, audit_writer=_CollectingWriter())
     second = sanitize(result.wrapped_text, _AUDIT_ID, audit_writer=_CollectingWriter())
-    # Strict bound: the sanitizer's own output must not trip any catalog
-    # pattern that wasn't already tripped on the first pass. The wrap
-    # markers + strip markers are designed not to look like injection
-    # tokens. If a future broader catalog entry (e.g. a `you_are_now_role`
-    # pattern with looser anchors) could match `[stripped:<id>:...]`
-    # itself, this assertion catches the regression at PR-time.
-    assert second.strip_count <= result.strip_count
+    # Zero new strips on the second pass: the wrap/strip markers must
+    # not themselves match any catalog token.
+    assert second.strip_count == 0, (
+        f"second-pass sanitise stripped {second.strip_count} new tokens; "
+        f"the sanitiser's own output trips its own catalog"
+    )
+    # The wrap of the second pass must be the first wrap surrounded by
+    # one additional pair of evidence markers — never a deeper nesting
+    # or a rewriting of the inner content.
+    expected = "[UNTRUSTED EVIDENCE BEGIN]\n" + result.wrapped_text + "\n[UNTRUSTED EVIDENCE END]"
+    assert second.wrapped_text == expected, (
+        f"second-pass output deviated from envelope-only re-wrap; "
+        f"diff begins at index {_first_diff(second.wrapped_text, expected)}"
+    )
+
+
+def _first_diff(a: str, b: str) -> int:
+    for i, (ca, cb) in enumerate(zip(a, b, strict=False)):
+        if ca != cb:
+            return i
+    return min(len(a), len(b))

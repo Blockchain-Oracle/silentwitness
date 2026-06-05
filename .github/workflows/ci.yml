@@ -168,6 +168,18 @@ jobs:
           if ! uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
             uv run python -m spacy download en_core_web_lg
           fi
+      - name: Cache Hypothesis example database
+        # Persist failing examples across runs so each new CI run replays
+        # last run's counter-examples in addition to drawing fresh ones.
+        # Without this, every CI green is a different random walk and a
+        # 1-in-5000 failure shows up as a non-reproducible flake.
+        continue-on-error: true
+        uses: actions/cache@v4
+        with:
+          path: .hypothesis/examples
+          key: hypothesis-examples-${{ hashFiles('tests/property/**', 'src/silentwitness_mcp/verification/**') }}
+          restore-keys: |
+            hypothesis-examples-
       - name: Run Hypothesis property tests (slow profile)
         env:
           HYPOTHESIS_PROFILE: slow

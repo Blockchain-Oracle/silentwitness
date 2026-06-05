@@ -140,9 +140,16 @@ REGEX_RULES: tuple[RegexRule, ...] = (
     RegexRule(EntityKind.SHA256, _SHA256),
     RegexRule(EntityKind.SHA1, _SHA1),
     RegexRule(EntityKind.MD5, _MD5),
-    RegexRule(EntityKind.REGISTRY_KEY, _REGISTRY_KEY),
+    # WINDOWS_PATH + POSIX_PATH BEFORE REGISTRY_KEY. The registry-key
+    # pattern ``HK(?:LM|CU|U|CR|CC)\\…`` has no left anchor and will
+    # greedily consume the ``HKU\A`` substring inside a Windows path
+    # like ``C:\HKU\A`` — the path's own extractor must run first
+    # (WINDOWS_PATH requires ``[A-Za-z]:\\``, so it cannot conflict in
+    # the reverse direction). Hypothesis at 5000 examples surfaced this
+    # ordering bug via test_entity_gate_accepts_when_entity_in_cited.
     RegexRule(EntityKind.WINDOWS_PATH, _WINDOWS_PATH),
     RegexRule(EntityKind.POSIX_PATH, _POSIX_PATH),
+    RegexRule(EntityKind.REGISTRY_KEY, _REGISTRY_KEY),
     # MUTEX before ACCOUNT — the generic principal pattern would otherwise
     # consume "Global\Win32MutexX" before the mutex-specific pattern could.
     RegexRule(EntityKind.MUTEX, _MUTEX),

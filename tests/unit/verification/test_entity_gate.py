@@ -125,6 +125,28 @@ def test_registry_key_extracted() -> None:
     assert any(e.kind == EntityKind.REGISTRY_KEY for e in result.extracted)
 
 
+def test_windows_path_with_hk_segment_not_split_into_registry_key() -> None:
+    """A Windows path whose interior contains an ``HKU\\…`` substring
+    must extract as a single WINDOWS_PATH, not as a stray REGISTRY_KEY
+    plus an orphaned prefix. The registry-key regex has no left-anchor,
+    so without explicit catalog ordering it would greedily consume the
+    interior. Hypothesis at 5000 examples surfaced this ordering bug
+    via test_entity_gate_accepts_when_entity_in_cited."""
+    path = "C:\\HKU\\A"
+    obs = f"observed {path}"
+    cited = _span(f"observed {path} in evidence")
+    result = verify_entities(obs, [cited])
+    assert result.success is True
+    extracted_kinds = {(e.text, e.kind.value) for e in result.extracted}
+    assert (path, "WINDOWS_PATH") in extracted_kinds, (
+        f"path {path!r} must extract as WINDOWS_PATH; got {extracted_kinds}"
+    )
+    assert not any(e.kind == EntityKind.REGISTRY_KEY for e in result.extracted), (
+        f"interior HK-substring must not split into REGISTRY_KEY; "
+        f"got {[(e.text, e.kind.value) for e in result.extracted]}"
+    )
+
+
 def test_windows_path_extracted_with_trailing_backslash() -> None:
     obs = "installed at C:\\Tools\\Ethereal\\"
     cited = _span("targeted directory: C:\\Tools\\Ethereal\\ owner SYSTEM")
