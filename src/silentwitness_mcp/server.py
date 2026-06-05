@@ -55,7 +55,14 @@ from silentwitness_mcp._lifecycle import AppContext, lifespan
 # clients can introspect the surface, but each call returns
 # MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
 EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
-    {"record_observation", "register_evidence", "verify_evidence_hash", "vol_pslist"}
+    {
+        "record_observation",
+        "register_evidence",
+        "verify_evidence_hash",
+        "vol_pslist",
+        "vol_psscan",
+        "vol_pstree",
+    }
 )
 
 
@@ -231,14 +238,9 @@ def _guard_mount(tool_name: str, ctx: Context[ServerSession, AppContext]) -> Non
 
 
 def _register_finding_tool_stubs(mcp: FastMCP) -> None:
-    """Register the seven snake_case finding/evidence tools from
-    architecture §4.2 as stubs.
-
-    Each body checks the mount-validator state first (architecture
-    §4.11), then raises :class:`NotImplementedError` so MCP clients see
-    a structured error rather than a silent success. The actual bodies
-    land in stories 8-12 of this epic; the mount-gate stays.
-    """
+    """Register the architecture §4.2 tools as mount-guarded stubs.
+    Real bodies live in tools/* and findings/*; the MCP surface stays
+    a stub until the case-context-binding story wires lifespan state."""
 
     @mcp.tool()
     def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
@@ -288,12 +290,21 @@ def _register_finding_tool_stubs(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def vol_pslist(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Volatility3 ``windows.pslist`` (architecture §4.6, PRD FR #5).
-        Body in :mod:`silentwitness_mcp.tools.memory`; this stub holds
-        the MCP surface + mount gate until the case-context-binding
-        story wires lifespan state."""
+        """Volatility3 windows.pslist. Stub pending case-context binding."""
         _guard_mount("vol_pslist", ctx)
         raise NotImplementedError("vol_pslist body pending case-context binding")
+
+    @mcp.tool()
+    def vol_psscan(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Volatility3 windows.psscan. Stub pending case-context binding."""
+        _guard_mount("vol_psscan", ctx)
+        raise NotImplementedError("vol_psscan body pending case-context binding")
+
+    @mcp.tool()
+    def vol_pstree(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Volatility3 windows.pstree. Stub pending case-context binding."""
+        _guard_mount("vol_pstree", ctx)
+        raise NotImplementedError("vol_pstree body pending case-context binding")
 
 
 # ---------------------------------------------------------------------------

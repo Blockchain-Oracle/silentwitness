@@ -1,10 +1,13 @@
 """Shared Volatility 3 subprocess infrastructure (architecture §4.6,
 PRD FR #5).
 
-Every ``vol_*`` wrapper imports :func:`_run_vol` and the
+Every ``vol_*`` wrapper imports :func:`_run_vol`, the family-shared
+refusal helpers (:func:`refuse`, :func:`write_audit_row`,
+:func:`persist_blob`, :func:`delete_orphan_blob`), and the
 :class:`VolFailureReason` enum from here. The skeleton story
-(story-vol-pslist) lands this helper; subsequent stories add caveat
-catalogue entries and call :func:`_run_vol` directly.
+(story-vol-pslist) landed the subprocess helper; the pstree+psscan
+story extracted the refusal-envelope plumbing so subsequent stories
+add ~5 LOC of body, not ~80.
 
 Vol3 binary path is pinned to SilentWitness's OWN venv at
 ``/opt/silentwitness/vol3-venv/bin/vol`` — see CLAUDE.md "Critical pin
@@ -17,13 +20,24 @@ from __future__ import annotations
 import asyncio
 import dataclasses
 import hashlib
+import json
 import time
 from collections.abc import Mapping
+from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
+from pydantic import BaseModel
+
+from silentwitness_common.atomic_io import append_jsonl_line, write_bytes_atomic
+from silentwitness_common.types import AuditEntry, DataProvenance, ToolResponse
+from silentwitness_mcp.audit.logger import AuditLogger
+from silentwitness_mcp.envelope import make_empty_provenance
 from silentwitness_mcp.verification.normalizer import normalize_output
+
+_BLOB_DIR: Final = "audit/blobs"
+_SENTINEL_PATH: Final = Path("/dev/null")
 
 VOL_BIN: Final = Path("/opt/silentwitness/vol3-venv/bin/vol")
 """Vol3 binary. CLAUDE.md non-negotiable: never `/opt/volatility3/...`."""
@@ -62,6 +76,30 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
         ),
         ("ImageFileName is truncated to 15 chars; use vol_cmdline or vol_dlllist for full paths"),
         ("ExitTime may be set for processes still referenced by other handles (orphan teardown)"),
+    ),
+    "pstree": (
+        ("Parent PIDs can refer to dead processes via PID reuse — cross-check CreateTime ordering"),
+        (
+            "Process hollowing produces legitimate-looking lineage with "
+            "malicious code — vol_pstree alone cannot detect it; "
+            "corroborate with vol_malfind + ldrmodules"
+        ),
+    ),
+    "psscan": (
+        (
+            "windows.psscan may show terminated processes that pslist no "
+            "longer sees — entries with ExitTime set are normal teardown "
+            "artifacts, not malice"
+        ),
+        (
+            "diff vs vol_pslist: processes in psscan but NOT in pslist "
+            "are DKOM-hidden OR terminated; ExitTime distinguishes the two"
+        ),
+        (
+            "pool-tag scan can produce false positives from non-process "
+            "allocations — validate Threads/Handles plausibility before "
+            "trusting an entry"
+        ),
     ),
 }
 
@@ -168,6 +206,127 @@ def cmd_argv_for(
     ]
 
 
+# ---------------------------------------------------------------------------
+# Family-shared audit / blob / refusal infrastructure
+# ---------------------------------------------------------------------------
+
+
+def persist_blob(case_dir: Path, audit_id: str, normalized: bytes) -> Path:
+    """Atomic write of the normalized stdout to
+    ``cases/<id>/audit/blobs/<audit_id>.txt`` (architecture §4.6)."""
+    blob_dir = case_dir / _BLOB_DIR
+    blob_dir.mkdir(parents=True, exist_ok=True)
+    blob_path = blob_dir / f"{audit_id}.txt"
+    write_bytes_atomic(blob_path, normalized)
+    return blob_path
+
+
+def delete_orphan_blob(blob_path: Path | None) -> None:
+    """Drop a blob whose audit-row write failed post-persist."""
+    if blob_path is None:
+        return
+    try:
+        blob_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def write_audit_row(
+    *,
+    tool_name: str,
+    case_dir: Path,
+    audit_log_filename: str,
+    audit_logger: AuditLogger,
+    audit_id: str,
+    evidence_path: Path,
+    elapsed_ms: float,
+    model_used: str,
+    result: dict[str, Any],
+    result_sha256: str | None,
+    blob_path: Path | None,
+    exit_code: int | None,
+) -> None:
+    """Architecture §4.4 canonical audit row writer. ``/dev/null`` is
+    the documented sentinel for pre-execution refusals (blob was never
+    persisted) so audit-log readers can grep for the sentinel rather
+    than treat a missing blob as corruption."""
+    audit_log = case_dir / "audit" / audit_log_filename
+    audit_log.parent.mkdir(parents=True, exist_ok=True)
+    summary_json = json.dumps(result, sort_keys=True)
+    fallback_sha = hashlib.sha256(summary_json.encode("utf-8")).hexdigest()
+    params: dict[str, object] = {"evidence_path": str(evidence_path)}
+    if exit_code is not None:
+        params["exit_code"] = exit_code
+    entry = AuditEntry(
+        ts=datetime.now(UTC),
+        audit_id=audit_id,
+        tool=tool_name,
+        params=params,
+        result_summary=result,
+        result_sha256=result_sha256 or fallback_sha,
+        stdout_path=blob_path if blob_path is not None else _SENTINEL_PATH,
+        elapsed_ms=elapsed_ms,
+        examiner=audit_logger.examiner,
+        model_used=model_used,
+        model_token_count={},
+    )
+    append_jsonl_line(audit_log, entry.model_dump_json())
+
+
+def refuse[TPayload: BaseModel](
+    reason: VolFailureReason,
+    *,
+    tool_name: str,
+    plugin_name: str,
+    audit_log_filename: str,
+    pre_audit_id: str,
+    case_dir: Path,
+    audit_logger: AuditLogger,
+    evidence_path: Path,
+    elapsed_ms: float,
+    model_used: str,
+    advisories: tuple[str, ...],
+    blob_path: Path | None = None,
+    exit_code: int | None = None,
+    result_sha256: str | None = None,
+) -> ToolResponse[TPayload]:
+    """Build refusal envelope + audit row. Pre-subprocess refusals get
+    an empty-sentinel :class:`DataProvenance`; post-subprocess refusals
+    carry the real blob path + hash so the verifier can re-check."""
+    write_audit_row(
+        tool_name=tool_name,
+        case_dir=case_dir,
+        audit_log_filename=audit_log_filename,
+        audit_logger=audit_logger,
+        audit_id=pre_audit_id,
+        evidence_path=evidence_path,
+        elapsed_ms=elapsed_ms,
+        model_used=model_used,
+        result={"reason": reason.value, "advisories": list(advisories)},
+        result_sha256=result_sha256,
+        blob_path=blob_path,
+        exit_code=exit_code,
+    )
+    if blob_path is None or result_sha256 is None:
+        provenance = make_empty_provenance(tool_name)
+    else:
+        provenance = DataProvenance(
+            tool=tool_name,
+            stdout_path=blob_path,
+            result_sha256=result_sha256,
+            elapsed_ms=elapsed_ms,
+            cmd_argv=tuple(cmd_argv_for(plugin_name, evidence_path)),
+        )
+    return ToolResponse[TPayload](
+        success=False,
+        data=None,
+        audit_id=pre_audit_id,
+        examiner=audit_logger.examiner,
+        advisories=(*advisories, reason.value),
+        data_provenance=provenance,
+    )
+
+
 __all__ = [
     "DEFAULT_TIMEOUT_S",
     "VOL_BIN",
@@ -176,5 +335,9 @@ __all__ = [
     "_run_vol",
     "caveats_for",
     "cmd_argv_for",
+    "delete_orphan_blob",
+    "persist_blob",
+    "refuse",
     "truncated_stderr",
+    "write_audit_row",
 ]
