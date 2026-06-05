@@ -183,8 +183,8 @@ def test_make_empty_provenance_per_call_is_fresh_instance() -> None:
     """No shared singleton — each call returns a fresh instance so
     Pydantic's ``object.__setattr__`` frozen-bypass channel cannot
     contaminate sibling envelopes."""
-    a = make_empty_provenance()
-    b = make_empty_provenance()
+    a = make_empty_provenance("vol_pslist")
+    b = make_empty_provenance("vol_pslist")
     assert a is not b
     assert a == b
 
@@ -229,7 +229,7 @@ def test_make_failure_envelope_allows_duplicate_reason_in_advisories() -> None:
         audit_id=_AUDIT_ID,
         examiner=_EXAMINER,
         reason=FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID,
-        data_provenance=make_empty_provenance(),
+        data_provenance=make_empty_provenance("vol_pslist"),
         advisories=("MOUNT_NOT_RO_NOEXEC_NOSUID",),
     )
     assert env.advisories == (

@@ -7,11 +7,10 @@ package can read them without depending on :mod:`silentwitness_mcp`.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Final
 
 from pydantic import BaseModel
 
-from silentwitness_common.failure import FailureReason
+from silentwitness_common.failure import EMPTY_PROVENANCE_TOOL_NAME, FailureReason
 from silentwitness_common.types import (
     AuditId,
     Confidence,
@@ -34,26 +33,20 @@ __all__ = [
     "make_failure_envelope",
 ]
 
-# Tool-name sentinel used by :func:`make_empty_provenance` when the
-# caller cannot supply a real one. Surfaces in audit logs as the literal
-# string so an analyst grepping for "_pre_tool_execution_" finds every
-# refusal that fired before any tool ran.
-EMPTY_PROVENANCE_TOOL_NAME: Final = "_pre_tool_execution_"
-_EMPTY_SHA256: Final = "0" * 64
 
-
-def make_empty_provenance(tool: str = EMPTY_PROVENANCE_TOOL_NAME) -> DataProvenance:
-    """Build a fresh ``DataProvenance`` for refusals fired BEFORE the
-    underlying tool ran. Stdout_path=/dev/null + all-zeros hash let
-    downstream readers distinguish "failed pre-execution" from a real
-    run that incidentally hashed to zeros (architecturally impossible).
-    A NEW instance is returned per call — the EMPTY_PROVENANCE
-    module-level singleton was removed (cross-envelope contamination
-    risk via Pydantic's ``object.__setattr__`` frozen-bypass channel)."""
+def make_empty_provenance(tool: str) -> DataProvenance:
+    """Fresh ``DataProvenance`` for refusals fired BEFORE the tool ran.
+    ``stdout_path=/dev/null`` + all-zeros hash let downstream readers
+    distinguish "failed pre-execution" from a real run that incidentally
+    hashed to zeros. A new instance per call — no shared singleton
+    (round-3 silent-failure H2: ``object.__setattr__`` frozen-bypass
+    could cross-contaminate). ``tool`` is REQUIRED so a caller cannot
+    silently leak the EMPTY_PROVENANCE_TOOL_NAME sentinel into the
+    audit log; pass it explicitly even for sentinel construction."""
     return DataProvenance(
         tool=tool,
         stdout_path=Path("/dev/null"),
-        result_sha256=_EMPTY_SHA256,
+        result_sha256="0" * 64,
         elapsed_ms=0.0,
         cmd_argv=(),
     )
@@ -72,16 +65,17 @@ def make_failure_envelope[TPayload: BaseModel](
 ) -> ToolResponse[TPayload]:
     """Build the canonical ``success=False`` envelope.
 
-    ``data_provenance`` is REQUIRED so callers cannot omit it and have
-    the literal ``_pre_tool_execution_`` tool name leak silently into
-    the audit log. Use :func:`make_empty_provenance` to obtain a
-    pre-tool-execution shape, passing the intended tool name.
-
     Caller advisories are preserved IN ORDER; ``reason`` is appended last
     so downstream consumers can rely on ``env.advisories[-1]`` being the
-    structured failure code. Callers must NOT pre-include ``reason`` in
+    structured failure code. Callers MUST NOT pre-include ``reason`` in
     ``advisories`` — duplicates are preserved verbatim (the factory does
-    not dedup; see ``test_make_failure_envelope_allows_duplicate_reason_in_advisories``).
+    not dedup).
+
+    ``TPayload`` is inferred from the caller's context (LHS annotation
+    or sink parameter type). Failure envelopes carry ``data=None`` so the
+    generic is for caller ergonomics; ``make_failure_envelope[T](...)``
+    runtime-subscription is a ``TypeError`` (PEP 695 functions aren't
+    subscriptable at runtime — bind at the call site instead).
     """
     return ToolResponse[TPayload](
         success=False,

@@ -83,10 +83,9 @@ def make_audit_id(examiner: str, day: date, seq: int) -> str:
 
 
 def require_audit_id_str(value: object) -> str:
-    """BeforeValidator: reject non-``str`` input (incl. ``bytes`` that
-    Pydantic v2 would otherwise UTF-8-decode silently — same PR-92
-    silent-failure surface :func:`_normalise_hex` guards against for
-    ``Sha256Hex``)."""
+    """BeforeValidator: reject non-str (incl. bytes — Pydantic v2 would
+    silently UTF-8-decode; same PR-92 surface :func:`_normalise_hex`
+    covers for Sha256Hex)."""
     if not isinstance(value, str):
         raise ValueError(f"AuditId requires str, got {type(value).__name__}")
     return value

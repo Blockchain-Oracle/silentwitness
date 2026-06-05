@@ -58,10 +58,19 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from silentwitness_common.ids import assert_audit_id_format, require_audit_id_str
 from silentwitness_common.types import AuditId, Sha256Hex
 from silentwitness_mcp.verification._injection_loader import get_patterns
 
-_BASE_CONFIG = ConfigDict(frozen=True, extra="forbid")
+# SanitizeResult holds wrapped_text that may carry lone surrogates from
+# adversarial-evidence inputs — Pydantic's whitespace-strip would call
+# .strip() on it and raise UnicodeError. Keep SanitizeResult's config
+# whitespace-strip OFF.
+_RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
+# StripEvent carries an AuditId field that depends on the canonical
+# strip-then-validate preprocessing every other AuditId carrier provides
+# (round-3 silent-failure H1: this used to diverge silently).
+_EVENT_CONFIG = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
 _MARKER_BEGIN = "[UNTRUSTED EVIDENCE BEGIN]"
 _MARKER_END = "[UNTRUSTED EVIDENCE END]"
 
@@ -92,7 +101,7 @@ class StripEvent(BaseModel):
     attack surface.
     """
 
-    model_config = _BASE_CONFIG
+    model_config = _EVENT_CONFIG
 
     ts: datetime
     audit_id: AuditId
@@ -106,7 +115,7 @@ class SanitizeResult(BaseModel):
     """Outcome of :func:`sanitize`. Frozen so callers can't accidentally
     forge new strip events post-hoc."""
 
-    model_config = _BASE_CONFIG
+    model_config = _RESULT_CONFIG
 
     wrapped_text: str
     strip_count: int = Field(ge=0)
@@ -182,6 +191,11 @@ def sanitize(
     ``audit_id`` keys the strip events to the upstream MCP tool call that
     produced this evidence. ``now`` is injected for deterministic tests.
     """
+    # Fail-fast on a malformed audit_id at the function-entry boundary so
+    # a zero-strip pipeline can't silently accept a bogus id (round-3
+    # silent-failure H2: the StripEvent construction-time gate only fires
+    # when at least one strip happens).
+    audit_id = assert_audit_id_format(require_audit_id_str(audit_id))
     timestamp = now if now is not None else datetime.now(UTC)
     text = raw
     events: list[StripEvent] = []

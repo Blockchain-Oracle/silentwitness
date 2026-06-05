@@ -257,11 +257,6 @@ def test_data_provenance_accepts_zero_elapsed_ms() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Required-field discipline (rebuilt after the round-2 trim)
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # discipline_reminder semantics
 # ---------------------------------------------------------------------------
 
@@ -323,12 +318,34 @@ def test_failure_reason_catalog_covers_known_codes() -> None:
 
 
 def test_empty_provenance_uses_dev_null_and_zero_hash() -> None:
-    p = make_empty_provenance()
+    p = make_empty_provenance(EMPTY_PROVENANCE_TOOL_NAME)
     assert p.stdout_path == Path("/dev/null")
     assert p.result_sha256 == "0" * 64
     assert p.elapsed_ms == 0.0
     assert p.cmd_argv == ()
     assert p.tool == EMPTY_PROVENANCE_TOOL_NAME
+
+
+def test_empty_provenance_tool_name_literal_pin() -> None:
+    """Round-3 pr-test L3: catches a rename that grep would miss
+    (analysts grep this exact string per the architecture §4.11 sentinel
+    contract)."""
+    assert EMPTY_PROVENANCE_TOOL_NAME == "_pre_tool_execution_"
+
+
+def test_audit_id_bytes_rejected_before_min_length_constraint() -> None:
+    """Round-3 pr-test H1: pins the BeforeValidator → core ordering. If
+    require_audit_id_str were demoted to AfterValidator, b"" would fail
+    too_short first and the AuditId-requires-str diagnostic would
+    silently disappear."""
+    with pytest.raises(ValidationError, match=r"AuditId requires str"):
+        ToolResponse[_SamplePayload](
+            success=False,
+            data=None,
+            audit_id=b"",  # type: ignore[arg-type]
+            examiner=_EXAMINER,
+            data_provenance=_provenance(),
+        )
 
 
 def test_make_empty_provenance_accepts_real_tool_name() -> None:
@@ -364,7 +381,7 @@ def test_make_failure_envelope_preserves_caller_advisories() -> None:
         audit_id=_AUDIT_ID,
         examiner=_EXAMINER,
         reason=FailureReason.EVIDENCE_NOT_REGISTERED,
-        data_provenance=make_empty_provenance(),
+        data_provenance=make_empty_provenance("vol_pslist"),
         advisories=("warm up step skipped",),
     )
     assert env.advisories == ("warm up step skipped", "EVIDENCE_NOT_REGISTERED")
@@ -377,5 +394,5 @@ def test_make_failure_envelope_rejects_invalid_audit_id() -> None:
             audit_id="not-a-real-audit-id",
             examiner=_EXAMINER,
             reason=FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID,
-            data_provenance=make_empty_provenance(),
+            data_provenance=make_empty_provenance("vol_pslist"),
         )
