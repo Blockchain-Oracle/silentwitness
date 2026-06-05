@@ -215,6 +215,152 @@ def test_audit_write_failure_preserves_original_rejection(
     assert envelope.data.context["original_reason"] == PivotRejectReason.HYPOTHESIS_NOT_FOUND.value
 
 
+def test_scanner_tolerates_whitespace_and_non_dict_lines(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """The scanner tolerates blank lines and non-dict scalars (a
+    hand-edit may leave a stray ``"\\n"`` or a top-level string).
+    Validation still finds the valid form row."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    form_row = json.dumps(
+        {
+            "ts": datetime.now(UTC).isoformat(),
+            "type": "form",
+            "hypothesis_id": "H-001",
+        }
+    )
+    log.write_text(
+        "\n   \n"  # blank + whitespace-only lines
+        '"a stray string"\n' + form_row + "\n",  # non-dict valid JSON
+        encoding="utf-8",
+    )
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-002",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is True
+
+
+def test_scanner_skips_dicts_without_hypothesis_id_or_pivot_id(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """Dict rows missing the key are tolerated — only dicts CARRYING
+    the key but with a malformed value raise."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ts": datetime.now(UTC).isoformat(), "type": "metadata"},  # no hypothesis_id
+        {"ts": datetime.now(UTC).isoformat(), "type": "form", "hypothesis_id": "H-001"},
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-002",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is True
+
+
+def test_audit_store_corrupted_on_non_string_hypothesis_id(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """A row with ``hypothesis_id`` present but non-string violates the
+    persistence contract → AUDIT_STORE_CORRUPTED."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        json.dumps(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "type": "form",
+                "hypothesis_id": 42,  # non-string violates contract
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-002",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is False
+    assert envelope.data.reason == PivotRejectReason.AUDIT_STORE_CORRUPTED
+
+
+def test_audit_store_corrupted_on_malformed_pivot_id_pattern(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """A pivot_id string that doesn't match P-NNN (e.g. legacy ``P-1``)
+    raises HypothesisStoreError → AUDIT_STORE_CORRUPTED."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    rows = [
+        {"ts": datetime.now(UTC).isoformat(), "type": "form", "hypothesis_id": "H-001"},
+        {
+            "ts": datetime.now(UTC).isoformat(),
+            "type": "pivot",
+            "hypothesis_id": "H-001",
+            "pivot_id": "P-1",  # not zero-padded — legacy/malformed
+        },
+    ]
+    log.write_text("\n".join(json.dumps(r) for r in rows) + "\n", encoding="utf-8")
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-002",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is False
+    assert envelope.data.reason == PivotRejectReason.AUDIT_STORE_CORRUPTED
+
+
+def test_audit_store_corrupted_on_malformed_pivot_id(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """A pivot row with a non-string ``pivot_id`` violates the
+    persistence contract. The seq scanner raises
+    HypothesisStoreError → AUDIT_STORE_CORRUPTED, defending against
+    the next allocation colliding with an invisible existing ID."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    record = {
+        "ts": datetime.now(UTC).isoformat(),
+        "type": "form",
+        "hypothesis_id": "H-001",
+    }
+    bad = {
+        "ts": datetime.now(UTC).isoformat(),
+        "type": "pivot",
+        "hypothesis_id": "H-001",
+        "pivot_id": 42,  # non-string violates contract
+    }
+    log.write_text(json.dumps(record) + "\n" + json.dumps(bad) + "\n", encoding="utf-8")
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-002",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is False
+    assert envelope.data.reason == PivotRejectReason.AUDIT_STORE_CORRUPTED
+
+
 def test_audit_store_corrupted_when_hypothesis_jsonl_malformed(
     case_env: tuple[Path, Path, AuditLogger],
 ) -> None:

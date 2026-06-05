@@ -1,30 +1,25 @@
-"""``record_pivot`` tool body — hypothesis-pivot transition event
-emission (architecture §4.2 row ``record_pivot``, §5.3
-``HypothesisEvent`` schema).
+"""``record_pivot`` tool body (architecture §4.2 + §5.3).
 
-The pivot count is PRD §4's secondary metric — operators read it via
-``grep -c '"type":"pivot"' cases/<id>/audit/hypothesis.jsonl``.
+Pipeline: sanitize reason → post-sanitize emptiness check →
+abandoning_evidence non-empty → from_hypothesis_id exists in
+``hypothesis.jsonl`` (``to_hypothesis_id`` shape is constructor-enforced
+by :class:`PivotInput`) → allocate ``P-NNN`` → append :class:`_PivotEvent`
+to ``audit/hypothesis.jsonl`` → audit row to ``audit/findings.jsonl``
+REGARDLESS of accept/reject (rejections are evidence — §4.4).
 
-Story refinement of the architecture's
-``(from_hypothesis_id, to_statement, reason)`` triple:
+PRD §4 secondary metric: ``grep -c '"type":"pivot"' hypothesis.jsonl``.
 
-* ``to_hypothesis_id`` replaces ``to_statement``: the new hypothesis is
-  allocated by the agent-side ``HypothesisStack.form()`` (Epic 8); the
-  MCP tool just records the transition. The child hypothesis may not
-  yet exist at the moment the pivot is logged — the tool does NOT
-  validate ``to_hypothesis_id`` exists.
-* ``abandoning_evidence: list[str]`` carries the audit_ids of evidence
-  that led to abandoning the from-hypothesis. The report's Findings
-  section cites these when explaining the pivot. The tool checks the
-  list is non-empty but does NOT verify the audit_ids point at real
-  entries — that's the agent's responsibility.
+This tool refines the architecture's
+``(from_hypothesis_id, to_statement, reason)`` triple. The agent-side
+recorder owns hypothesis allocation; the MCP tool only records the
+transition. The child ``to_hypothesis_id`` may not exist yet — the
+tool does NOT validate its existence. ``abandoning_evidence`` is
+frozen to a tuple at parse time so a handler cannot mutate the input
+between the pipeline pass and the audit-row pass.
 
-Pipeline: sanitize reason → validate from_hypothesis_id exists in
-hypothesis.jsonl → check to_hypothesis_id shape → check
-post-sanitize reason non-emptiness → check abandoning_evidence
-non-empty → allocate ``P-NNN`` → append ``HypothesisEvent`` to
-``audit/hypothesis.jsonl`` → audit row to ``audit/findings.jsonl``
-REGARDLESS of accept/reject (architecture §4.4).
+Persistence note: ``_PivotEvent.reason`` carries the sanitizer's
+wrapped envelope verbatim. A downstream consumer comparing to
+user-supplied strings must unwrap via the sanitizer's envelope.
 """
 
 from __future__ import annotations
@@ -36,13 +31,18 @@ import time
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
+from silentwitness_mcp.findings._pivot_store import (
+    HypothesisStoreError,
+    existing_hypothesis_ids,
+    max_pivot_seq,
+)
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
 from silentwitness_mcp.verification.sanitizer import (
     _MARKER_BEGIN,
@@ -60,18 +60,14 @@ class PivotRejectReason(StrEnum):
     HYPOTHESIS_NOT_FOUND = "HYPOTHESIS_NOT_FOUND"
     MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
     MISSING_ABANDONING_EVIDENCE = "MISSING_ABANDONING_EVIDENCE"
-    MALFORMED_HYPOTHESIS_ID = "MALFORMED_HYPOTHESIS_ID"
     AUDIT_STORE_CORRUPTED = "AUDIT_STORE_CORRUPTED"
     AUDIT_STORE_UNWRITABLE = "AUDIT_STORE_UNWRITABLE"
     PIPELINE_INTERNAL_ERROR = "PIPELINE_INTERNAL_ERROR"
 
 
 _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
-# Zero-padded 3-digit form matches the allocator output and any
-# previously-logged event. Auto-widens past 999 if the case ever
-# accumulates that many pivots.
+# Zero-padded 3-digit form matches the allocator output.
 _HYPOTHESIS_ID_PATTERN: Final = re.compile(r"^H-\d{3,}$")
-_PIVOT_ID_PATTERN: Final = re.compile(r"^P-(\d+)$")
 _HYPOTHESIS_JSONL: Final = "hypothesis.jsonl"
 # Single source of truth: pull the sanitizer's wrap markers so the
 # post-sanitize unwrap stays in lockstep with the sanitizer envelope.
@@ -80,12 +76,16 @@ _WRAP_END: Final = f"\n{_MARKER_END}"
 
 
 class PivotInput(BaseModel):
+    """Agent-submitted pivot payload. ``abandoning_evidence`` is frozen
+    to a tuple at parse-time so a handler cannot mutate the input list
+    between the pipeline pass and the audit-row pass."""
+
     model_config = _RESULT_CONFIG
 
     from_hypothesis_id: str = Field(min_length=1)
     to_hypothesis_id: str = Field(min_length=1)
     reason: str = Field(min_length=1)
-    abandoning_evidence: list[str] = Field(default_factory=list)
+    abandoning_evidence: tuple[str, ...] = Field(default_factory=tuple)
 
     @model_validator(mode="after")
     def _hypothesis_id_shape(self) -> PivotInput:
@@ -121,17 +121,17 @@ class PivotResult(BaseModel):
         return self
 
 
-class _HypothesisEvent(BaseModel):
-    """Persistence row appended to ``audit/hypothesis.jsonl``. Schema
-    from architecture §5.3 verbatim. ``tokens_spent`` and
-    ``steps_spent`` are 0 here — the MCP-tool side lacks the agent
-    budget context; the agent-side recorder (Epic 8) will populate
-    them when it owns the call."""
+class _PivotEvent(BaseModel):
+    """Pivot-specific subset of the architecture §5.3 HypothesisEvent
+    schema. ``type`` is narrowed to ``"pivot"`` — the other event types
+    (form/confirm/abandon) are owned by the agent-side recorder.
+    ``tokens_spent`` and ``steps_spent`` default to 0; the agent-side
+    recorder populates them when it owns the call."""
 
     model_config = ConfigDict(extra="forbid")
 
     ts: datetime
-    type: str = Field(pattern=r"^(form|pivot|confirm|abandon)$")
+    type: Literal["pivot"] = "pivot"
     hypothesis_id: str = Field(pattern=r"^H-\d{3,}$")
     pivot_id: str = Field(pattern=r"^P-\d{3,}$")
     to_hypothesis_id: str = Field(pattern=r"^H-\d{3,}$")
@@ -163,47 +163,6 @@ def _hypothesis_log(case_dir: Path) -> Path:
     return case_dir / "audit" / _HYPOTHESIS_JSONL
 
 
-def _existing_hypothesis_ids(hypothesis_log: Path) -> set[str]:
-    """Read hypothesis.jsonl and return the set of hypothesis_id values
-    that have been formed (any row with ``hypothesis_id`` field). Used
-    to validate that ``from_hypothesis_id`` references a real one."""
-    if not hypothesis_log.exists():
-        return set()
-    ids: set[str] = set()
-    for line in hypothesis_log.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        record = json.loads(line)
-        if not isinstance(record, dict):
-            continue
-        hid = record.get("hypothesis_id")
-        if isinstance(hid, str):
-            ids.add(hid)
-    return ids
-
-
-def _max_pivot_seq(hypothesis_log: Path) -> int:
-    if not hypothesis_log.exists():
-        return 0
-    highest = 0
-    for line in hypothesis_log.read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        record = json.loads(line)
-        if not isinstance(record, dict):
-            continue
-        pid = record.get("pivot_id")
-        if not isinstance(pid, str):
-            continue
-        match = _PIVOT_ID_PATTERN.match(pid)
-        if match is None:
-            continue
-        seq = int(match.group(1))
-        if seq > highest:
-            highest = seq
-    return highest
-
-
 def record_pivot(
     payload: PivotInput,
     *,
@@ -223,7 +182,10 @@ def record_pivot(
     result: PivotResult | None = None
     try:
         result = _run_pipeline(payload, hypothesis_log, sanitizer_log, pre_audit_id)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, HypothesisStoreError) as exc:
+        # Narrow to the read-path exceptions we explicitly raise so a
+        # ValidationError or unrelated ValueError can't masquerade as a
+        # hypothesis.jsonl corruption.
         result = PivotResult(
             success=False,
             reason=PivotRejectReason.AUDIT_STORE_CORRUPTED,
@@ -297,7 +259,7 @@ def _run_pipeline(
             reason=PivotRejectReason.MISSING_ABANDONING_EVIDENCE,
         )
 
-    existing = _existing_hypothesis_ids(hypothesis_log)
+    existing = existing_hypothesis_ids(hypothesis_log)
     if payload.from_hypothesis_id not in existing:
         return PivotResult(
             success=False,
@@ -305,15 +267,14 @@ def _run_pipeline(
             context={"field": "from_hypothesis_id", "value": payload.from_hypothesis_id},
         )
 
-    pivot_id = f"P-{_max_pivot_seq(hypothesis_log) + 1:03d}"
-    event = _HypothesisEvent(
+    pivot_id = f"P-{max_pivot_seq(hypothesis_log) + 1:03d}"
+    event = _PivotEvent(
         ts=datetime.now(UTC),
-        type="pivot",
         hypothesis_id=payload.from_hypothesis_id,
         pivot_id=pivot_id,
         to_hypothesis_id=payload.to_hypothesis_id,
         reason=s_reason,
-        related_audit_ids=tuple(payload.abandoning_evidence),
+        related_audit_ids=payload.abandoning_evidence,
     )
     hypothesis_log.parent.mkdir(parents=True, exist_ok=True)
     append_jsonl_line(hypothesis_log, event.model_dump_json())

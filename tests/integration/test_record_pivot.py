@@ -83,6 +83,63 @@ def test_record_pivot_happy_path_emits_hypothesis_event(
     assert any(r.get("tool") == "record_pivot" for r in audit_rows)
 
 
+def test_future_to_hypothesis_id_is_accepted(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """Spec contract: ``to_hypothesis_id`` is NOT validated against the
+    log — the agent may record the pivot before forming the child.
+    Pins the positive case so a "validate both" refactor fails here."""
+    case_dir, _, logger = case_env
+    _seed_hypothesis_log(case_dir, ("H-001",))  # only H-001 exists
+    payload = PivotInput(
+        from_hypothesis_id="H-001",
+        to_hypothesis_id="H-999",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is True
+    assert envelope.data.pivot_id == "P-001"
+
+
+def test_from_hypothesis_id_matches_prior_pivot_row(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """`existing_hypothesis_ids` scans every row regardless of event
+    type. Pin this so a defensive refactor that filtered to
+    ``type=='form'`` would break chained pivots and fail this test."""
+    case_dir, _, logger = case_env
+    log = case_dir / "audit" / "hypothesis.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        json.dumps(
+            {
+                "ts": datetime.now(UTC).isoformat(),
+                "type": "pivot",
+                "hypothesis_id": "H-002",
+                "pivot_id": "P-001",
+                "to_hypothesis_id": "H-003",
+                "reason": "prior pivot",
+                "related_audit_ids": [],
+                "tokens_spent": 0,
+                "steps_spent": 0,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    payload = PivotInput(
+        from_hypothesis_id="H-002",
+        to_hypothesis_id="H-004",
+        reason=_VALID_REASON,
+        abandoning_evidence=["sift-aj-20260613-007"],
+    )
+    envelope = record_pivot(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
+    assert envelope.data.success is True
+    # Sequence resumes after the prior P-001
+    assert envelope.data.pivot_id == "P-002"
+
+
 def test_pivot_count_metric_grep_works(case_env: tuple[Path, Path, AuditLogger]) -> None:
     """PRD §4 secondary metric: ``grep -c '"type":"pivot"'
     hypothesis.jsonl`` returns the pivot count. The emitted JSONL must
