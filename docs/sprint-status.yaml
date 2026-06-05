@@ -219,11 +219,11 @@ stories:
 
   - id: story-vol-pstree-psscan
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
-    status: PENDING
+    status: COMPLETE
     depends_on: [vol-pslist]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/24"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/136"
+    merged_at: "2026-06-05T18:20:06Z"
 
   - id: story-vol-malfind
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
