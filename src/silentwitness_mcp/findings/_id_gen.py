@@ -7,9 +7,11 @@ reading the maximum existing ``observation_id`` from
 file (architecture §5.2: findings.json is the single source of truth
 for finding state).
 
-Race-safety: the file read + write happens under an ``fcntl.flock`` on a
-sibling lock file. Parallel ``record_observation`` calls from the
-specialist sub-agents (architecture §5.2) cannot collide on IDs.
+Race-safety: ``fcntl.flock`` defends against multi-process writers (e.g.
+concurrent stdio + Streamable HTTP transport instances both touching the
+same case dir). In-process serialization comes from the synchronous call
+site — Python's GIL + the kernel-level flock cover the cross-process
+case; an async refactor would need to add an ``asyncio.Lock`` here.
 """
 
 from __future__ import annotations

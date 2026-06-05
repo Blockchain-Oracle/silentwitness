@@ -76,15 +76,15 @@ def test_audit_id_not_found_rejection(tmp_path: Path) -> None:
         cited_spans=(bogus,),
         audit_ids=("sift-aj-20260613-998",),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.AUDIT_ID_NOT_FOUND
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.AUDIT_ID_NOT_FOUND
     assert (case_dir / "audit" / "findings.jsonl").exists()
 
 
@@ -105,17 +105,17 @@ def test_output_hash_mismatch_rejection(tmp_path: Path) -> None:
         cited_spans=(bad,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.OUTPUT_HASH_MISMATCH
-    assert "expected_sha256" in result.context
-    assert "actual_sha256" in result.context
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.OUTPUT_HASH_MISMATCH
+    assert "expected_sha256" in envelope.data.context
+    assert "actual_sha256" in envelope.data.context
 
 
 def test_span_not_in_lines_rejection(tmp_path: Path) -> None:
@@ -135,15 +135,15 @@ def test_span_not_in_lines_rejection(tmp_path: Path) -> None:
         cited_spans=(wrong,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.SPAN_NOT_IN_LINES
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.SPAN_NOT_IN_LINES
 
 
 def test_line_range_out_of_bounds_rejection(tmp_path: Path) -> None:
@@ -163,15 +163,15 @@ def test_line_range_out_of_bounds_rejection(tmp_path: Path) -> None:
         cited_spans=(oob,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.LINE_RANGE_OUT_OF_BOUNDS
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.LINE_RANGE_OUT_OF_BOUNDS
 
 
 def test_hallucinated_entities_ethereal_demo(tmp_path: Path) -> None:
@@ -187,17 +187,17 @@ def test_hallucinated_entities_ethereal_demo(tmp_path: Path) -> None:
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.HALLUCINATED_ENTITIES
-    assert result.hallucinated
-    assert result.suggested is not None
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.HALLUCINATED_ENTITIES
+    assert envelope.data.hallucinated
+    assert envelope.data.suggested is not None
 
 
 def test_hallucinated_entities_carries_suggested(tmp_path: Path) -> None:
@@ -215,16 +215,16 @@ def test_hallucinated_entities_carries_suggested(tmp_path: Path) -> None:
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is False
-    assert result.reason == ObservationRejectReason.HALLUCINATED_ENTITIES
-    assert "9f8e7d6c" in (result.suggested or "")
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.HALLUCINATED_ENTITIES
+    assert "9f8e7d6c" in (envelope.data.suggested or "")
 
 
 def test_agent_self_correction_after_hallucination(tmp_path: Path) -> None:
@@ -240,26 +240,114 @@ def test_agent_self_correction_after_hallucination(tmp_path: Path) -> None:
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    first_result = record_observation(
+    first_envelope = record_observation(
         first,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert first_result.success is False
+    assert first_envelope.data.success is False
 
     second = ObservationInput(
         text="Ethereal installed under C:\\Program Files (x86)\\Ethereal",
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    second_result = record_observation(
+    second_envelope = record_observation(
         second,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert second_result.success is True
-    assert second_result.observation_id == "O-001"
+    assert second_envelope.data.success is True
+    assert second_envelope.data.observation_id == "O-001"
+
+
+def test_stdout_path_missing_rejection(tmp_path: Path) -> None:
+    """Code-reviewer I2: STDOUT_PATH_MISSING — audit entry exists but
+    the stored blob has been deleted from disk."""
+    case_dir, blobs_dir, logger = _make_case_env(tmp_path)
+    aid = logger.next_audit_id()
+    content = b"PID 4 System\n"
+    entry = _write_blob_and_entry(blobs_dir, audit_id=aid, content=content)
+    entry.stdout_path.unlink()
+    span = CitedSpan(
+        audit_id=aid,
+        sha256_of_normalized_output=hashlib.sha256(content).hexdigest(),
+        line_start=0,
+        line_end=1,
+        span_text="PID 4 System",
+    )
+    payload = ObservationInput(
+        text="PID 4 System",
+        cited_spans=(span,),
+        audit_ids=(aid,),
+    )
+    envelope = record_observation(
+        payload,
+        case_dir=case_dir,
+        audit_index={aid: entry},
+        audit_logger=logger,
+        model_used=_MODEL,
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.STDOUT_PATH_MISSING
+
+
+def test_tool_not_registered_rejection(tmp_path: Path) -> None:
+    """Code-reviewer I2: TOOL_NOT_REGISTERED — audit entry's tool field
+    isn't in the normalizer registry."""
+    case_dir, blobs_dir, logger = _make_case_env(tmp_path)
+    aid = logger.next_audit_id()
+    content = b"PID 4 System\n"
+    entry = _write_blob_and_entry(blobs_dir, audit_id=aid, content=content, tool="nonexistent_tool")
+    span = CitedSpan(
+        audit_id=aid,
+        sha256_of_normalized_output=hashlib.sha256(content).hexdigest(),
+        line_start=0,
+        line_end=1,
+        span_text="PID 4 System",
+    )
+    payload = ObservationInput(
+        text="PID 4 System",
+        cited_spans=(span,),
+        audit_ids=(aid,),
+    )
+    envelope = record_observation(
+        payload,
+        case_dir=case_dir,
+        audit_index={aid: entry},
+        audit_logger=logger,
+        model_used=_MODEL,
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.TOOL_NOT_REGISTERED
+
+
+def test_corrupted_findings_json_returns_pipeline_internal_error(tmp_path: Path) -> None:
+    """Silent-failure H4: a corrupted findings.json must surface as a
+    structured PIPELINE_INTERNAL_ERROR reject AND emit an audit row —
+    the round-2 try/finally guard's primary justification."""
+    case_dir, blobs_dir, logger = _make_case_env(tmp_path)
+    (case_dir / "findings.json").write_text("not valid json{")
+    aid = logger.next_audit_id()
+    content = b"PID 4 System\n"
+    entry = _write_blob_and_entry(blobs_dir, audit_id=aid, content=content)
+    span = _cited_span_for(content, aid, span_text="PID 4 System")
+    payload = ObservationInput(
+        text="PID 4 System",
+        cited_spans=(span,),
+        audit_ids=(aid,),
+    )
+    envelope = record_observation(
+        payload,
+        case_dir=case_dir,
+        audit_index={aid: entry},
+        audit_logger=logger,
+        model_used=_MODEL,
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == ObservationRejectReason.PIPELINE_INTERNAL_ERROR
+    assert (case_dir / "audit" / "findings.jsonl").exists()

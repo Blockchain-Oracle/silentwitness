@@ -106,15 +106,15 @@ def test_valid_observation_is_accepted_and_persisted(tmp_path: Path) -> None:
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index=audit_index,
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is True
-    assert result.observation_id == "O-001"
+    assert envelope.data.success is True
+    assert envelope.data.observation_id == "O-001"
     assert (case_dir / "findings.json").exists()
     findings = json.loads((case_dir / "findings.json").read_text())
     assert len(findings) == 1
@@ -161,14 +161,14 @@ def test_audit_id_format_in_response(tmp_path: Path) -> None:
         cited_spans=(span,),
         audit_ids=(aid,),
     )
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
         audit_logger=logger,
         model_used=_MODEL,
     )
-    assert result.success is True
+    assert envelope.data.success is True
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +235,9 @@ def test_audit_entry_emitted_on_rejection_too(tmp_path: Path) -> None:
     assert findings_log.exists()
     row = json.loads(findings_log.read_text().strip())
     assert row["tool"] == "record_observation"
-    assert "AUDIT_ID_NOT_FOUND" in row["result_summary_truncated"]
+    # AuditEntry schema (architecture §4.4) carries the full result_summary;
+    # round-2 dropped the forked "result_summary_truncated" key.
+    assert row["result_summary"]["reason"] == "AUDIT_ID_NOT_FOUND"
 
 
 def test_findings_json_only_grows_on_accept(tmp_path: Path) -> None:
@@ -283,15 +285,15 @@ def test_observation_ids_are_monotonic(tmp_path: Path) -> None:
             cited_spans=(span,),
             audit_ids=(aid,),
         )
-        result = record_observation(
+        envelope = record_observation(
             payload,
             case_dir=case_dir,
             audit_index={aid: entry},
             audit_logger=logger,
             model_used=_MODEL,
         )
-        assert result.success is True
-        ids.append(result.observation_id)
+        assert envelope.data.success is True
+        ids.append(envelope.data.observation_id)
     assert ids == ["O-001", "O-002", "O-003"]
 
 
@@ -318,7 +320,7 @@ def test_observation_ids_resume_after_restart(tmp_path: Path) -> None:
     # Simulate restart: new logger picks up findings.json.
     logger.close()
     logger2 = AuditLogger(case_dir, examiner=_EXAMINER)
-    result = record_observation(
+    envelope = record_observation(
         payload,
         case_dir=case_dir,
         audit_index={aid: entry},
@@ -326,7 +328,7 @@ def test_observation_ids_resume_after_restart(tmp_path: Path) -> None:
         model_used=_MODEL,
     )
     logger2.close()
-    assert result.observation_id == "O-002"
+    assert envelope.data.observation_id == "O-002"
 
 
 # ---------------------------------------------------------------------------
