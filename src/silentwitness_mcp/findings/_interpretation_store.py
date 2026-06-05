@@ -24,6 +24,17 @@ _LOCK_FILENAME: Final = ".findings.lock"
 _INTERPRETATION_ID_PATTERN: Final = re.compile(r"^I-(\d+)$")
 
 
+class FindingsStoreError(ValueError):
+    """Raised when findings.json content violates the persistence contract
+    (wrong top-level type, malformed interpretation entries, missing
+    keys that the schema requires). Inherits from ``ValueError`` so an
+    existing call site catching ``ValueError`` still surfaces a store-
+    corruption rejection, but the dedicated subclass lets the caller
+    narrow its except clause without swallowing unrelated
+    ``ValueError``s from Pydantic, ``int()`` parses, or future pipeline
+    additions (silent-failure HIGH from the round-1 reviewer pass)."""
+
+
 @contextmanager
 def _locked(case_dir: Path) -> Iterator[None]:
     """Same lockfile name observation_id allocation uses."""
@@ -49,24 +60,37 @@ def _read_findings(case_dir: Path) -> list[dict[str, Any]]:
         return []
     data = json.loads(raw)
     if not isinstance(data, list):
-        raise ValueError(f"findings.json must be a JSON array; got {type(data).__name__}")
+        raise FindingsStoreError(f"findings.json must be a JSON array; got {type(data).__name__}")
     return data
 
 
 def _max_interpretation_seq(findings: list[dict[str, Any]]) -> int:
     """Global ``I-NNN`` sequence across ALL observations — case-wide
-    unambiguous IDs for critic citations."""
+    unambiguous IDs for critic citations.
+
+    Non-dict entries are tolerated (a hand-edited findings.json or
+    partial-write race might leave one), but any entry that IS a dict
+    must carry a string ``interpretation_id`` matching ``I-NNN``. A
+    missing or malformed key indicates the persistence contract has
+    been violated and the next allocation could collide with an
+    invisible existing ID — fail-closed via :class:`FindingsStoreError`."""
     highest = 0
     for obs in findings:
         for item in obs.get("interpretations", []) or []:
             if not isinstance(item, dict):
                 continue
             iid = item.get("interpretation_id")
+            if iid is None:
+                raise FindingsStoreError(
+                    "interpretation entry missing required 'interpretation_id'"
+                )
             if not isinstance(iid, str):
-                continue
+                raise FindingsStoreError(
+                    f"interpretation_id must be a string; got {type(iid).__name__}"
+                )
             match = _INTERPRETATION_ID_PATTERN.match(iid)
             if match is None:
-                continue
+                raise FindingsStoreError(f"interpretation_id {iid!r} does not match I-NNN format")
             seq = int(match.group(1))
             if seq > highest:
                 highest = seq
@@ -93,7 +117,7 @@ def allocate_interpretation_id(
         target = findings[target_idx]
         existing = target.get("interpretations", [])
         if not isinstance(existing, list):
-            raise ValueError(
+            raise FindingsStoreError(
                 f"findings.json[{target_idx}].interpretations must be a list; "
                 f"got {type(existing).__name__}"
             )
@@ -107,4 +131,4 @@ def allocate_interpretation_id(
         return iid
 
 
-__all__ = ["allocate_interpretation_id"]
+__all__ = ["FindingsStoreError", "allocate_interpretation_id"]

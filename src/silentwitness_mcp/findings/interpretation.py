@@ -7,12 +7,13 @@ MEDIUM ≥ 30) → allocate ``I-NNN`` under the observation in
 findings.json → audit row to ``audit/findings.jsonl`` REGARDLESS of
 accept/reject (rejections are evidence too — architecture §4.4).
 
-The story spec EXTENDS the architecture's minimal
-``(observation_id, text, confidence)`` input with ``justification``
-and ``what_would_change_this_confidence`` — both structurally required
-by the critic pipeline (Epic 10) and the report's confidence-banded
-shape (Epic 11). The conditional length floor is the architectural
-defense against overclaim drift.
+Input EXTENDS the architecture's minimal
+``(observation_id, text, confidence)`` triple with ``justification``
+and ``what_would_change_this_confidence``: the critic pipeline
+(architecture §5.5) and the confidence-banded report renderer
+(architecture §8.1 step 23) both treat these as structurally required.
+The conditional length floor is the architectural defense against
+overclaim drift.
 """
 
 from __future__ import annotations
@@ -31,9 +32,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, Confidence, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
-from silentwitness_mcp.findings._interpretation_store import allocate_interpretation_id
+from silentwitness_mcp.findings._interpretation_store import (
+    FindingsStoreError,
+    allocate_interpretation_id,
+)
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
 from silentwitness_mcp.verification.sanitizer import (
+    _MARKER_BEGIN,
+    _MARKER_END,
     StripEvent,
     StripEventWriter,
     sanitize,
@@ -47,18 +53,24 @@ class InterpretationRejectReason(StrEnum):
     OBSERVATION_NOT_FOUND = "OBSERVATION_NOT_FOUND"
     MISSING_REQUIRED_FIELD = "MISSING_REQUIRED_FIELD"
     JUSTIFICATION_TOO_SHORT_FOR_CONFIDENCE = "JUSTIFICATION_TOO_SHORT_FOR_CONFIDENCE"
-    INVALID_CONFIDENCE = "INVALID_CONFIDENCE"
     FINDINGS_STORE_CORRUPTED = "FINDINGS_STORE_CORRUPTED"
     FINDINGS_STORE_UNWRITABLE = "FINDINGS_STORE_UNWRITABLE"
     PIPELINE_INTERNAL_ERROR = "PIPELINE_INTERNAL_ERROR"
 
 
 _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
-_OBSERVATION_ID_PATTERN: Final = re.compile(r"^O-\d+$")
+# Mirrors the allocator's zero-padded ``O-NNN`` format (auto-widens past
+# 999). Tighter than ``^O-\d+$`` so a hand-edited ``O-1`` surfaces as a
+# constructor-time error, not a misleading OBSERVATION_NOT_FOUND.
+_OBSERVATION_ID_PATTERN: Final = re.compile(r"^O-\d{3,}$")
 _HIGH_MIN_JUSTIFICATION: Final = 50
 _MEDIUM_MIN_JUSTIFICATION: Final = 30
-_WRAP_BEGIN: Final = "[UNTRUSTED EVIDENCE BEGIN]\n"
-_WRAP_END: Final = "\n[UNTRUSTED EVIDENCE END]"
+# Single source of truth: pull the sanitizer's wrap markers directly so
+# the post-sanitize unwrap stays in lockstep with the sanitizer's
+# envelope format (silent-failure HIGH from the retroactive review of
+# the round-1 reviewer pass).
+_WRAP_BEGIN: Final = f"{_MARKER_BEGIN}\n"
+_WRAP_END: Final = f"\n{_MARKER_END}"
 _FALSIFICATION_FIELD: Final = "what_would_change_this_confidence"
 
 
@@ -154,7 +166,10 @@ def record_interpretation(
             sanitizer_log=sanitizer_log,
             pre_audit_id=pre_audit_id,
         )
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, FindingsStoreError) as exc:
+        # Narrow to the read-path exceptions we explicitly raise so an
+        # unrelated ``ValueError`` (Pydantic validation, ``int()`` parse,
+        # etc.) cannot masquerade as a findings.json corruption.
         result = InterpretationResult(
             success=False,
             reason=InterpretationRejectReason.FINDINGS_STORE_CORRUPTED,
@@ -191,14 +206,21 @@ def record_interpretation(
                 model_used=model_used,
             )
         except Exception as audit_exc:
+            # Preserve the original rejection so the agent's self-
+            # correction loop still sees the real verdict (e.g.
+            # JUSTIFICATION_TOO_SHORT) rather than seeing only the
+            # audit-write failure and retrying with the same bad input.
+            preserved = {
+                "stage": "audit_write",
+                "error_type": type(audit_exc).__name__,
+                "audit_write_failed": True,
+                "original_reason": (result.reason.value if result.reason else None),
+                "original_context": dict(result.context),
+            }
             result = InterpretationResult(
                 success=False,
                 reason=InterpretationRejectReason.FINDINGS_STORE_UNWRITABLE,
-                context={
-                    "stage": "audit_write",
-                    "error_type": type(audit_exc).__name__,
-                    "audit_write_failed": True,
-                },
+                context=preserved,
             )
     return _wrap_envelope(result, audit_id=pre_audit_id, examiner=audit_logger.examiner)
 

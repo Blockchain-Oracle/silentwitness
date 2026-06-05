@@ -82,6 +82,28 @@ def test_result_discriminator_rejects_failure_without_reason() -> None:
         InterpretationResult(success=False)
 
 
+def test_result_discriminator_rejects_success_with_reason() -> None:
+    """Cross-contamination direction: success=True must not carry a
+    reason."""
+    with pytest.raises(ValueError, match="success=True must not carry reason"):
+        InterpretationResult(
+            success=True,
+            interpretation_id="I-001",
+            reason=InterpretationRejectReason.PIPELINE_INTERNAL_ERROR,
+        )
+
+
+def test_result_discriminator_rejects_failure_with_interpretation_id() -> None:
+    """Cross-contamination direction: success=False must not carry an
+    interpretation_id."""
+    with pytest.raises(ValueError, match="success=False must not carry interpretation_id"):
+        InterpretationResult(
+            success=False,
+            interpretation_id="I-001",
+            reason=InterpretationRejectReason.PIPELINE_INTERNAL_ERROR,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Corruption-recovery / audit-trail invariants
 # ---------------------------------------------------------------------------
@@ -141,13 +163,11 @@ def test_empty_findings_file_falls_back_to_no_observations(
     assert envelope.data.reason == InterpretationRejectReason.OBSERVATION_NOT_FOUND
 
 
-def test_corrupted_interpretation_entries_in_existing_findings(
+def test_non_dict_interpretation_entries_are_tolerated(
     case_env: tuple[Path, Path, AuditLogger],
 ) -> None:
-    """Garbage interpretation entries (non-dict, non-string ID, non-
-    matching pattern) must be filtered by the seq scanner so allocation
-    still proceeds with the highest VALID seq. Defends against a
-    partial-write race or hand-edited file."""
+    """A non-dict entry (e.g. a stray string from a hand-edit) is
+    tolerated by the seq scanner; valid entries still drive allocation."""
     case_dir, _, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
@@ -156,12 +176,7 @@ def test_corrupted_interpretation_entries_in_existing_findings(
             "text": "seed",
             "cited_spans": [],
             "audit_ids": [],
-            "interpretations": [
-                "not a dict",
-                {"interpretation_id": 42},
-                {"interpretation_id": "garbage-not-I-NNN"},
-                {"interpretation_id": "I-007"},
-            ],
+            "interpretations": ["not a dict", {"interpretation_id": "I-007"}],
         }
     ]
     (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
@@ -177,6 +192,70 @@ def test_corrupted_interpretation_entries_in_existing_findings(
     )
     assert envelope.data.success is True
     assert envelope.data.interpretation_id == "I-008"
+
+
+def test_missing_interpretation_id_raises_store_corrupted(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """An entry missing ``interpretation_id`` violates the persistence
+    contract — next allocation could collide with an invisible existing
+    ID. Surfaces as FINDINGS_STORE_CORRUPTED, not a silent skip."""
+    case_dir, _, logger = case_env
+    case_dir.mkdir(parents=True, exist_ok=True)
+    findings = [
+        {
+            "observation_id": "O-001",
+            "text": "seed",
+            "cited_spans": [],
+            "audit_ids": [],
+            "interpretations": [{"text": "stub", "confidence": "LOW"}],
+        }
+    ]
+    (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="next",
+        confidence=Confidence.LOW,
+        justification="brief",
+        what_would_change_this_confidence="if X",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == InterpretationRejectReason.FINDINGS_STORE_CORRUPTED
+
+
+def test_malformed_interpretation_id_raises_store_corrupted(
+    case_env: tuple[Path, Path, AuditLogger],
+) -> None:
+    """A non-matching ``interpretation_id`` (wrong shape, non-string)
+    also surfaces as FINDINGS_STORE_CORRUPTED — silent skip would risk
+    a collision."""
+    case_dir, _, logger = case_env
+    case_dir.mkdir(parents=True, exist_ok=True)
+    findings = [
+        {
+            "observation_id": "O-001",
+            "text": "seed",
+            "cited_spans": [],
+            "audit_ids": [],
+            "interpretations": [{"interpretation_id": "garbage-not-I-NNN"}],
+        }
+    ]
+    (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="next",
+        confidence=Confidence.LOW,
+        justification="brief",
+        what_would_change_this_confidence="if X",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == InterpretationRejectReason.FINDINGS_STORE_CORRUPTED
 
 
 def test_audit_row_for_every_call_even_when_pipeline_corrupts(
@@ -203,3 +282,107 @@ def test_audit_row_for_every_call_even_when_pipeline_corrupts(
     assert audit_log.exists()
     rows = [json.loads(line) for line in audit_log.read_text(encoding="utf-8").splitlines() if line]
     assert any(row.get("tool") == "record_interpretation" for row in rows)
+
+
+# ---------------------------------------------------------------------------
+# Failure-path coverage — OSError, audit-write fail, generic Exception
+# ---------------------------------------------------------------------------
+
+
+def test_findings_store_unwritable_when_write_raises_oserror(
+    case_env: tuple[Path, Path, AuditLogger],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disk-write failure → FINDINGS_STORE_UNWRITABLE; audit row still
+    gets written via the finally block."""
+    case_dir, _, logger = case_env
+    _seed(case_dir)
+
+    def _raise(*_args: object, **_kwargs: object) -> None:
+        raise OSError("simulated disk full")
+
+    monkeypatch.setattr(
+        "silentwitness_mcp.findings._interpretation_store.write_json_atomic", _raise
+    )
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="x",
+        confidence=Confidence.LOW,
+        justification="brief",
+        what_would_change_this_confidence="if X",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == InterpretationRejectReason.FINDINGS_STORE_UNWRITABLE
+    assert envelope.data.context["stage"] == "findings_write"
+    assert envelope.data.context["error_type"] == "OSError"
+
+
+def test_pipeline_internal_error_on_unexpected_exception(
+    case_env: tuple[Path, Path, AuditLogger],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unexpected exception (e.g. sanitizer regression raising
+    TypeError) → PIPELINE_INTERNAL_ERROR; broad catch prevents leakage."""
+    case_dir, _, logger = case_env
+    case_dir.mkdir(parents=True, exist_ok=True)
+
+    def _boom(*_args: object, **_kwargs: object) -> None:
+        raise TypeError("simulated sanitizer regression")
+
+    monkeypatch.setattr("silentwitness_mcp.findings.interpretation.sanitize", _boom)
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="x",
+        confidence=Confidence.LOW,
+        justification="brief",
+        what_would_change_this_confidence="if X",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == InterpretationRejectReason.PIPELINE_INTERNAL_ERROR
+    assert envelope.data.context["error_type"] == "TypeError"
+
+
+def test_audit_write_failure_preserves_original_rejection(
+    case_env: tuple[Path, Path, AuditLogger],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit-write failure preserves the original rejection under
+    ``context.original_reason`` so the agent's self-correction loop
+    still sees the real verdict."""
+    case_dir, _, logger = case_env
+    _seed(case_dir)
+    monkeypatch.setattr(
+        "silentwitness_mcp.findings.interpretation.append_jsonl_line",
+        lambda *_a, **_kw: (_ for _ in ()).throw(OSError("audit fail")),
+    )
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="x",
+        confidence=Confidence.HIGH,
+        justification="too short",
+        what_would_change_this_confidence="if X",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is False
+    assert envelope.data.reason == InterpretationRejectReason.FINDINGS_STORE_UNWRITABLE
+    assert envelope.data.context["audit_write_failed"] is True
+    assert (
+        envelope.data.context["original_reason"]
+        == InterpretationRejectReason.JUSTIFICATION_TOO_SHORT_FOR_CONFIDENCE.value
+    )
+
+
+def _seed(case_dir: Path) -> None:
+    case_dir.mkdir(parents=True, exist_ok=True)
+    (case_dir / "findings.json").write_text(
+        json.dumps([{"observation_id": "O-001", "text": "seed"}]),
+        encoding="utf-8",
+    )

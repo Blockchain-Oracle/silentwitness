@@ -1,5 +1,5 @@
-"""BDD acceptance scenarios for ``record_interpretation`` (story-record-
-interpretation-tool / architecture §4.2 + §5.5)."""
+"""BDD acceptance scenarios for ``record_interpretation`` (architecture
+§4.2 + §5.5)."""
 
 from __future__ import annotations
 
@@ -277,8 +277,8 @@ def test_second_interpretation_allocates_distinct_id_and_retains_first(
     case_env: tuple[Path, Path, AuditLogger],
 ) -> None:
     """The same observation_id interpreted twice retains both — the
-    report (Epic 11) shows the latest but the audit trail keeps the
-    history."""
+    report renderer shows the latest but the audit trail keeps the
+    history (architecture §8.1 step 23)."""
     case_dir, _, logger = case_env
     _seed_findings(case_dir)
     first = InterpretationInput(
