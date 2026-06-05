@@ -50,6 +50,8 @@ EXPECTED_TOOL_NAMES = frozenset(
         "register_evidence",
         "verify_evidence_hash",
         "vol_pslist",
+        "vol_psscan",
+        "vol_pstree",
     }
 )
 
@@ -293,7 +295,14 @@ def test_evidence_bound_tools_set_matches_architecture_4_11() -> None:
     """Only the tools that actually touch /evidence belong in the
     refuse-on-bad-mount set. Architecture §4.10 + §4.11."""
     assert EVIDENCE_BOUND_TOOLS == frozenset(
-        {"record_observation", "register_evidence", "verify_evidence_hash", "vol_pslist"}
+        {
+            "record_observation",
+            "register_evidence",
+            "verify_evidence_hash",
+            "vol_pslist",
+            "vol_psscan",
+            "vol_pstree",
+        }
     )
 
 
