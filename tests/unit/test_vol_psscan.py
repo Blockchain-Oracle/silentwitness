@@ -199,6 +199,62 @@ def test_psscan_unregistered_evidence_refuses(
     assert envelope.advisories[-1] == VolFailureReason.EVIDENCE_NOT_REGISTERED.value
 
 
+def test_psscan_tool_failed_captures_stderr(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Symmetric to the pslist + pstree TOOL_FAILED test — BDD line 99
+    pins this for psscan too."""
+    _install_mock(
+        monkeypatch, _FakeProc(stdout=b"", stderr=b"vol3 windows.psscan failed", returncode=2)
+    )
+    case_dir, evidence, logger, registry = env
+    envelope = asyncio.run(
+        vol_psscan(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.TOOL_FAILED.value
+    assert "vol3 windows.psscan failed" in envelope.advisories[0]
+
+
+def test_psscan_audit_row_result_sha256_matches_blob_hash(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pins the shared write_audit_row contract through the new
+    tool_name parameter (after the PR #136 extraction): the audit row
+    result_sha256 MUST equal sha256(persisted blob bytes)."""
+    import hashlib
+
+    rows = [_row(4)]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    case_dir, evidence, logger, registry = env
+    envelope = asyncio.run(
+        vol_psscan(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [
+        json.loads(line) for line in audit_log.read_text(encoding="utf-8").splitlines() if line
+    ]
+    row = next(r for r in audit_rows if r["tool"] == "vol_psscan")
+    blob_path = case_dir / "audit" / "blobs" / f"{envelope.audit_id}.txt"
+    assert row["result_sha256"] == hashlib.sha256(blob_path.read_bytes()).hexdigest()
+    assert row["stdout_path"] == str(blob_path)
+
+
 def test_psscan_inherits_pslist_schema_drift_contract(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,

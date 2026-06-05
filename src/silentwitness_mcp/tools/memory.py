@@ -1,16 +1,15 @@
 """Volatility 3 memory-family tool bodies (architecture §4.6, PRD FR #5).
 
 Subprocess + audit + blob + refusal plumbing lives in
-:mod:`_vol_common`; this module holds the per-plugin row-shape models
-and the wrapper bodies. Plugin names use the class-suffixed form
+:mod:`_vol_common`. Plugin names use the class-suffixed form
 (``windows.pslist.PsList``). The ``-r json`` renderer emits a flat
-array for pslist/psscan and an ``__children``-recursive tree for
-pstree (flattened breadth-first into a list)."""
+array for pslist/psscan and an ``__children`` tree for pstree."""
 
 from __future__ import annotations
 
 import json
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
@@ -76,8 +75,8 @@ class PslistOutput(BaseModel):
 
 
 class PstreeEntry(PslistEntry):
-    """Flattened pstree row. ``audit``/``cmd``/``path`` are pstree-
-    only extras; depth is NOT a column per spec line 121."""
+    """Flattened pstree row. audit/cmd/path are pstree-only extras;
+    depth is NOT a column (recomputable downstream from pid pairs)."""
 
     audit: str | None = Field(default=None, alias="Audit")
     cmd: str | None = Field(default=None, alias="Cmd")
@@ -90,8 +89,9 @@ class PstreeOutput(BaseModel):
 
 
 class PsscanEntry(PslistEntry):
-    """psscan returns the same columns as pslist (story spec line 124).
-    Inheriting preserves the schema-drift refusal contract for free."""
+    """psscan returns the same columns as pslist (context/domain/03
+    §7.3). Intentionally empty — preserves the nominal type so a
+    PsscanOutput cannot carry PslistEntry rows. Do NOT collapse."""
 
 
 class PsscanOutput(BaseModel):
@@ -186,7 +186,8 @@ async def vol_pstree(
 def _check_evidence_gates(
     evidence_path: Path, *, evidence_registry: EvidenceRegistry
 ) -> tuple[VolFailureReason, str] | None:
-    """assert_registered + verify_hash, race-safe. None on pass."""
+    """assert_registered + verify_hash. File-vanished race between
+    the two surfaces as EVIDENCE_TAMPERED."""
     try:
         evidence_registry.assert_registered(evidence_path)
     except EvidenceNotRegisteredError:
@@ -217,7 +218,7 @@ async def _run_wrapper[TPayload: BaseModel](
     plugin_name: str,
     caveat_key: str,
     output_cls: type[TPayload],
-    parse_rows: Any,
+    parse_rows: Callable[[bytes], TPayload],
     evidence_path: Path,
     case_dir: Path,
     evidence_registry: EvidenceRegistry,
@@ -227,8 +228,7 @@ async def _run_wrapper[TPayload: BaseModel](
 ) -> ToolResponse[TPayload]:
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
-    # dict[str, Any] silences mypy on the splat — each value is
-    # provably correct at this layer.
+    # dict[str, Any] for the splat; refuse() checks types at the call.
     refuse_kw: dict[str, Any] = {
         "tool_name": tool_name,
         "plugin_name": plugin_name,
@@ -355,7 +355,9 @@ def _parse_flat[TPayload: BaseModel, TEntry: BaseModel](
 
 
 def _flatten_pstree(raw: bytes) -> list[PstreeEntry]:
-    """Breadth-first flatten of Vol3 pstree's ``__children`` recursion."""
+    """BFS flatten of Vol3 pstree's ``__children`` tree. A non-list/
+    non-null ``__children`` raises — silent subtree drop would let
+    schema drift hide a whole branch from the audit trail."""
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"pstree root must be a list, got {type(rows).__name__}")
@@ -365,10 +367,13 @@ def _flatten_pstree(raw: bytes) -> list[PstreeEntry]:
         node = stack.pop(0)
         if not isinstance(node, dict):
             raise ValueError(f"pstree node must be a dict, got {type(node).__name__}")
-        children = node.pop("__children", []) or []
+        children = node.pop("__children", None)
         flat.append(PstreeEntry.model_validate(node))
-        if isinstance(children, list):
-            stack.extend(children)
+        if children is None:
+            continue
+        if not isinstance(children, list):
+            raise ValueError(f"__children must be a list or null, got {type(children).__name__}")
+        stack.extend(children)
     return flat
 
 
