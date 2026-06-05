@@ -55,7 +55,7 @@ from silentwitness_mcp._lifecycle import AppContext, lifespan
 # clients can introspect the surface, but each call returns
 # MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
 EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
-    {"record_observation", "register_evidence", "verify_evidence_hash"}
+    {"record_observation", "register_evidence", "verify_evidence_hash", "vol_pslist"}
 )
 
 
@@ -285,6 +285,15 @@ def _register_finding_tool_stubs(mcp: FastMCP) -> None:
         """Re-hash on case resume to catch bit-rot. Stub."""
         _guard_mount("verify_evidence_hash", ctx)
         raise NotImplementedError("verify_evidence_hash is registered but not yet implemented")
+
+    @mcp.tool()
+    def vol_pslist(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Volatility3 ``windows.pslist`` (architecture §4.6, PRD FR #5).
+        Body in :mod:`silentwitness_mcp.tools.memory`; this stub holds
+        the MCP surface + mount gate until the case-context-binding
+        story wires lifespan state."""
+        _guard_mount("vol_pslist", ctx)
+        raise NotImplementedError("vol_pslist body pending case-context binding")
 
 
 # ---------------------------------------------------------------------------
