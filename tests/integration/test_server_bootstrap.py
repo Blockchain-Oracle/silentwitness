@@ -268,11 +268,19 @@ def test_cli_version_reports_package_version(capsys: pytest.CaptureFixture[str])
     assert __version__ in out
 
 
-def test_cli_main_propagates_configuration_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bad-config invocation surfaces as an exception, not a silent
-    exit-0. Specifically: HTTP without the gateway token."""
-    with pytest.raises(ServerConfigurationError):
-        main(["--transport", "http"])
+def test_cli_main_returns_ex_config_on_configuration_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """HTTP without the gateway token surfaces as exit code 78
+    (EX_CONFIG) with the reason on stderr, not as a propagated
+    exception. Supervisors can branch on the exit code without
+    scraping the traceback (retroactive PR-118 H3 fix)."""
+    monkeypatch.delenv("SILENTWITNESS_GATEWAY_TOKEN", raising=False)
+    rc = main(["--transport", "http"])
+    assert rc == 78
+    err = capsys.readouterr().err
+    assert "configuration error" in err
+    assert "SILENTWITNESS_GATEWAY_TOKEN" in err
 
 
 # ---------------------------------------------------------------------------

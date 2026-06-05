@@ -16,14 +16,21 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import Final
 
 from silentwitness_mcp import __version__
 from silentwitness_mcp.server import (
     DEFAULT_HTTP_HOST,
     DEFAULT_HTTP_PORT,
+    ServerConfigurationError,
     Transport,
     run_server,
 )
+
+# BSD sysexits.h codes — operators and supervisors can branch on these
+# without parsing the stderr message. `man sysexits.h`.
+_EX_IOERR: Final = 74
+_EX_CONFIG: Final = 78
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -68,6 +75,17 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("silentwitness: interrupted", file=sys.stderr)
         return 130
+    except ServerConfigurationError as exc:
+        # Misconfig at startup (missing token, non-loopback host,
+        # out-of-range port). Structured exit lets supervisors branch
+        # without scraping stderr.
+        print(f"silentwitness: configuration error: {exc}", file=sys.stderr)
+        return _EX_CONFIG
+    except OSError as exc:
+        # Port-bind collision, EACCES on bind, etc. Otherwise these would
+        # dump a 30-line Python traceback into the JSON-RPC framing seam.
+        print(f"silentwitness: bind/IO error: {exc}", file=sys.stderr)
+        return _EX_IOERR
     return 0
 
 

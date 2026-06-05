@@ -91,9 +91,17 @@ def check_mount(target: Path = DEFAULT_EVIDENCE_ROOT) -> MountCheckResult:
         )
     findmnt = shutil.which("findmnt")
     if findmnt is None:
+        # Fail-closed: production-shaped path exists but we can't
+        # validate it (stripped util-linux, container init manipulated
+        # PATH, botched ansible run). A SIFT image hardening step that
+        # silently dropped findmnt would otherwise leave the mount
+        # validator a no-op even on a writable, exec-allowed /evidence.
         return MountCheckResult(
-            ok=True,
-            advisories=["findmnt binary not on PATH (non-Linux env); mount check skipped"],
+            ok=False,
+            advisories=[
+                f"findmnt absent on PATH but {target} exists; "
+                f"cannot verify ro,noexec,nosuid — refusing to proceed"
+            ],
         )
     try:
         result = subprocess.run(  # noqa: S603  # validated args, fixed binary
