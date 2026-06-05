@@ -12,9 +12,11 @@ import hashlib
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final, NamedTuple
 
 from hypothesis import strategies as st
 
+from silentwitness_common.ids import assert_audit_id_format
 from silentwitness_common.types import AuditEntry, CitedSpan
 from silentwitness_mcp.verification.normalizer import normalize_output
 
@@ -142,8 +144,13 @@ def audit_entry_strategy(tmpdir: Path) -> st.SearchStrategy[tuple[AuditEntry, by
         payload = b"\xef\xbb\xbf" + body if flavour == "bom" else body
         seq = draw(st.integers(min_value=1, max_value=999))
         audit_id = _AUDIT_ID_RE.format(seq)
+        # exist_ok=False — UUID collisions at 48 bits over 5000 examples
+        # are ~7e-5 (effectively zero); a real collision indicates a
+        # seed-replay or a tmpdir-cleanup race we want to surface. The
+        # same flag also fails loudly on PermissionError / NotADirectory
+        # / ENOSPC rather than silently corrupting the test environment.
         subdir = tmpdir / draw(st.uuids()).hex[:12]
-        subdir.mkdir(parents=True, exist_ok=True)
+        subdir.mkdir(parents=True, exist_ok=False)
         blob_path = subdir / f"{audit_id}.txt"
         blob_path.write_bytes(payload)
         entry = AuditEntry(
@@ -244,10 +251,28 @@ def injection_payload_strategy() -> st.SearchStrategy[str]:
     )
 
 
-FORGED_MALLORY_PREFIX = "sift-mallory-99999999-"
+FORGED_MALLORY_PREFIX: Final[str] = "sift-mallory-20991231-"
+# Module-load-time check: surface a regression in the canonical audit_id
+# format (silentwitness_common.ids.assert_audit_id_format) at import,
+# not after 5000 slow-profile examples. The forged id must REMAIN
+# canonically valid so the forgery-defense properties exercise a
+# realistic attacker-planted marker — a structurally distinguishable
+# id would weaken the test to a regex-rejection check, not a
+# forgery-mint check.
+assert_audit_id_format(FORGED_MALLORY_PREFIX + "001")
 
 
-def forged_marker_strategy() -> st.SearchStrategy[tuple[str, str]]:
+class ForgedMarkerPayload(NamedTuple):
+    """Pair returned by :func:`forged_marker_strategy` — the forged
+    ``[stripped:…]`` substring on its own plus the full sandwiched
+    payload that the sanitizer will see. Named over positional so a
+    refactor that swaps the two strings is a type error."""
+
+    forged_marker: str
+    full_payload: str
+
+
+def forged_marker_strategy() -> st.SearchStrategy[ForgedMarkerPayload]:
     """Payloads sandwiching an attacker-planted ``[stripped:…]`` literal
     against a real injection token, plus the forged-marker substring on
     its own.
@@ -263,11 +288,13 @@ def forged_marker_strategy() -> st.SearchStrategy[tuple[str, str]]:
     empty and the per-event forgery-defense assertion can't be
     exercised at all.
     """
-    other_audit_id = st.text(
-        alphabet=st.characters(min_codepoint=0x61, max_codepoint=0x7A),
-        min_size=8,
-        max_size=24,
-    ).map(lambda s: FORGED_MALLORY_PREFIX + s)
+    # Generate digit-only suffixes so the forged id is structurally
+    # indistinguishable from a real ``sift-<slug>-<YYYYMMDD>-<NNN+>``
+    # — the audit-id closure check is the only thing that should reveal
+    # mallory's id is not in the trusted index, not its character class.
+    other_audit_id = st.integers(min_value=1, max_value=10**9).map(
+        lambda n: FORGED_MALLORY_PREFIX + str(n)
+    )
     pattern_id = st.sampled_from(
         [
             "xml-role-tag",
@@ -299,7 +326,7 @@ def forged_marker_strategy() -> st.SearchStrategy[tuple[str, str]]:
         max_size=20,
     )
     return st.builds(
-        lambda f, t, b: (f, f + " " + t + " " + b),
+        lambda f, t, b: ForgedMarkerPayload(forged_marker=f, full_payload=f + " " + t + " " + b),
         forged,
         st.sampled_from(_INJECTION_TOKENS),
         benign,

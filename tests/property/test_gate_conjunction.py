@@ -1,4 +1,4 @@
-"""End-to-end conjunction property for the verification wedge.
+"""End-to-end conjunction property for the verification gates.
 
 Individually-passing gates (citation, entity) are necessary but not
 sufficient for ``record_observation`` — the architecture §4.5 / §4.7
@@ -6,11 +6,6 @@ contract is that BOTH gates accept the same observation in
 conjunction. This module pins exactly that invariant under random
 input. If Hypothesis finds an input where one gate accepts and the
 other does not, a gate has drifted from the contract.
-
-Lives in its own file (separate from ``test_gates.py``) because the
-file-size guard treats this as a load-bearing property worth its own
-module boundary, and so that the conjunction property's failure
-output isn't buried among the per-gate test verdicts.
 """
 
 from __future__ import annotations
@@ -19,6 +14,7 @@ from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from hypothesis.strategies import DataObject
 from pytest import TempPathFactory
 
+from silentwitness_common.types import CitedSpan
 from silentwitness_mcp.verification.citation_gate import verify_citation
 from silentwitness_mcp.verification.entity_gate import verify_entities
 from tests.property.strategies import (
@@ -36,20 +32,14 @@ from tests.property.strategies import (
 def test_both_gates_accept_valid_observation(
     tmp_path_factory: TempPathFactory, data: DataObject, entity: str
 ) -> None:
-    """The wedge's load-bearing property: for a randomly constructed
-    observation whose cited span contains a DFIR entity, BOTH the
-    citation gate AND the entity gate accept."""
-    from silentwitness_common.types import CitedSpan
-
+    """Load-bearing conjunction property (architecture §4.5 + §4.7):
+    for a randomly constructed observation whose cited span contains
+    a DFIR entity, BOTH the citation gate AND the entity gate accept."""
     tmpdir = tmp_path_factory.mktemp("conjunction", numbered=True)
     entry, payload = data.draw(audit_entry_strategy(tmpdir))
     span = data.draw(cited_span_strategy(entry, payload))
     assume(span is not None)
     assert span is not None
-    # Plant the entity into observation_text AND into a cited span
-    # whose audit_id is in the index. Citation gate accepts the
-    # byte-level span; entity gate accepts because the entity is
-    # present in both the observation and a cited span.
     entity_cited = CitedSpan(
         audit_id=entry.audit_id,
         sha256_of_normalized_output=span.sha256_of_normalized_output,

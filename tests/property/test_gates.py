@@ -25,6 +25,7 @@ from silentwitness_mcp.verification.normalizer import normalize_output
 from silentwitness_mcp.verification.sanitizer import StripEvent, sanitize
 from tests.property.strategies import (
     FORGED_MALLORY_PREFIX,
+    ForgedMarkerPayload,
     audit_entry_strategy,
     cited_span_strategy,
     dfir_entity_strategy,
@@ -120,7 +121,7 @@ def test_sanitize_emitted_markers_carry_audit_id(payload: str) -> None:
 
 
 @given(forged_pair=forged_marker_strategy())
-def test_sanitize_passes_through_forged_markers(forged_pair: tuple[str, str]) -> None:
+def test_sanitize_passes_through_forged_markers(forged_pair: ForgedMarkerPayload) -> None:
     """Pre-existing ``[stripped:...]`` literals in input survive verbatim
     into the wrap — they're untrusted evidence, not sanitizer output, so
     the audit_id-nonce check downstream catches them as
@@ -128,26 +129,29 @@ def test_sanitize_passes_through_forged_markers(forged_pair: tuple[str, str]) ->
     a canonical marker that bears the forged audit_id, and any
     canonical marker it emits (on the real injection token co-located
     in the payload) must carry THIS audit_id, not the forged one."""
-    forged_marker, payload = forged_pair
     writer = _CollectingWriter()
-    result = sanitize(payload, _AUDIT_ID, audit_writer=writer)
+    result = sanitize(forged_pair.full_payload, _AUDIT_ID, audit_writer=writer)
     # The forged marker substring survives verbatim into wrapped_text —
     # the sanitizer does not consume or rewrite it.
-    assert forged_marker in result.wrapped_text, (
-        f"forged marker stripped: {forged_marker!r} absent from output"
+    assert forged_pair.forged_marker in result.wrapped_text, (
+        f"forged marker stripped: {forged_pair.forged_marker!r} absent from output"
     )
     # Tight invariant: the sanitizer can never mint a NEW marker
-    # carrying the forged audit_id prefix. Count occurrences in input
-    # vs output — if output > input, the sanitizer added one. (The
-    # f-string-interpolation trap that swallowed the previous version
-    # of this assertion is avoided by counting directly on the strings
-    # rather than building a haystack that already contains the needle
-    # by construction.)
-    input_forged = payload.count(FORGED_MALLORY_PREFIX)
+    # carrying the forged audit_id prefix. Counting on raw strings
+    # avoids constructing a haystack that contains the needle by
+    # f-string interpolation.
+    input_forged = forged_pair.full_payload.count(FORGED_MALLORY_PREFIX)
     output_forged = result.wrapped_text.count(FORGED_MALLORY_PREFIX)
     assert output_forged <= input_forged, (
         f"sanitizer minted a marker carrying the forged audit_id: "
         f"input had {input_forged} occurrences, output has {output_forged}"
+    )
+    # Strategy precondition: events must fire — if the strategy regresses
+    # to producing payloads that don't trip the catalog, the per-event
+    # smuggling check below is dead code and the property goes vacuous.
+    assert writer.events, (
+        "strategy produced a payload that emitted no sanitizer events; "
+        "the forgery-defense per-event assertion is now dead code"
     )
     # Every emitted event's canonical-marker rendering must be keyed on
     # THIS audit_id; the pattern_id itself must not embed the forged
