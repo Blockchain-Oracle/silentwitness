@@ -122,19 +122,29 @@ def audit_entry_strategy(tmpdir: Path) -> st.SearchStrategy[tuple[AuditEntry, by
     * pure ASCII (Vol3-shape baseline)
     * valid multi-byte UTF-8 (real-world IR output with accents)
     * BOM-prefixed UTF-8 (EvtxECmd ships these)
+
+    Each example lands in its own ``{tmpdir}/{uuid}`` subdirectory — the
+    audit_id sequence space is 999 wide, so at the slow profile's 5000
+    examples the birthday-paradox collision probability on a shared
+    directory is effectively 1.0. Per-example isolation eliminates the
+    "shrunk example replays into a sibling's overwritten blob" failure
+    mode.
     """
 
     @st.composite
     def _build(draw: st.DrawFn) -> tuple[AuditEntry, bytes]:
         flavour = draw(st.sampled_from(("ascii", "utf8", "bom")))
         line_strat = _ASCII_LINE if flavour == "ascii" else _UTF8_LINE
-        line = draw(line_strat)
-        n_lines = draw(st.integers(min_value=1, max_value=6))
-        body = "\n".join(line for _ in range(n_lines)).encode("utf-8")
+        # N distinct lines — repeating a single line N times makes the
+        # multi-line span-slice paths untested in the citation gate.
+        lines = draw(st.lists(line_strat, min_size=1, max_size=6))
+        body = "\n".join(lines).encode("utf-8")
         payload = b"\xef\xbb\xbf" + body if flavour == "bom" else body
         seq = draw(st.integers(min_value=1, max_value=999))
         audit_id = _AUDIT_ID_RE.format(seq)
-        blob_path = tmpdir / f"{audit_id}.txt"
+        subdir = tmpdir / draw(st.uuids()).hex[:12]
+        subdir.mkdir(parents=True, exist_ok=True)
+        blob_path = subdir / f"{audit_id}.txt"
         blob_path.write_bytes(payload)
         entry = AuditEntry(
             ts=datetime(2026, 6, 13, 14, 27, tzinfo=UTC),
@@ -167,9 +177,9 @@ def cited_span_strategy(draw: st.DrawFn, entry: AuditEntry, payload: bytes) -> C
     if not non_empty_lines:
         return None
     line_idx, line_content = draw(st.sampled_from(non_empty_lines))
-    # span_text contains lone surrogates if payload had invalid UTF-8 — the
-    # Pydantic field rejects those, so re-encode-decode-then-roundtrip drops
-    # them defensively.
+    # Lone surrogates (U+DC80..U+DCFF) are invalid input for the Pydantic
+    # CitedSpan.span_text field — filter them so the strategy only
+    # produces constructable spans.
     if any(0xDC80 <= ord(c) <= 0xDCFF for c in line_content):
         return None
     return CitedSpan(
@@ -184,6 +194,11 @@ def cited_span_strategy(draw: st.DrawFn, entry: AuditEntry, payload: bytes) -> C
 # ---------------------------------------------------------------------------
 # Injection-payload strategies — fed to sanitize() to exercise the strip
 # pipeline. The catalog of phrases mirrors the architecture §4.8 token set.
+#
+# NOTE: hand-maintained mirror of ``_injection_patterns.yaml``. The list
+# below is a BIASED GENERATOR for the property tests, not the source of
+# truth — drift is acceptable. If a new pattern lands in the YAML
+# catalog, this strategy will simply under-sample it until updated.
 # ---------------------------------------------------------------------------
 
 
@@ -229,16 +244,30 @@ def injection_payload_strategy() -> st.SearchStrategy[str]:
     )
 
 
-def forged_marker_strategy() -> st.SearchStrategy[str]:
-    """Payloads carrying attacker-planted ``[stripped:<other-id>:<pid>]``
-    or bare ``[stripped: ...]`` literals. The sanitizer must NOT honour
-    them — they must survive into wrapped_text without the canonical
-    audit_id nonce, and the per-marker assertion must catch every one."""
+FORGED_MALLORY_PREFIX = "sift-mallory-99999999-"
+
+
+def forged_marker_strategy() -> st.SearchStrategy[tuple[str, str]]:
+    """Payloads sandwiching an attacker-planted ``[stripped:…]`` literal
+    against a real injection token, plus the forged-marker substring on
+    its own.
+
+    Returns ``(forged_marker, full_payload)`` so the test can
+    independently assert the forged marker survives verbatim into the
+    wrap AND that the sanitizer's strip events (fired on the real
+    injection token) never emit a canonical marker bearing the forged
+    audit_id.
+
+    The bare ``[stripped:…]`` shapes alone don't trip any catalog rule,
+    so without the injection token the sanitizer's events list stays
+    empty and the per-event forgery-defense assertion can't be
+    exercised at all.
+    """
     other_audit_id = st.text(
         alphabet=st.characters(min_codepoint=0x61, max_codepoint=0x7A),
         min_size=8,
         max_size=24,
-    ).map(lambda s: f"sift-mallory-99999999-{s}")
+    ).map(lambda s: FORGED_MALLORY_PREFIX + s)
     pattern_id = st.sampled_from(
         [
             "xml-role-tag",
@@ -259,7 +288,22 @@ def forged_marker_strategy() -> st.SearchStrategy[str]:
             "[stripped:]",
         ]
     )
-    return st.one_of(canonical_other, bare)
+    forged = st.one_of(canonical_other, bare)
+    benign = st.text(
+        alphabet=st.characters(
+            min_codepoint=0x20,
+            max_codepoint=0x7E,
+            blacklist_characters="<>|[]",
+        ),
+        min_size=0,
+        max_size=20,
+    )
+    return st.builds(
+        lambda f, t, b: (f, f + " " + t + " " + b),
+        forged,
+        st.sampled_from(_INJECTION_TOKENS),
+        benign,
+    )
 
 
 # ---------------------------------------------------------------------------
