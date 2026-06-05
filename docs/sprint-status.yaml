@@ -160,11 +160,11 @@ stories:
 
   - id: story-response-envelope
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/17"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/120"
+    merged_at: "2026-06-05T05:00:00Z"
 
   - id: story-record-observation-tool
     epic: "Epic 4 — MCP server skeleton + finding-state tools"
