@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Annotated, Generic, TypeVar
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -26,6 +27,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from silentwitness_common.ids import assert_audit_id_format, require_audit_id_str
 
 
 def _normalise_hex(value: object) -> str:
@@ -44,6 +47,19 @@ type Sha256Hex = Annotated[
     BeforeValidator(_normalise_hex),
     StringConstraints(pattern=r"^[a-f0-9]{64}$"),
 ]
+
+# AuditId (architecture §4.4). Order matters: BeforeValidator rejects
+# non-str (PR-92 bytes-coercion) → core validation does
+# str_strip_whitespace + min_length → AfterValidator enforces the
+# sift-<slug>-<YYYYMMDD>-<NNN> shape. Do NOT swap the format check to
+# BeforeValidator (would skip the whitespace strip).
+type AuditId = Annotated[
+    str,
+    BeforeValidator(require_audit_id_str),
+    StringConstraints(min_length=1),
+    AfterValidator(assert_audit_id_format),
+]
+
 
 # ---------------------------------------------------------------------------
 # Enums — string-valued so JSON round-trips preserve them as readable strings
@@ -160,7 +176,7 @@ class CitedSpan(BaseModel):
 
     model_config = _BASE_CONFIG
 
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     sha256_of_normalized_output: Sha256Hex
     line_start: int = Field(ge=0)
     line_end: int = Field(ge=0)
@@ -208,8 +224,9 @@ class Observation(BaseModel):
         description="Non-empty list of cited spans. The citation gate "
         "re-verifies each at evaluation time."
     )
-    audit_ids: tuple[str, ...] = Field(
-        description="audit_ids of every MCP tool call this observation derives from."
+    audit_ids: tuple[AuditId, ...] = Field(
+        min_length=1,
+        description="audit_ids of every MCP tool call this observation derives from.",
     )
 
     @field_validator("cited_spans")
@@ -217,15 +234,6 @@ class Observation(BaseModel):
     def _non_empty_spans(cls, value: tuple[CitedSpan, ...]) -> tuple[CitedSpan, ...]:
         if not value:
             raise ValueError("Observation.cited_spans must contain at least one span")
-        return value
-
-    @field_validator("audit_ids")
-    @classmethod
-    def _non_empty_audit_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            raise ValueError("Observation.audit_ids must contain at least one audit_id")
-        if any(not a.strip() for a in value):
-            raise ValueError("Observation.audit_ids cannot contain empty/whitespace entries")
         return value
 
 
@@ -303,7 +311,7 @@ class EvidenceRecord(BaseModel):
     sha256: Sha256Hex
     size_bytes: int = Field(ge=0)
     registered_at: datetime
-    registered_audit_id: str = Field(min_length=1)
+    registered_audit_id: AuditId
 
 
 class VerifyResult(BaseModel):
@@ -344,7 +352,7 @@ class AuditEntry(BaseModel):
     model_config = _BASE_CONFIG
 
     ts: datetime
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     tool: str = Field(min_length=1)
     params: dict[str, object]
     result_summary: dict[str, object]
@@ -370,7 +378,7 @@ class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
 
     success: bool
     data: TPayload | None = None
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     examiner: str = Field(min_length=1)
     caveats: tuple[str, ...] = Field(default_factory=tuple)
     advisories: tuple[str, ...] = Field(default_factory=tuple)
