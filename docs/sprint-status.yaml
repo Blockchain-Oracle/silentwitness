@@ -141,11 +141,11 @@ stories:
 
   - id: story-gates-property-tests
     epic: "Epic 3 — Verification gates"
-    status: PENDING
+    status: COMPLETE
     depends_on: [citation-gate, entity-gate, sanitizer]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/15"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/116"
+    merged_at: "2026-06-05T00:14:00Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 4 — MCP server skeleton + finding-state tools
