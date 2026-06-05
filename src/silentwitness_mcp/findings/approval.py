@@ -144,6 +144,7 @@ def approve_finding(
                 case_dir=case_dir,
                 ledger_dir=ledger_dir,
                 case_id=case_id,
+                examiner=audit_logger.examiner,
             )
     except LedgerSecurityError:
         result = ApproveResult(
@@ -234,6 +235,7 @@ def _run_pipeline(
     case_dir: Path,
     ledger_dir: Path,
     case_id: str,
+    examiner: str,
 ) -> ApproveResult:
     findings = read_findings(case_dir)
     located = locate_finding(findings, payload.finding_id)
@@ -281,7 +283,6 @@ def _run_pipeline(
             context={"case_dir": str(case_dir)},
         )
 
-    # LedgerSecurityError on weak dir mode → LEDGER_DIR_PERMISSIONS_WEAK.
     ledger = HMACLedger(ledger_dir=ledger_dir, case_id=case_id)
     obs_parts = ObservationParts(
         text=obs_record.get("text", ""),
@@ -303,14 +304,13 @@ def _run_pipeline(
             payload.finding_id,
             LedgerItemType.FINDING,
             content_bytes,
-            examiner=case_id,
+            examiner=examiner,
         )
     finally:
         if derived_key is not None:
             HMACLedger.zero_key(derived_key)
 
-    # Partial-commit fence: if findings.json write fails after ledger
-    # seal, surface content_hash for manual reconciliation.
+    # Partial-commit fence: surface content_hash on write fail.
     findings[finding_idx] = {**finding, "status": _STATUS_APPROVED}
     try:
         write_json_atomic(case_dir / _FINDINGS_FILENAME, findings)
