@@ -1,17 +1,14 @@
 """``record_narrative`` tool body (architecture §4.2 + §5.3 + §5.4).
 
-Refines the architecture's minimal ``(section, text)`` input with
-four structurally required fields:
+Refines the architecture's ``(section, text)`` input with four
+structurally required fields: ``initial_hypothesis`` (the WHY),
+``attack_chain`` (dispatched observations), ``pivots`` (P-NNN refs),
+and ``gaps`` (epistemic-honesty floor when the chain is deep).
 
-* ``initial_hypothesis`` — the WHY the agent started this thread
-* ``attack_chain`` — dispatched observations / interpretations
-* ``pivots`` — pivot_ids taken during exploration
-* ``gaps`` — epistemic-honesty floor when the chain is deep
-
-The conditional gaps rule (>3 attack-chain steps → ≥1 gap required)
-is the architectural defense against fluent-but-unanchored prose.
-Section gating: RECOMMENDATIONS and APPENDIX_AUDIT reject as
-SECTION_NOT_AGENT_WRITABLE — reserved for the examiner / renderer.
+The conditional gaps rule (>3 chain steps → ≥1 non-empty gap) defends
+against fluent-but-unanchored prose. Section gating: RECOMMENDATIONS
+and APPENDIX_AUDIT reject as SECTION_NOT_AGENT_WRITABLE — reserved
+for the examiner / renderer.
 """
 
 from __future__ import annotations
@@ -90,10 +87,8 @@ class AttackChainStep(BaseModel):
 
 
 class NarrativeInput(BaseModel):
-    """Agent-emitted narrative draft. The constructor enforces
-    ``initial_hypothesis`` min-length, attack_chain non-emptiness, and
-    pivot_id shape. The conditional gaps rule (>3 chain steps → ≥1
-    gap) runs post-sanitize because sanitization may shrink strings."""
+    """Agent-emitted narrative draft. Constructor enforces shape;
+    conditional gaps rule runs post-sanitize."""
 
     model_config = _RESULT_CONFIG
 
@@ -149,10 +144,15 @@ class _JsonlStripWriter(StripEventWriter):
 
 
 def _content_after_wrap(sanitized: str) -> str:
-    """Strip the sanitizer envelope so emptiness checks see content."""
+    """Strip the sanitizer envelope so emptiness checks see content.
+    Raises :class:`NarrativeStoreError` if the envelope is missing —
+    a sanitizer regression would otherwise let the emptiness check
+    silently pass on non-wrapped raw input."""
     if sanitized.startswith(_WRAP_BEGIN) and sanitized.endswith(_WRAP_END):
         return sanitized[len(_WRAP_BEGIN) : -len(_WRAP_END)]
-    return sanitized
+    raise NarrativeStoreError(
+        "sanitizer envelope contract broken: wrap markers missing from output"
+    )
 
 
 def record_narrative(
@@ -162,11 +162,9 @@ def record_narrative(
     audit_logger: AuditLogger,
     model_used: str,
 ) -> ToolResponse[NarrativeResult]:
-    """Pipeline: validate section is agent-writable → sanitize text +
-    initial_hypothesis + gaps + chain notes → post-sanitize emptiness
-    check on initial_hypothesis → conditional gaps requirement →
-    observation_id existence → pivot_id existence → allocate
-    ``N-NNN`` → append to findings.json → audit row in finally{}."""
+    """Pipeline: section gating → sanitize fields → post-sanitize
+    emptiness + gaps floor → observation + pivot existence → allocate
+    N-NNN → append findings.json → audit row in finally{}."""
     sanitizer_log = case_dir / "audit" / "sanitizer.jsonl"
     findings_log = case_dir / "audit" / "findings.jsonl"
     hypothesis_log = case_dir / "audit" / "hypothesis.jsonl"
@@ -218,12 +216,17 @@ def record_narrative(
                 model_used=model_used,
             )
         except Exception as audit_exc:
+            # Preserve narrative_id on success path: findings.json was
+            # written, so silently losing N-NNN would let the agent
+            # retry and duplicate-allocate.
             preserved = {
                 "stage": "audit_write",
                 "error_type": type(audit_exc).__name__,
                 "audit_write_failed": True,
                 "original_reason": (result.reason.value if result.reason else None),
                 "original_context": dict(result.context),
+                "original_narrative_id": result.narrative_id,
+                "original_success": result.success,
             }
             result = NarrativeResult(
                 success=False,
@@ -276,8 +279,11 @@ def _run_pipeline(
             context={"field": "initial_hypothesis"},
         )
 
-    # Conditional gaps floor — epistemic honesty for chained findings.
-    if len(s_chain) > _ATTACK_CHAIN_GAPS_THRESHOLD and not s_gaps:
+    # Conditional gaps floor — count gaps with non-empty post-sanitize
+    # content; an entry that sanitizes to wrap-markers-only would
+    # otherwise degrade the floor to a tuple-length check.
+    non_empty_gaps = [g for g in s_gaps if _content_after_wrap(g).strip()]
+    if len(s_chain) > _ATTACK_CHAIN_GAPS_THRESHOLD and not non_empty_gaps:
         return NarrativeResult(
             success=False,
             reason=NarrativeRejectReason.MISSING_GAPS,
@@ -341,12 +347,14 @@ def _write_audit_row(
     artefact_path = (
         case_dir / "findings.json" if result.success else case_dir / "audit" / "findings.jsonl"
     )
+    # Pivots are regex-pinned but scrub keeps the row format symmetric
+    # with the other agent-controlled string fields.
     scrubbed_params: dict[str, object] = {
         "section": payload.section.value,
         "text": scrub_line_terminators(payload.text),
         "initial_hypothesis": scrub_line_terminators(payload.initial_hypothesis),
         "attack_chain": [step.model_dump(mode="json") for step in payload.attack_chain],
-        "pivots": list(payload.pivots),
+        "pivots": [scrub_line_terminators(p) for p in payload.pivots],
         "gaps": [scrub_line_terminators(g) for g in payload.gaps],
     }
     entry = AuditEntry(

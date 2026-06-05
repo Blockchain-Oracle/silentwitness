@@ -1,16 +1,13 @@
-"""Persistence helpers for ``record_narrative``. Mirrors the split that
-``observation.py``/``_id_gen.py``, ``interpretation.py``/
-``_interpretation_store.py``, and ``pivot.py``/``_pivot_store.py``
-use — keeps the tool body under the 400-LOC CI cap.
+"""Persistence helpers for ``record_narrative``. Mirrors the
+persistence / tool-body split used by sibling findings tools — keeps
+the tool body under the 400-LOC CI cap.
 
 Schema: narratives are appended to ``findings.json`` at top level as
-records with ``narrative_id`` (``N-NNN``). The case-wide
-``N-NNN`` sequence makes critic citations unambiguous.
+records with ``narrative_id`` (``N-NNN``). The case-wide N-NNN
+sequence makes critic citations unambiguous.
 
-Pivot existence is read from ``audit/hypothesis.jsonl`` (the same log
-``record_pivot`` writes to). Observation existence is read from
-``findings.json`` (the same store ``record_observation`` writes to).
-"""
+Pivot existence reads ``audit/hypothesis.jsonl``; observation
+existence reads ``findings.json``."""
 
 from __future__ import annotations
 
