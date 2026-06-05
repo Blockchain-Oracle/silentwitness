@@ -158,8 +158,17 @@ def test_vol_pslist_parses_valid_json_into_typed_output(
     assert audit_rows[0]["tool"] == "vol_pslist"
     blob_path = case_dir / "audit" / "blobs" / f"{envelope.audit_id}.txt"
     assert blob_path.exists()
-    # Caveats locked verbatim from _VOL_CAVEATS["pslist"].
-    assert any("PsActiveProcessHead" in c for c in envelope.caveats)
+    # Audit-trail contract (BDD line 45): result_sha256 in the audit row
+    # matches SHA256 of the persisted blob bytes.
+    import hashlib
+
+    assert audit_rows[0]["result_sha256"] == hashlib.sha256(blob_path.read_bytes()).hexdigest()
+    assert audit_rows[0]["stdout_path"] == str(blob_path)
+    # All three caveats from _VOL_CAVEATS["pslist"] verbatim (BDD lines 49-51).
+    caveats_blob = " | ".join(envelope.caveats)
+    assert "PsActiveProcessHead" in caveats_blob
+    assert "truncated to 15 chars" in caveats_blob
+    assert "ExitTime may be set" in caveats_blob
 
 
 def test_vol_pslist_empty_table_returns_empty_entries(
@@ -256,6 +265,9 @@ def test_tool_timeout_escalates_to_kill(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Shrink grace to keep the test under one second. The constant lives
+    # in _vol_common; monkeypatching it preserves the production default.
+    monkeypatch.setattr("silentwitness_mcp.tools._vol_common._TERMINATE_GRACE_S", 0.05)
     case_dir, evidence, logger, registry = env
     hanging = _FakeProc(hang=True)
     _install_subprocess_mock(monkeypatch, hanging)
@@ -271,7 +283,11 @@ def test_tool_timeout_escalates_to_kill(
     )
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.TOOL_TIMEOUT.value
+    # SIGTERM → grace timeout → SIGKILL escalation must run end-to-end;
+    # asserting only `terminated` would let a regression that breaks the
+    # grace-timeout fallthrough pass silently.
     assert hanging.terminated is True
+    assert hanging.killed is True
 
 
 def test_malformed_json_returns_parse_failed_with_preview(
@@ -293,6 +309,40 @@ def test_malformed_json_returns_parse_failed_with_preview(
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
     assert "{not valid json" in envelope.advisories[0]
+
+
+def test_unknown_column_triggers_output_parse_failed(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Future Vol3 release adds a column the model doesn't know about
+    → forbid catches it → OUTPUT_PARSE_FAILED. Forensic audit must not
+    silently drop schema drift."""
+    drifted_row = [
+        {
+            "PID": 4,
+            "PPID": 0,
+            "ImageFileName": "System",
+            "Offset(V)": 0x1000,
+            "Threads": 1,
+            "Wow64": False,
+            "Protected": "PsProtectedSignerWindows-Light",  # NEW column in hypothetical Vol3 2.29
+        }
+    ]
+    case_dir, evidence, logger, registry = env
+    _install_subprocess_mock(monkeypatch, _FakeProc(stdout=json.dumps(drifted_row).encode("utf-8")))
+    envelope = asyncio.run(
+        vol_pslist(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
+    assert "ValidationError" in envelope.advisories[0]
 
 
 def test_cmd_argv_is_pinned_to_vol3_venv_with_plugin_class_name(

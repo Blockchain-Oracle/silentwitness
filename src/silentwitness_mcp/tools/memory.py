@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from silentwitness_common.atomic_io import append_jsonl_line, write_bytes_atomic
 from silentwitness_common.types import (
@@ -36,8 +36,10 @@ from silentwitness_common.types import (
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.envelope import make_empty_provenance
 from silentwitness_mcp.evidence.registry import (
+    EvidenceMissingOnDiskError,
     EvidenceNotRegisteredError,
     EvidenceRegistry,
+    EvidenceRegistryError,
 )
 from silentwitness_mcp.tools._vol_common import (
     DEFAULT_TIMEOUT_S,
@@ -57,9 +59,15 @@ _PARSE_PREVIEW_BYTES: Final = 200
 class PslistEntry(BaseModel):
     """One row from Vol3 ``windows.pslist`` JSON renderer. Field
     aliases map Vol3's CamelCase keys (architecture-source-of-truth in
-    ``context/domain/03`` §7.2) to snake_case Python."""
+    ``context/domain/03`` §7.2) to snake_case Python.
 
-    model_config = ConfigDict(frozen=True, extra="ignore", populate_by_name=True)
+    ``extra="forbid"``: a future Vol3 release that adds a column
+    (e.g. a ``Protected`` flag) MUST surface as
+    :attr:`VolFailureReason.OUTPUT_PARSE_FAILED` rather than silently
+    dropping the field — a forensic audit trail can't quietly elide
+    schema drift."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 
     pid: int = Field(alias="PID")
     ppid: int = Field(alias="PPID")
@@ -71,6 +79,10 @@ class PslistEntry(BaseModel):
     wow64: bool = Field(alias="Wow64")
     create_time: datetime | None = Field(default=None, alias="CreateTime")
     exit_time: datetime | None = Field(default=None, alias="ExitTime")
+    # `File output` is emitted by Vol3 even when --dump is not requested
+    # (renderer-side metadata column). Defaulted so synthetic test rows
+    # don't have to include it.
+    file_output: str | None = Field(default=None, alias="File output")
 
 
 class PslistOutput(BaseModel):
@@ -106,7 +118,35 @@ async def vol_pslist(
             model_used=model_used,
             advisories=(f"evidence path not registered: {evidence_path}",),
         )
-    verify = evidence_registry.verify_hash(evidence_path)
+    # File-vanished race between assert_registered and verify_hash
+    # surfaces as EVIDENCE_TAMPERED (vanished = tampered in our model).
+    try:
+        verify = evidence_registry.verify_hash(evidence_path)
+    except EvidenceMissingOnDiskError:
+        return _refuse(
+            VolFailureReason.EVIDENCE_TAMPERED,
+            pre_audit_id=pre_audit_id,
+            case_dir=case_dir,
+            audit_logger=audit_logger,
+            evidence_path=evidence_path,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+            model_used=model_used,
+            advisories=(
+                f"evidence file vanished between assert_registered and "
+                f"verify_hash: {evidence_path}",
+            ),
+        )
+    except EvidenceRegistryError as exc:
+        return _refuse(
+            VolFailureReason.EVIDENCE_TAMPERED,
+            pre_audit_id=pre_audit_id,
+            case_dir=case_dir,
+            audit_logger=audit_logger,
+            evidence_path=evidence_path,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+            model_used=model_used,
+            advisories=(f"registry error during verify_hash: {type(exc).__name__}: {exc}",),
+        )
     if not verify.matches:
         return _refuse(
             VolFailureReason.EVIDENCE_TAMPERED,
@@ -136,7 +176,21 @@ async def vol_pslist(
             advisories=(f"Vol3 windows.pslist exceeded {timeout_s}s timeout",),
         )
 
-    blob_path = _persist_blob(case_dir, pre_audit_id, result.stdout_normalized)
+    try:
+        blob_path = _persist_blob(case_dir, pre_audit_id, result.stdout_normalized)
+    except OSError as exc:
+        return _refuse(
+            VolFailureReason.TOOL_FAILED,
+            pre_audit_id=pre_audit_id,
+            case_dir=case_dir,
+            audit_logger=audit_logger,
+            evidence_path=evidence_path,
+            elapsed_ms=result.elapsed_ms,
+            model_used=model_used,
+            advisories=(f"blob persist failed: {type(exc).__name__}: {exc}",),
+            exit_code=result.exit_code,
+            result_sha256=result.result_sha256,
+        )
     if result.exit_code != 0:
         return _refuse(
             VolFailureReason.TOOL_FAILED,
@@ -156,8 +210,11 @@ async def vol_pslist(
         rows = json.loads(result.stdout_normalized.decode("utf-8"))
         if not isinstance(rows, list):
             raise ValueError(f"Vol3 JSON renderer returned {type(rows).__name__}, expected list")
+        # ValidationError listed explicitly even though it subclasses
+        # ValueError in Pydantic v2 — guards against a pydantic-core
+        # version that quietly changes that inheritance.
         entries = tuple(PslistEntry.model_validate(row) for row in rows)
-    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError, ValidationError, ValueError) as exc:
         preview = result.stdout_normalized[:_PARSE_PREVIEW_BYTES].decode("utf-8", errors="replace")
         return _refuse(
             VolFailureReason.OUTPUT_PARSE_FAILED,
@@ -174,18 +231,35 @@ async def vol_pslist(
         )
 
     output = PslistOutput(entries=entries)
-    _write_audit_row(
-        case_dir=case_dir,
-        audit_logger=audit_logger,
-        audit_id=pre_audit_id,
-        evidence_path=evidence_path,
-        elapsed_ms=result.elapsed_ms,
-        model_used=model_used,
-        result=output.model_dump(mode="json"),
-        result_sha256=result.result_sha256,
-        blob_path=blob_path,
-        exit_code=0,
-    )
+    try:
+        _write_audit_row(
+            case_dir=case_dir,
+            audit_logger=audit_logger,
+            audit_id=pre_audit_id,
+            evidence_path=evidence_path,
+            elapsed_ms=result.elapsed_ms,
+            model_used=model_used,
+            result=output.model_dump(mode="json"),
+            result_sha256=result.result_sha256,
+            blob_path=blob_path,
+            exit_code=0,
+        )
+    except OSError as exc:
+        # H1: blob persisted but audit row failed → orphan. Remove
+        # so audit/blobs/ stays a 1:1 map with the audit log.
+        _delete_orphan_blob(blob_path)
+        return _refuse(
+            VolFailureReason.TOOL_FAILED,
+            pre_audit_id=pre_audit_id,
+            case_dir=case_dir,
+            audit_logger=audit_logger,
+            evidence_path=evidence_path,
+            elapsed_ms=result.elapsed_ms,
+            model_used=model_used,
+            advisories=(f"audit row write failed: {type(exc).__name__}: {exc}",),
+            exit_code=result.exit_code,
+            result_sha256=result.result_sha256,
+        )
     return ToolResponse[PslistOutput](
         success=True,
         data=output,
@@ -266,6 +340,16 @@ def _persist_blob(case_dir: Path, audit_id: str, normalized: bytes) -> Path:
     return blob_path
 
 
+def _delete_orphan_blob(blob_path: Path | None) -> None:
+    """Remove an orphan blob when audit-row write fails post-persist."""
+    if blob_path is None:
+        return
+    try:
+        blob_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
 def _write_audit_row(
     *,
     case_dir: Path,
@@ -283,14 +367,14 @@ def _write_audit_row(
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     summary_json = json.dumps(result, sort_keys=True)
     fallback_sha = hashlib.sha256(summary_json.encode("utf-8")).hexdigest()
-    extras: dict[str, object] = {"evidence_path": str(evidence_path)}
+    params: dict[str, object] = {"evidence_path": str(evidence_path)}
     if exit_code is not None:
-        extras["exit_code"] = exit_code
+        params["exit_code"] = exit_code
     entry = AuditEntry(
         ts=datetime.now(UTC),
         audit_id=audit_id,
         tool="vol_pslist",
-        params={"evidence_path": str(evidence_path), **extras},
+        params=params,
         result_summary=result,
         result_sha256=result_sha256 or fallback_sha,
         # /dev/null sentinel for pre-subprocess refusals — matches the

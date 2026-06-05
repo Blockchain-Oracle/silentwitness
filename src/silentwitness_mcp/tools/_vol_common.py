@@ -125,7 +125,14 @@ async def _run_vol(
             await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
         except TimeoutError:
             proc.kill()
-            await proc.wait()
+            # Bounded — a process in uninterruptible disk wait can
+            # ignore SIGKILL until the syscall completes; without this
+            # cap the coroutine would hang forever and the caller's
+            # TOOL_TIMEOUT envelope would never fire.
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
+            except TimeoutError:
+                pass
         raise
     elapsed_ms = (time.monotonic() - start) * 1000.0
     normalized = normalize_output(stdout, normalizer_key)
