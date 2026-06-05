@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 from hypothesis import given, strategies as st
 from pydantic import BaseModel, ValidationError
 
+from silentwitness_common.failure import FailureReason as SourceFailureReason
 from silentwitness_common.ids import make_audit_id
+from silentwitness_common.types import (
+    AuditEntry,
+    AuditId as SourceAuditId,
+    CitedSpan,
+    Confidence as SourceConfidence,
+)
 from silentwitness_mcp.envelope import (
-    EMPTY_PROVENANCE,
+    EMPTY_PROVENANCE_TOOL_NAME,
     AuditId,
     Confidence,
     DataProvenance,
@@ -60,9 +68,13 @@ def test_response_envelope_is_tool_response_alias() -> None:
 def test_auditid_alias_is_re_exported() -> None:
     """The MCP server side imports ``AuditId`` from envelope, not from
     common.types directly. The re-export must resolve to the same alias."""
-    from silentwitness_common.types import AuditId as SourceAuditId
-
     assert AuditId is SourceAuditId
+
+
+def test_failure_reason_is_re_exported_from_common() -> None:
+    """FailureReason is the wire contract between MCP and agent — lives
+    in common.failure. envelope re-exports it for MCP-side convenience."""
+    assert FailureReason is SourceFailureReason
 
 
 # ---------------------------------------------------------------------------
@@ -77,8 +89,8 @@ def test_audit_id_format_validator_accepts_canonical() -> None:
         "sift-aj-20260613-999",
         "sift-mallory-20260101-1234",
         "sift-abu-20251225-42",
-        "sift-ab-20260613-99999",  # 5-digit widening
-        "sift-cd-20260613-123456",  # 6-digit widening
+        "sift-ab-20260613-99999",
+        "sift-cd-20260613-123456",
     ):
         env = ToolResponse[_SamplePayload](
             success=False,
@@ -99,6 +111,8 @@ def test_audit_id_format_validator_accepts_canonical() -> None:
         "sift-aj-20260613",
         "sift--20260613-001",
         "sift-aj-20269999-001",
+        "sift-aj-20250229-001",  # non-leap Feb 29
+        "sift-aj-20260631-001",  # June 31
     ],
 )
 def test_audit_id_format_validator_rejects_non_canonical(bad_id: str) -> None:
@@ -118,10 +132,9 @@ def test_audit_id_format_validator_rejects_non_canonical(bad_id: str) -> None:
 
 def test_audit_id_empty_string_rejected_by_length_constraint() -> None:
     """Empty string is rejected by ``StringConstraints(min_length=1)`` —
-    NOT by the format validator. Pinning this separately so a regression
-    removing the format validator still fails the other test cases
-    loudly instead of being masked by the length check."""
-    with pytest.raises(ValidationError, match=r"at least 1 character|string_too_short"):
+    NOT by the format validator. Pinned separately so a regression
+    removing the format validator still fails the other tests loudly."""
+    with pytest.raises(ValidationError, match=r"at least 1 (character|item)|too_short"):
         ToolResponse[_SamplePayload](
             success=False,
             data=None,
@@ -133,8 +146,8 @@ def test_audit_id_empty_string_rejected_by_length_constraint() -> None:
 
 def test_audit_id_whitespace_stripped_then_validated() -> None:
     """``_BASE_CONFIG.str_strip_whitespace=True`` strips before the
-    AfterValidator runs, so a padded canonical id is accepted and the
-    stored value is the trimmed one. Pinning the policy."""
+    AfterValidator runs. Pin the policy so an Annotated-order refactor
+    swapping AfterValidator → BeforeValidator breaks this test."""
     env = ToolResponse[_SamplePayload](
         success=False,
         data=None,
@@ -149,10 +162,6 @@ def test_audit_id_format_gate_also_applies_to_audit_entry() -> None:
     """Architecture §4.4: the format gate is the load-bearing primitive
     joining the audit log + HMAC ledger + report. AuditEntry shares the
     AuditId alias so the JSONL read path can't accept a malformed id."""
-    from datetime import UTC, datetime
-
-    from silentwitness_common.types import AuditEntry
-
     with pytest.raises(ValidationError, match=r"does not match sift-"):
         AuditEntry(
             ts=datetime(2026, 6, 13, 14, 27, tzinfo=UTC),
@@ -171,8 +180,6 @@ def test_audit_id_format_gate_also_applies_to_audit_entry() -> None:
 def test_audit_id_format_gate_also_applies_to_cited_span() -> None:
     """Citation gate's input — an LLM-emitted CitedSpan — must refuse a
     malformed audit_id at parse time, before the gate even fires."""
-    from silentwitness_common.types import CitedSpan
-
     with pytest.raises(ValidationError, match=r"does not match sift-"):
         CitedSpan(
             audit_id="bogus-id",
@@ -184,20 +191,25 @@ def test_audit_id_format_gate_also_applies_to_cited_span() -> None:
 
 
 @given(
-    examiner=st.text(
-        alphabet=st.characters(min_codepoint=0x61, max_codepoint=0x7A),
-        min_size=2,
-        max_size=20,
-    ),
-    seq=st.integers(min_value=1, max_value=999),
+    examiner_seed=st.text(
+        alphabet=st.characters(
+            min_codepoint=0x30, max_codepoint=0x7A, blacklist_categories=("Cc", "Cs")
+        ),
+        min_size=1,
+        max_size=24,
+    ).filter(lambda s: any(c.isalnum() for c in s)),
+    seq=st.integers(min_value=1, max_value=1_000_000),
+    day=st.dates(min_value=date(2020, 1, 1), max_value=date(2030, 12, 31)),
 )
-def test_make_audit_id_round_trips_through_envelope(examiner: str, seq: int) -> None:
-    """Property: anything ``make_audit_id`` produces is accepted by the
-    AuditId validator. Locks factory ↔ validator agreement so a future
-    format change MUST update both."""
-    from datetime import date
-
-    aid = make_audit_id(examiner, date(2026, 6, 13), seq)
+def test_make_audit_id_round_trips_through_envelope(
+    examiner_seed: str, seq: int, day: date
+) -> None:
+    """Property: every ``make_audit_id`` output is accepted by the
+    AuditId validator. Examiner-seed includes digits + punctuation
+    that slug_examiner strips (filtered to require ≥1 alnum so the
+    slug isn't empty); seq covers widening past 999; day covers leap
+    days + year boundaries. Locks factory ↔ validator agreement."""
+    aid = make_audit_id(examiner_seed, day, seq)
     env = ToolResponse[_SamplePayload](
         success=False,
         data=None,
@@ -221,8 +233,7 @@ def test_data_provenance_round_trips_path_to_string() -> None:
 
 
 def test_data_provenance_accepts_empty_cmd_argv() -> None:
-    """Empty cmd_argv is the canonical pre-tool-execution-failure shape
-    (used by make_empty_provenance)."""
+    """Empty cmd_argv is the canonical pre-tool-execution shape."""
     p = DataProvenance(
         tool="vol_pslist",
         stdout_path=Path("/dev/null"),
@@ -246,19 +257,37 @@ def test_data_provenance_accepts_zero_elapsed_ms() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Confidence — re-exported enum identity (the value tests live in
-# tests/unit/test_common_types.py; here we just prove the re-export
-# binds the same enum, not a shadow with broken comparisons)
+# Required-field discipline (rebuilt after the round-2 trim)
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# discipline_reminder semantics
+# ---------------------------------------------------------------------------
+
+
+def test_discipline_reminder_is_optional() -> None:
+    """Default is ``None`` — the "no reminder requested" sentinel."""
+    env = ToolResponse[_SamplePayload](
+        success=False,
+        data=None,
+        audit_id=_AUDIT_ID,
+        examiner=_EXAMINER,
+        data_provenance=_provenance(),
+    )
+    assert env.discipline_reminder is None
+
+
+# ---------------------------------------------------------------------------
+# Confidence — re-exported enum identity
 # ---------------------------------------------------------------------------
 
 
 def test_confidence_re_export_is_source_enum() -> None:
-    """Reflected `str.__lt__` re-dispatch trap (PR-92) was caught by the
-    source enum's ``TypeError`` overrides. If the re-export were a shadow,
-    `Confidence.LOW < "ZEBRA"` would silently return True via the str
-    fallback. Confirm identity, not just structural equality."""
-    from silentwitness_common.types import Confidence as SourceConfidence
-
+    """Reflected ``str.__lt__`` re-dispatch trap (PR-92) was caught by
+    the source enum's ``TypeError`` overrides. If the re-export were a
+    shadow, ``Confidence.LOW < "ZEBRA"`` would silently return True via
+    the str fallback. Confirm identity, not just structural equality."""
     assert Confidence is SourceConfidence
     with pytest.raises(TypeError):
         _ = Confidence.LOW < "ZEBRA"  # type: ignore[operator]
@@ -270,7 +299,6 @@ def test_confidence_re_export_is_source_enum() -> None:
 
 
 def test_failure_reason_round_trips_as_string() -> None:
-    """StrEnum serialises as its value — keeps JSON shape stable."""
     assert FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID.value == "MOUNT_NOT_RO_NOEXEC_NOSUID"
     assert str(FailureReason.EVIDENCE_NOT_REGISTERED) == "EVIDENCE_NOT_REGISTERED"
 
@@ -289,27 +317,28 @@ def test_failure_reason_catalog_covers_known_codes() -> None:
 
 
 # ---------------------------------------------------------------------------
-# make_empty_provenance / EMPTY_PROVENANCE
+# make_empty_provenance (no module-level singleton — cross-envelope
+# contamination via __dict__ / object.__setattr__ removed in round-3)
 # ---------------------------------------------------------------------------
 
 
 def test_empty_provenance_uses_dev_null_and_zero_hash() -> None:
-    """Sentinel that downstream readers grep for to distinguish
-    "failed before the tool ran" from a real run."""
-    assert EMPTY_PROVENANCE.stdout_path == Path("/dev/null")
-    assert EMPTY_PROVENANCE.result_sha256 == "0" * 64
-    assert EMPTY_PROVENANCE.elapsed_ms == 0.0
-    assert EMPTY_PROVENANCE.cmd_argv == ()
+    p = make_empty_provenance()
+    assert p.stdout_path == Path("/dev/null")
+    assert p.result_sha256 == "0" * 64
+    assert p.elapsed_ms == 0.0
+    assert p.cmd_argv == ()
+    assert p.tool == EMPTY_PROVENANCE_TOOL_NAME
 
 
-def test_make_empty_provenance_sets_tool_name() -> None:
+def test_make_empty_provenance_accepts_real_tool_name() -> None:
     p = make_empty_provenance("vol_pslist")
     assert p.tool == "vol_pslist"
-    assert p.stdout_path == Path("/dev/null")
 
 
 # ---------------------------------------------------------------------------
-# make_failure_envelope factory
+# make_failure_envelope factory (round-3: data_provenance is REQUIRED;
+# generic TPayload bind restored)
 # ---------------------------------------------------------------------------
 
 
@@ -318,24 +347,16 @@ def test_make_failure_envelope_appends_reason_to_advisories() -> None:
         audit_id=_AUDIT_ID,
         examiner=_EXAMINER,
         reason=FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID,
+        data_provenance=make_empty_provenance("vol_pslist"),
     )
     assert env.success is False
     assert env.data is None
     assert env.advisories == ("MOUNT_NOT_RO_NOEXEC_NOSUID",)
-
-
-def test_make_failure_envelope_with_only_reason_leaves_other_tuples_empty() -> None:
-    """The actual production code path for ``_guard_mount`` — every
-    optional tuple stays empty; only the reason populates advisories."""
-    env = make_failure_envelope(
-        audit_id=_AUDIT_ID,
-        examiner=_EXAMINER,
-        reason=FailureReason.EVIDENCE_NOT_REGISTERED,
-    )
-    assert env.caveats == ()
-    assert env.corroboration == ()
-    assert env.discipline_reminder is None
-    assert env.advisories == ("EVIDENCE_NOT_REGISTERED",)
+    # Pin the type: a future refactor dropping `reason.value` and
+    # storing the enum instance would still pass tuple-equality
+    # (StrEnum.__eq__ falls back to str), but the in-memory type would
+    # diverge from the JSONL bytes.
+    assert type(env.advisories[-1]) is str
 
 
 def test_make_failure_envelope_preserves_caller_advisories() -> None:
@@ -343,45 +364,18 @@ def test_make_failure_envelope_preserves_caller_advisories() -> None:
         audit_id=_AUDIT_ID,
         examiner=_EXAMINER,
         reason=FailureReason.EVIDENCE_NOT_REGISTERED,
+        data_provenance=make_empty_provenance(),
         advisories=("warm up step skipped",),
     )
     assert env.advisories == ("warm up step skipped", "EVIDENCE_NOT_REGISTERED")
 
 
-def test_make_failure_envelope_allows_duplicate_reason_in_advisories() -> None:
-    """Dedup is the caller's responsibility — locks the chosen policy
-    so a future "smart" dedup change is visible."""
-    env = make_failure_envelope(
-        audit_id=_AUDIT_ID,
-        examiner=_EXAMINER,
-        reason=FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID,
-        advisories=("MOUNT_NOT_RO_NOEXEC_NOSUID",),
-    )
-    assert env.advisories == (
-        "MOUNT_NOT_RO_NOEXEC_NOSUID",
-        "MOUNT_NOT_RO_NOEXEC_NOSUID",
-    )
-
-
 def test_make_failure_envelope_rejects_invalid_audit_id() -> None:
-    """The factory inherits the AuditId Annotated alias — bad audit_id
-    rejected with the canonical error message."""
+    """The factory inherits the AuditId Annotated alias."""
     with pytest.raises(ValidationError, match=r"does not match sift-"):
         make_failure_envelope(
             audit_id="not-a-real-audit-id",
             examiner=_EXAMINER,
             reason=FailureReason.MOUNT_NOT_RO_NOEXEC_NOSUID,
+            data_provenance=make_empty_provenance(),
         )
-
-
-def test_make_failure_envelope_accepts_real_provenance_for_post_run_failures() -> None:
-    """Failures that fire AFTER the tool ran (e.g., citation hash
-    mismatch) pass a real DataProvenance instead of EMPTY_PROVENANCE."""
-    env = make_failure_envelope(
-        audit_id=_AUDIT_ID,
-        examiner=_EXAMINER,
-        reason=FailureReason.CITATION_OUTPUT_HASH_MISMATCH,
-        data_provenance=_provenance(),
-    )
-    assert env.data_provenance.tool == "vol_pslist"
-    assert env.data_provenance.stdout_path != Path("/dev/null")

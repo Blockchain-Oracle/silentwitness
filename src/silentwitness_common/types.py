@@ -28,7 +28,7 @@ from pydantic import (
     model_validator,
 )
 
-from silentwitness_common.ids import assert_audit_id_format
+from silentwitness_common.ids import assert_audit_id_format, require_audit_id_str
 
 
 def _normalise_hex(value: object) -> str:
@@ -48,12 +48,18 @@ type Sha256Hex = Annotated[
     StringConstraints(pattern=r"^[a-f0-9]{64}$"),
 ]
 
-# Canonical audit_id type (architecture §4.4) — applied to every model that
-# carries one so the audit log, HMAC ledger, citation gate, and envelope
-# cannot diverge silently on format.
+# AuditId (architecture §4.4). Order matters: BeforeValidator rejects
+# non-str (PR-92 bytes-coercion) → core validation does
+# str_strip_whitespace + min_length → AfterValidator enforces the
+# sift-<slug>-<YYYYMMDD>-<NNN> shape. Do NOT swap the format check to
+# BeforeValidator (would skip the whitespace strip).
 type AuditId = Annotated[
-    str, StringConstraints(min_length=1), AfterValidator(assert_audit_id_format)
+    str,
+    BeforeValidator(require_audit_id_str),
+    StringConstraints(min_length=1),
+    AfterValidator(assert_audit_id_format),
 ]
+
 
 # ---------------------------------------------------------------------------
 # Enums — string-valued so JSON round-trips preserve them as readable strings
@@ -219,7 +225,8 @@ class Observation(BaseModel):
         "re-verifies each at evaluation time."
     )
     audit_ids: tuple[AuditId, ...] = Field(
-        description="audit_ids of every MCP tool call this observation derives from."
+        min_length=1,
+        description="audit_ids of every MCP tool call this observation derives from.",
     )
 
     @field_validator("cited_spans")
@@ -227,13 +234,6 @@ class Observation(BaseModel):
     def _non_empty_spans(cls, value: tuple[CitedSpan, ...]) -> tuple[CitedSpan, ...]:
         if not value:
             raise ValueError("Observation.cited_spans must contain at least one span")
-        return value
-
-    @field_validator("audit_ids")
-    @classmethod
-    def _non_empty_audit_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if not value:
-            raise ValueError("Observation.audit_ids must be non-empty")
         return value
 
 

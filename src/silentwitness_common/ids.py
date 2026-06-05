@@ -82,11 +82,22 @@ def make_audit_id(examiner: str, day: date, seq: int) -> str:
     return f"sift-{slug_examiner(examiner)}-{day.strftime('%Y%m%d')}-{_pad(seq)}"
 
 
+def require_audit_id_str(value: object) -> str:
+    """BeforeValidator: reject non-``str`` input (incl. ``bytes`` that
+    Pydantic v2 would otherwise UTF-8-decode silently — same PR-92
+    silent-failure surface :func:`_normalise_hex` guards against for
+    ``Sha256Hex``)."""
+    if not isinstance(value, str):
+        raise ValueError(f"AuditId requires str, got {type(value).__name__}")
+    return value
+
+
 def assert_audit_id_format(value: str) -> str:
-    """Pydantic field-validator hook: rejects any value that doesn't match
+    """AfterValidator: reject any value that doesn't match
     ``sift-<slug>-<YYYYMMDD>-<NNN>`` (architecture §4.4). Returns the
     input verbatim so byte-exact discipline for the audit log + HMAC
-    ledger is preserved — parse for side-effect, return as-given."""
+    ledger is preserved. See :func:`parse_audit_id` for the structured-
+    parse variant audit-log readers + ledger verification use."""
     parse_audit_id(value)
     return value
 
@@ -115,5 +126,6 @@ __all__ = [
     "make_finding_id",
     "make_timeline_id",
     "parse_audit_id",
+    "require_audit_id_str",
     "slug_examiner",
 ]

@@ -197,10 +197,8 @@ def test_citation_gate_rejects_random_sha256(
 
 @given(seq=st.integers(min_value=1, max_value=999_999))
 def test_citation_gate_rejects_unknown_audit_id(seq: int) -> None:
-    """An audit_id absent from the index → AUDIT_ID_NOT_FOUND. The
-    strategy now produces canonical-format ids (post the AuditId
-    Annotated alias landing in story-response-envelope) so the
-    CitedSpan model accepts the input."""
+    """An audit_id absent from the index → AUDIT_ID_NOT_FOUND. Strategy
+    generates canonical-format ids so the CitedSpan model accepts them."""
     from silentwitness_common.types import CitedSpan
 
     span = CitedSpan(

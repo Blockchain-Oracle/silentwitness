@@ -58,7 +58,7 @@ from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from silentwitness_common.types import Sha256Hex
+from silentwitness_common.types import AuditId, Sha256Hex
 from silentwitness_mcp.verification._injection_loader import get_patterns
 
 _BASE_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -95,7 +95,7 @@ class StripEvent(BaseModel):
     model_config = _BASE_CONFIG
 
     ts: datetime
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     pattern_id: str = Field(min_length=1)
     position_in_intermediate: int = Field(ge=0)
     op_sequence: int = Field(ge=0)
