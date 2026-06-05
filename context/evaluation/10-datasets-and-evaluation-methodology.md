@@ -1433,4 +1433,4 @@ This document draws on:
 - **VirusShare** — https://virusshare.com/.
 - **Public community writeups** for the NIST Hacking Case at intrinsicode.net and zarat.hatenablog.com.
 
-For internal cross-reference: the wedge commitment that frames this domain knowledge is at `/Users/abu/dev/hackathon/find-evil/STRATEGY.md`; the project's research provenance (including the original Tier 1-4 dataset triage that informed parts of Section A) is at `/Users/abu/dev/hackathon/find-evil/research/protocol-sift-2026/refs/datasets.md` and at `/Users/abu/dev/hackathon/find-evil/research/protocol-sift-2026/.raw/04-signals-and-data.md`.
+For internal cross-reference: the wedge commitment that frames this domain knowledge is at `STRATEGY.md`; the project's research provenance (including the original Tier 1-4 dataset triage that informed parts of Section A) is at `research/protocol-sift-2026/refs/datasets.md` and at `research/protocol-sift-2026/.raw/04-signals-and-data.md`.
