@@ -105,6 +105,47 @@ def test_catalog_rejects_pattern_matching_benign_evidence() -> None:
         _load(bad_path)
 
 
+def test_sanitize_fails_fast_on_malformed_audit_id_before_any_strip() -> None:
+    """Round-3 silent-failure H2: a bogus audit_id must raise BEFORE any
+    strip work runs. Without the function-entry fail-fast at
+    sanitizer.sanitize(), the StripEvent construction-time gate only
+    fires when ≥1 strip happens — clean input would silently accept a
+    malformed id."""
+    writer = _CollectingWriter()
+    with pytest.raises(ValueError, match=r"does not match sift-"):
+        sanitize("hello world", "bogus-id", audit_writer=writer, now=_FIXED_NOW)
+    assert writer.events == []
+
+
+def test_sanitize_fails_fast_on_bytes_audit_id() -> None:
+    """Round-3 silent-failure C2 propagation: bytes input rejected at
+    sanitize() entry by ``require_audit_id_str``."""
+    writer = _CollectingWriter()
+    with pytest.raises(ValueError, match=r"AuditId requires str"):
+        sanitize(
+            "hello world",
+            b"sift-aj-20260613-007",  # type: ignore[arg-type]
+            audit_writer=writer,
+            now=_FIXED_NOW,
+        )
+
+
+def test_strip_event_strips_whitespace_on_audit_id() -> None:
+    """Round-3 silent-failure H1: StripEvent._EVENT_CONFIG enables
+    str_strip_whitespace so StripEvent's AuditId preprocessing matches
+    every other AuditId carrier. A regression that reverts _EVENT_CONFIG
+    to no-strip would silently reject whitespace-padded canonical ids."""
+    event = StripEvent(
+        ts=_FIXED_NOW,
+        audit_id="  sift-aj-20260613-007  \n",
+        pattern_id="xml-role-tag",
+        position_in_intermediate=0,
+        op_sequence=0,
+        original_excerpt_hash="a" * 64,
+    )
+    assert event.audit_id == "sift-aj-20260613-007"
+
+
 def test_catalog_wraps_yaml_error_as_injection_catalog_error() -> None:
     """PR-114 silent-failure M3: YAML / OS / decode errors propagate as
     the typed :class:`InjectionCatalogError` so callers can

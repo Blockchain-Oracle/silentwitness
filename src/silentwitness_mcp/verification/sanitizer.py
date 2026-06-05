@@ -62,10 +62,10 @@ from silentwitness_common.ids import assert_audit_id_format, require_audit_id_st
 from silentwitness_common.types import AuditId, Sha256Hex
 from silentwitness_mcp.verification._injection_loader import get_patterns
 
-# SanitizeResult holds wrapped_text that may carry lone surrogates from
-# adversarial-evidence inputs — Pydantic's whitespace-strip would call
-# .strip() on it and raise UnicodeError. Keep SanitizeResult's config
-# whitespace-strip OFF.
+# SanitizeResult.wrapped_text is bookended by [UNTRUSTED EVIDENCE BEGIN/END]
+# markers so the byte-exact wrap contract is invariant by construction —
+# strip would be a no-op anyway and could surface Pydantic str-coercion
+# corner cases on adversarial-evidence inputs. Keep strip OFF.
 _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 # StripEvent carries an AuditId field that depends on the canonical
 # strip-then-validate preprocessing every other AuditId carrier provides
