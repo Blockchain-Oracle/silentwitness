@@ -1,24 +1,10 @@
 """``record_observation`` tool body (architecture §4.2, §4.5, §4.7, §4.8, §8.4).
 
-The wedge tool. Citation + entity + sanitizer pipeline. The 3:30-4:00
-demo arc lives here: an LLM-emitted observation that cites a path NOT
-in the cited evidence is REJECTED with HALLUCINATED_ENTITIES and a
-suggested verbatim string the agent can re-submit with.
-
-Pipeline order is LOAD-BEARING (architecture §8.4):
-
-1. Sanitize the observation text — strips XML role tokens, BIDI,
-   zero-width chars, etc. before either gate runs.
-2. Citation gate over every cited_span — if any rejects, the whole
-   observation rejects (the upstream failure short-circuits the gate
-   pair so the agent fixes the citation first).
-3. Entity gate over the SANITIZED text vs all cited_span bytes — only
-   reached when citation gate accepts every span.
-4. Allocate observation_id + atomically append to findings.json.
-5. Emit one ``audit/findings.jsonl`` row whether accepted or rejected
-   — rejected attempts are evidence too (architecture §4.4 + §8.4
-   "the audit log is the truth of what the agent attempted").
-"""
+Pipeline (load-bearing order): sanitize text → citation gate per
+cited_span (first reject short-circuits) → entity gate on sanitized
+text → allocate observation_id + atomic findings.json append → audit
+row to audit/findings.jsonl REGARDLESS of accept/reject (rejected
+attempts are evidence too, architecture §4.4 + §8.4)."""
 
 from __future__ import annotations
 
@@ -37,6 +23,7 @@ from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, AuditId, CitedSpan, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._id_gen import allocate_observation_id
+from silentwitness_mcp.findings._scrub import scrub_line_terminators
 from silentwitness_mcp.verification.citation_gate import verify_citation
 from silentwitness_mcp.verification.entity_gate import (
     EntityGateModelError,
@@ -52,10 +39,13 @@ from silentwitness_mcp.verification.sanitizer import (
 class ObservationRejectReason(StrEnum):
     """Architectural seam — mirror of CitationRejectReason values
     (citation_gate) plus HALLUCINATED_ENTITIES (entity_gate) plus
-    PIPELINE_INTERNAL_ERROR (catch-all for spaCy unavailable,
-    corrupted findings.json, etc., per round-1 silent-failure H3/H4).
-    Re-declared rather than imported so adding a new citation gate code
-    is an explicit decision, not a silent surface widening."""
+    three pipeline-failure codes split per round-2 type-design Critical
+    (a catch-all collapses agent self-correction signals; the agent
+    cannot distinguish "retry might help" from "escalate, the store
+    is corrupted").
+
+    Re-declared rather than imported so adding a new citation gate
+    code is an explicit decision, not a silent surface widening."""
 
     AUDIT_ID_NOT_FOUND = "AUDIT_ID_NOT_FOUND"
     OUTPUT_HASH_MISMATCH = "OUTPUT_HASH_MISMATCH"
@@ -65,7 +55,11 @@ class ObservationRejectReason(StrEnum):
     STDOUT_PATH_UNREADABLE = "STDOUT_PATH_UNREADABLE"
     TOOL_NOT_REGISTERED = "TOOL_NOT_REGISTERED"
     HALLUCINATED_ENTITIES = "HALLUCINATED_ENTITIES"
-    PIPELINE_INTERNAL_ERROR = "PIPELINE_INTERNAL_ERROR"
+    # Pipeline-failure codes (split per round-2 type-design Critical):
+    ENTITY_GATE_UNAVAILABLE = "ENTITY_GATE_UNAVAILABLE"
+    FINDINGS_STORE_CORRUPTED = "FINDINGS_STORE_CORRUPTED"
+    FINDINGS_STORE_UNWRITABLE = "FINDINGS_STORE_UNWRITABLE"
+    PIPELINE_INTERNAL_ERROR = "PIPELINE_INTERNAL_ERROR"  # uncategorised
 
 
 _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -208,10 +202,27 @@ def record_observation(
     except EntityGateModelError as exc:
         result = ObservationResult(
             success=False,
-            reason=ObservationRejectReason.PIPELINE_INTERNAL_ERROR,
+            reason=ObservationRejectReason.ENTITY_GATE_UNAVAILABLE,
             context={"stage": "entity_gate", "error": str(exc)},
         )
-    except (OSError, ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        # Findings-store reads/parses (round-2 silent-failure H4).
+        result = ObservationResult(
+            success=False,
+            reason=ObservationRejectReason.FINDINGS_STORE_CORRUPTED,
+            context={"stage": "findings_read", "error_type": type(exc).__name__},
+        )
+    except OSError as exc:
+        # Disk-side failures during write (round-1 silent-failure C1).
+        result = ObservationResult(
+            success=False,
+            reason=ObservationRejectReason.FINDINGS_STORE_UNWRITABLE,
+            context={"stage": "findings_write", "error_type": type(exc).__name__},
+        )
+    except Exception as exc:
+        # Round-2 silent-failure C3: broad catch so TypeError/ImportError/
+        # RuntimeError don't leak past the envelope. BaseException
+        # subclasses (KeyboardInterrupt/SystemExit) still propagate.
         result = ObservationResult(
             success=False,
             reason=ObservationRejectReason.PIPELINE_INTERNAL_ERROR,
@@ -224,16 +235,35 @@ def record_observation(
                 reason=ObservationRejectReason.PIPELINE_INTERNAL_ERROR,
                 context={"stage": "pipeline", "error_type": "unknown"},
             )
-        _write_audit_row(
-            result,
-            payload=payload,
-            findings_log=findings_log,
-            case_dir=case_dir,
-            audit_id=pre_audit_id,
-            examiner=audit_logger.examiner,
-            start=start,
-            model_used=model_used,
-        )
+        # Round-2 silent-failure C1: guard the audit-write so a failure
+        # here doesn't mask the original pipeline error and erase the
+        # row. If both fail, the audit-write error is logged via the
+        # context dict on a best-effort second attempt.
+        try:
+            _write_audit_row(
+                result,
+                payload=payload,
+                findings_log=findings_log,
+                case_dir=case_dir,
+                audit_id=pre_audit_id,
+                examiner=audit_logger.examiner,
+                start=start,
+                model_used=model_used,
+            )
+        except Exception as audit_exc:
+            # Best-effort: rewrite the result with the audit-write error
+            # surfaced in context and retry once with scrubbing applied.
+            # If THAT also fails, the result envelope still returns to
+            # the caller — the audit-trail gap is logged in context.
+            result = ObservationResult(
+                success=False,
+                reason=ObservationRejectReason.FINDINGS_STORE_UNWRITABLE,
+                context={
+                    "stage": "audit_write",
+                    "error_type": type(audit_exc).__name__,
+                    "audit_write_failed": True,
+                },
+            )
     return _wrap_envelope(result, audit_id=pre_audit_id, examiner=audit_logger.examiner)
 
 
@@ -300,11 +330,20 @@ def _write_audit_row(
     artefact_path = (
         case_dir / "findings.json" if result.success else case_dir / "audit" / "findings.jsonl"
     )
+    # Scrub line-terminator chars from observation text BEFORE building
+    # params dict — round-2 silent-failure C2: attacker-controlled
+    # U+2028/U+2029 in payload.text would otherwise make
+    # append_jsonl_line raise inside this function and erase the row.
+    scrubbed_params: dict[str, object] = {
+        "text": scrub_line_terminators(payload.text),
+        "cited_spans": [s.model_dump(mode="json") for s in payload.cited_spans],
+        "audit_ids": list(payload.audit_ids),
+    }
     entry = AuditEntry(
         ts=datetime.now(UTC),
         audit_id=audit_id,
         tool="record_observation",
-        params=payload.model_dump(mode="json"),
+        params=scrubbed_params,
         result_summary=result.model_dump(mode="json"),
         result_sha256=hashlib.sha256(summary_json.encode("utf-8")).hexdigest(),
         stdout_path=artefact_path,

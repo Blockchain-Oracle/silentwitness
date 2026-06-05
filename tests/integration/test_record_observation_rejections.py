@@ -6,6 +6,7 @@ that every reject reason is exercised end-to-end."""
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -349,5 +350,37 @@ def test_corrupted_findings_json_returns_pipeline_internal_error(tmp_path: Path)
         model_used=_MODEL,
     )
     assert envelope.data.success is False
-    assert envelope.data.reason == ObservationRejectReason.PIPELINE_INTERNAL_ERROR
+    assert envelope.data.reason == ObservationRejectReason.FINDINGS_STORE_CORRUPTED
     assert (case_dir / "audit" / "findings.jsonl").exists()
+
+
+def test_u2028_in_text_does_not_break_audit_write(tmp_path: Path) -> None:
+    """Round-3 silent-failure C2: attacker-controlled U+2028 in
+    observation text must NOT break the audit-row write. The scrubber
+    replaces it with U+FFFD so append_jsonl_line accepts the row."""
+    case_dir, blobs_dir, logger = _make_case_env(tmp_path)
+    aid = logger.next_audit_id()
+    content = b"PID 4 System\n"
+    entry = _write_blob_and_entry(blobs_dir, audit_id=aid, content=content)
+    span = _cited_span_for(content, aid, span_text="PID 4")
+    payload = ObservationInput(
+        text="PID 4 System\u2028harmful injection",
+        cited_spans=(span,),
+        audit_ids=(aid,),
+    )
+    envelope = record_observation(
+        payload,
+        case_dir=case_dir,
+        audit_index={aid: entry},
+        audit_logger=logger,
+        model_used=_MODEL,
+    )
+    # No raw ValueError leaks; audit row landed.
+    findings_log = case_dir / "audit" / "findings.jsonl"
+    assert findings_log.exists()
+    row = json.loads(findings_log.read_text().strip().split("\n")[0])
+    # The scrubbed text contains U+FFFD where U+2028 was.
+    assert "\ufffd" in row["params"]["text"]
+    assert "\u2028" not in row["params"]["text"]
+    # Envelope returns cleanly (entity gate fires on the scrubbed text).
+    assert envelope.success is True
