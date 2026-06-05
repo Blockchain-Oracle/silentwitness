@@ -7,15 +7,28 @@ in this story (story-fastmcp-server-bootstrap); the actual finding-
 recording logic lands in stories 8-12 of Epic 4 (one tool per story).
 
 Loopback-only HTTP binding (``127.0.0.1`` — never ``0.0.0.0``) is the
-DNS-rebinding defense from ``context/technical/07`` §A3.2 and is
-enforced by both the FastMCP ``settings.host`` we set AND by
-:func:`_validate_http_config` which refuses any other host value.
+DNS-rebinding defense from ``context/technical/07`` §A3.2. Enforcement
+sits in :func:`_validate_http_config`, called before FastMCP construction
+so a misconfigured invocation fails synchronously rather than after a
+socket has bound. The ``host`` we pass into ``FastMCP(host=...)`` is then
+the validated value — FastMCP itself does not re-validate, so the gate is
+:func:`_validate_http_config`, not the SDK.
 
 Bearer-token auth on HTTP uses
 :class:`mcp.server.auth.provider.TokenVerifier` against
 ``$SILENTWITNESS_GATEWAY_TOKEN``. If the env var is unset, HTTP mode
 refuses to start (fail-closed). stdio mode has no auth because the
 subprocess identity boundary suffices (architecture §7.3).
+
+FastMCP couples ``token_verifier`` with :class:`AuthSettings` — passing
+a verifier without auth settings is rejected at construction time. The
+minimal :class:`AuthSettings` we pass DOES cause FastMCP to expose an
+RFC-9728 Protected-Resource-Metadata endpoint at
+``/.well-known/oauth-protected-resource``; the only consumer of that
+endpoint on a loopback-bound server is a local MCP client doing OAuth
+discovery, which our static-bearer model ignores. We are not bypassing
+OAuth discovery; we are coexisting with the SDK's exposure of it.
+
 """
 
 from __future__ import annotations
@@ -28,11 +41,36 @@ from typing import Final
 
 from mcp.server.auth.provider import AccessToken, TokenVerifier
 from mcp.server.auth.settings import AuthSettings
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
+from mcp.server.session import ServerSession
 from pydantic import AnyHttpUrl
 
 from silentwitness_mcp import __version__
-from silentwitness_mcp._lifecycle import lifespan
+from silentwitness_mcp._lifecycle import AppContext, lifespan
+
+# Tools that touch /evidence must refuse to operate when the mount
+# validator (architecture §4.11) reports the mount is missing
+# ``ro,noexec,nosuid``. The lifespan still registers them so MCP
+# clients can introspect the surface, but each call returns
+# MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
+EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
+    {"record_observation", "register_evidence", "verify_evidence_hash"}
+)
+
+
+class MountValidationError(RuntimeError):
+    """Raised by an evidence-bound tool when the lifespan-time mount
+    check failed. Surfaces ``MOUNT_NOT_RO_NOEXEC_NOSUID`` to the agent
+    per architecture §4.11 so the failure is a structured reason, not
+    a generic crash."""
+
+    def __init__(self, advisories: list[str]) -> None:
+        super().__init__(
+            "MOUNT_NOT_RO_NOEXEC_NOSUID: evidence mount missing required "
+            f"options; advisories={advisories}"
+        )
+        self.advisories = advisories
+
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +117,12 @@ class _StaticTokenVerifier(TokenVerifier):
         self._expected = expected_token
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        # Defensive: a misbehaving client (or a future SDK change) could
+        # hand us None, bytes, or an oversized string. All three must
+        # reject cleanly without raising — a TypeError would crash the
+        # whole MCP connection.
+        if not isinstance(token, str) or not token or len(token) > 4096:
+            return None
         # Constant-time comparison so token length cannot be inferred
         # from response timing.
         import hmac
@@ -134,73 +178,99 @@ def _resolve_token_verifier(transport: Transport) -> TokenVerifier | None:
 # ---------------------------------------------------------------------------
 
 
+def _guard_mount(tool_name: str, ctx: Context[ServerSession, AppContext]) -> None:
+    """Architecture §4.11 BDD: evidence-bound tools refuse to operate
+    when the mount check failed. Non-evidence-bound tools pass through.
+
+    Called as the FIRST action of every stub so future implementations
+    can rely on this guard being in place.
+    """
+    if tool_name not in EVIDENCE_BOUND_TOOLS:
+        return
+    mount = ctx.request_context.lifespan_context.mount
+    if not mount.ok:
+        raise MountValidationError(list(mount.advisories))
+
+
 def _register_finding_tool_stubs(mcp: FastMCP) -> None:
     """Register the seven snake_case finding/evidence tools from
     architecture §4.2 as stubs.
 
-    Each body raises :class:`NotImplementedError` so MCP clients see a
-    structured error rather than a silent success. The actual bodies
-    land in stories 8-12 of this epic.
+    Each body checks the mount-validator state first (architecture
+    §4.11), then raises :class:`NotImplementedError` so MCP clients see
+    a structured error rather than a silent success. The actual bodies
+    land in stories 8-12 of this epic; the mount-gate stays.
     """
 
     @mcp.tool()
-    def record_observation() -> dict[str, str]:
+    def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Record a verifiable observation (architecture §4.5/§4.7).
 
         Stub — implemented in story-record-observation-tool.
         """
+        _guard_mount("record_observation", ctx)
         raise NotImplementedError(
             "record_observation is registered but not yet implemented; "
             "tracked by story-record-observation-tool"
         )
 
     @mcp.tool()
-    def record_interpretation() -> dict[str, str]:
+    def record_interpretation(
+        ctx: Context[ServerSession, AppContext],
+    ) -> dict[str, str]:
         """Record an interpretation that links observations to a
         hypothesis. Stub — implemented in story-record-interpretation-tool."""
+        _guard_mount("record_interpretation", ctx)
         raise NotImplementedError(
             "record_interpretation is registered but not yet implemented; "
             "tracked by story-record-interpretation-tool"
         )
 
     @mcp.tool()
-    def record_pivot() -> dict[str, str]:
+    def record_pivot(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Pivot the active hypothesis. Stub — story-record-pivot-tool."""
+        _guard_mount("record_pivot", ctx)
         raise NotImplementedError(
             "record_pivot is registered but not yet implemented; tracked by story-record-pivot-tool"
         )
 
     @mcp.tool()
-    def record_narrative() -> dict[str, str]:
+    def record_narrative(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Append a narrative section to the case report. Stub —
         story-record-narrative-tool."""
+        _guard_mount("record_narrative", ctx)
         raise NotImplementedError(
             "record_narrative is registered but not yet implemented; "
             "tracked by story-record-narrative-tool"
         )
 
     @mcp.tool()
-    def approve_finding() -> dict[str, str]:
+    def approve_finding(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Examiner-only HMAC-ledger approval. Stub —
         story-approve-finding-tool."""
+        _guard_mount("approve_finding", ctx)
         raise NotImplementedError(
             "approve_finding is registered but not yet implemented; "
             "tracked by story-approve-finding-tool"
         )
 
     @mcp.tool()
-    def register_evidence() -> dict[str, str]:
+    def register_evidence(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Hash + manifest registration (architecture §4.10). Stub —
         story-evidence-register-tool."""
+        _guard_mount("register_evidence", ctx)
         raise NotImplementedError(
             "register_evidence is registered but not yet implemented; "
             "tracked by story-evidence-register-tool"
         )
 
     @mcp.tool()
-    def verify_evidence_hash() -> dict[str, str]:
+    def verify_evidence_hash(
+        ctx: Context[ServerSession, AppContext],
+    ) -> dict[str, str]:
         """Re-hash on case resume to catch bit-rot. Stub —
         story-evidence-verify-tool."""
+        _guard_mount("verify_evidence_hash", ctx)
         raise NotImplementedError(
             "verify_evidence_hash is registered but not yet implemented; "
             "tracked by story-evidence-verify-tool"

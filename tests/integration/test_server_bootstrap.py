@@ -28,11 +28,14 @@ from silentwitness_mcp._lifecycle import (
 from silentwitness_mcp.server import (
     DEFAULT_HTTP_HOST,
     DEFAULT_HTTP_PORT,
+    EVIDENCE_BOUND_TOOLS,
     GATEWAY_TOKEN_ENV,
     LOOPBACK_ALLOWED,
     SERVER_NAME,
+    MountValidationError,
     ServerConfigurationError,
     Transport,
+    _guard_mount,
     _StaticTokenVerifier,
     create_server,
 )
@@ -127,16 +130,17 @@ def test_all_expected_finding_tools_registered() -> None:
     )
 
 
-def test_tool_stubs_raise_not_implemented() -> None:
-    """Stub bodies must raise rather than silently succeed — otherwise
-    the agent could record a 'finding' without any verification work."""
+def test_tool_stubs_advertise_ctx_parameter_via_schema() -> None:
+    """The @mcp.tool() decorator inspects each stub's signature for
+    Context injection. Tools advertise `ctx: Context[...]` so FastMCP
+    knows to inject the request context at call time. The user-facing
+    input schema must NOT include `ctx` — Context is magic-injected."""
     mcp = create_server(Transport.STDIO)
     tools = asyncio.run(mcp.list_tools())
     for tool in tools:
-        with pytest.raises(Exception) as exc_info:
-            asyncio.run(mcp.call_tool(tool.name, {}))
-        # FastMCP wraps the NotImplementedError; the message survives.
-        assert "not yet implemented" in str(exc_info.value).lower()
+        # FastMCP strips the Context parameter from the public schema.
+        props = (tool.inputSchema or {}).get("properties", {})
+        assert "ctx" not in props, f"{tool.name} leaked Context into its input schema: {props}"
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +208,22 @@ def test_static_token_verifier_rejects_wrong_token() -> None:
     assert asyncio.run(verifier.verify_token("")) is None
 
 
+def test_static_token_verifier_rejects_non_string_token_without_raising() -> None:
+    """A misbehaving client / SDK version handing us None, bytes, or
+    int MUST NOT crash the MCP connection. The verifier returns None
+    on every non-str input rather than letting TypeError escape."""
+    verifier = _StaticTokenVerifier("the-right-token")
+    for bogus in (None, b"the-right-token", 12345, [], {}):
+        assert asyncio.run(verifier.verify_token(bogus)) is None  # type: ignore[arg-type]
+
+
+def test_static_token_verifier_rejects_oversized_token() -> None:
+    """A multi-megabyte token can't trigger unbounded compare_digest
+    work — verifier rejects anything over 4 KiB."""
+    verifier = _StaticTokenVerifier("the-right-token")
+    assert asyncio.run(verifier.verify_token("x" * 5000)) is None
+
+
 def test_static_token_verifier_uses_constant_time_compare() -> None:
     """Verifies hmac.compare_digest is the comparison primitive — token-
     length timing attacks are out of scope. Indirectly: a one-byte-off
@@ -253,3 +273,74 @@ def test_cli_main_propagates_configuration_error(monkeypatch: pytest.MonkeyPatch
     exit-0. Specifically: HTTP without the gateway token."""
     with pytest.raises(ServerConfigurationError):
         main(["--transport", "http"])
+
+
+# ---------------------------------------------------------------------------
+# Mount-validator BDD criterion (architecture §4.11)
+# ---------------------------------------------------------------------------
+
+
+def test_evidence_bound_tools_set_matches_architecture_4_11() -> None:
+    """Only the tools that actually touch /evidence belong in the
+    refuse-on-bad-mount set. Architecture §4.10 + §4.11."""
+    assert EVIDENCE_BOUND_TOOLS == frozenset(
+        {"record_observation", "register_evidence", "verify_evidence_hash"}
+    )
+
+
+def _fake_ctx_with_mount(ok: bool, advisories: list[str] | None = None) -> object:
+    """Synthesize the minimal `ctx.request_context.lifespan_context.mount`
+    surface that `_guard_mount` reads. Avoids spinning up a real MCP
+    session for a logic-only assertion."""
+    from silentwitness_mcp._lifecycle import AppContext, MountCheckResult
+
+    mount = MountCheckResult(ok=ok, advisories=advisories or [])
+    app_ctx = AppContext(
+        mount=mount,
+        evidence_root=DEFAULT_EVIDENCE_ROOT,
+        injection_pattern_count=1,
+    )
+
+    class _RequestContext:
+        lifespan_context = app_ctx
+
+    class _Ctx:
+        request_context = _RequestContext()
+
+    return _Ctx()
+
+
+def test_guard_mount_refuses_evidence_bound_tools_when_mount_failed() -> None:
+    """BDD criterion (architecture §4.11): with mount.ok=False, every
+    evidence-bound tool surfaces MOUNT_NOT_RO_NOEXEC_NOSUID before any
+    other body code runs."""
+    ctx = _fake_ctx_with_mount(ok=False, advisories=["missing ro"])
+    for tool_name in EVIDENCE_BOUND_TOOLS:
+        with pytest.raises(MountValidationError, match="MOUNT_NOT_RO_NOEXEC_NOSUID"):
+            _guard_mount(tool_name, ctx)  # type: ignore[arg-type]
+
+
+def test_guard_mount_passes_through_non_evidence_tools_on_failed_mount() -> None:
+    """record_interpretation / record_pivot / record_narrative /
+    approve_finding don't touch /evidence — _guard_mount is a no-op for
+    them even if the mount check failed."""
+    ctx = _fake_ctx_with_mount(ok=False, advisories=["bad mount"])
+    for tool_name in EXPECTED_TOOL_NAMES - EVIDENCE_BOUND_TOOLS:
+        _guard_mount(tool_name, ctx)  # type: ignore[arg-type]
+        # No exception = pass.
+
+
+def test_guard_mount_passes_through_when_mount_ok() -> None:
+    """The happy path: mount.ok=True, no guard fires for any tool."""
+    ctx = _fake_ctx_with_mount(ok=True)
+    for tool_name in EXPECTED_TOOL_NAMES:
+        _guard_mount(tool_name, ctx)  # type: ignore[arg-type]
+
+
+def test_mount_validation_error_carries_advisories() -> None:
+    """The exception surfaces the advisories so the agent's response
+    envelope can render them for the examiner — opaque errors are a
+    silent-failure smell."""
+    err = MountValidationError(["mount missing ro", "mount missing nosuid"])
+    assert "ro" in str(err)
+    assert err.advisories == ["mount missing ro", "mount missing nosuid"]
