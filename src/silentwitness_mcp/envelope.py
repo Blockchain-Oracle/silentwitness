@@ -1,100 +1,97 @@
-"""MCP-tool response envelope — canonical import surface (architecture §4.3).
+"""MCP-tool response envelope import surface (architecture §4.3).
 
-The envelope's source model (:class:`ToolResponse[TPayload]`, the
-:class:`DataProvenance` payload, the :class:`Confidence` enum) lives in
-:mod:`silentwitness_common.types` because the agent (which depends on
-``silentwitness_common`` but NOT on ``silentwitness_mcp``) must also
-read it. Putting the source in ``silentwitness_common`` preserves the
-package dependency direction.
-
-This module is the MCP-server-facing import handle. Tools defined in
-the FastMCP server (story-fastmcp-server-bootstrap and the per-tool
-stories that follow) import from here so the canonical envelope surface
-is one stable name:
-
-.. code-block:: python
-
-    from silentwitness_mcp.envelope import ToolResponse, DataProvenance
-
-The :func:`make_failure_envelope` factory bundles the most common
-failure shape — ``success=False`` + structured reason — so guard code
-(mount validation, evidence-registration refusal, citation-gate
-rejection) doesn't repeat the constructor invariants. The fields that
-make the envelope structurally meaningful — ``audit_id``, ``examiner``,
-``data_provenance`` — are required even for failures so the audit
-trail is intact.
+The source model lives in :mod:`silentwitness_common.types` so the agent
+package (which does not depend on :mod:`silentwitness_mcp`) can read it.
 """
 
 from __future__ import annotations
 
+from enum import StrEnum
 from pathlib import Path
+from typing import Final
 
 from pydantic import BaseModel
 
 from silentwitness_common.types import (
+    AuditId,
     Confidence,
     DataProvenance,
     ResponseEnvelope,
+    Sha256Hex,
     ToolResponse,
 )
 
 __all__ = [
+    "EMPTY_PROVENANCE",
+    "AuditId",
     "Confidence",
     "DataProvenance",
+    "FailureReason",
     "ResponseEnvelope",
+    "Sha256Hex",
     "ToolResponse",
+    "make_empty_provenance",
     "make_failure_envelope",
 ]
 
 
-def make_failure_envelope[TPayload: BaseModel](
-    payload_type: type[TPayload],
+class FailureReason(StrEnum):
+    """Catalog of structured failure codes carried in ``advisories`` so
+    downstream consumers can match on a single string per refusal site.
+    StrEnum round-trips through JSON as the bare value."""
+
+    MOUNT_NOT_RO_NOEXEC_NOSUID = "MOUNT_NOT_RO_NOEXEC_NOSUID"
+    EVIDENCE_NOT_REGISTERED = "EVIDENCE_NOT_REGISTERED"
+    CITATION_OUTPUT_HASH_MISMATCH = "CITATION_OUTPUT_HASH_MISMATCH"
+    CITATION_AUDIT_ID_NOT_FOUND = "CITATION_AUDIT_ID_NOT_FOUND"
+    HALLUCINATED_ENTITIES = "HALLUCINATED_ENTITIES"
+
+
+_EMPTY_SHA256: Final = "0" * 64
+
+
+def make_empty_provenance(tool: str) -> DataProvenance:
+    """Canonical ``DataProvenance`` for refusals that fired BEFORE the
+    underlying tool ran. ``stdout_path=/dev/null`` and an all-zeros hash
+    let downstream readers distinguish "failed without producing output"
+    from a real run that incidentally hashed to zeros (architecturally
+    impossible)."""
+    return DataProvenance(
+        tool=tool,
+        stdout_path=Path("/dev/null"),
+        result_sha256=_EMPTY_SHA256,
+        elapsed_ms=0.0,
+        cmd_argv=(),
+    )
+
+
+EMPTY_PROVENANCE: Final = make_empty_provenance("_unset")
+
+
+def make_failure_envelope(
     *,
-    audit_id: str,
+    audit_id: AuditId,
     examiner: str,
-    tool: str,
-    stdout_path: Path,
-    result_sha256: str,
-    elapsed_ms: float,
-    cmd_argv: tuple[str, ...],
-    reason: str,
+    reason: FailureReason,
+    data_provenance: DataProvenance = EMPTY_PROVENANCE,
     caveats: tuple[str, ...] = (),
     advisories: tuple[str, ...] = (),
     corroboration: tuple[str, ...] = (),
     discipline_reminder: str | None = None,
-) -> ToolResponse[TPayload]:
-    """Factory for the canonical ``success=False`` envelope.
-
-    ``reason`` is appended to ``advisories`` so the structured code
-    (e.g. ``MOUNT_NOT_RO_NOEXEC_NOSUID``, ``EVIDENCE_NOT_REGISTERED``,
-    ``CITATION_OUTPUT_HASH_MISMATCH``) is uniformly discoverable in the
-    same field every downstream consumer reads. The Pydantic invariant
-    ``success=False ⇒ data is None`` is satisfied by construction —
-    callers cannot accidentally pass ``data=`` to this factory.
-
-    The ``tool``/``stdout_path``/``result_sha256``/``elapsed_ms``/
-    ``cmd_argv`` arguments build a :class:`DataProvenance`; even for a
-    failure they must be supplied because every audit-log entry needs
-    the provenance of the call that produced it. For an "empty"
-    provenance use ``stdout_path=Path("/dev/null")``, an all-zeros
-    sha256, and ``cmd_argv=()``.
-    """
-    provenance = DataProvenance(
-        tool=tool,
-        stdout_path=stdout_path,
-        result_sha256=result_sha256,
-        elapsed_ms=elapsed_ms,
-        cmd_argv=cmd_argv,
-    )
-    full_advisories = (*advisories, reason)
-    return ToolResponse[payload_type](  # type: ignore[valid-type]
+) -> ToolResponse[BaseModel]:
+    """Canonical ``success=False`` envelope. ``reason`` is appended to
+    ``advisories`` so the structured code is in one field every consumer
+    reads. The ``ToolResponse[BaseModel]`` return is the honest existential
+    type — ``data is None`` so the payload generic is phantom; callers
+    that need a narrower bind can ``cast`` at the use site."""
+    return ToolResponse[BaseModel](
         success=False,
         data=None,
         audit_id=audit_id,
         examiner=examiner,
         caveats=caveats,
-        advisories=full_advisories,
+        advisories=(*advisories, reason.value),
         corroboration=corroboration,
         discipline_reminder=discipline_reminder,
-        data_provenance=provenance,
+        data_provenance=data_provenance,
     )

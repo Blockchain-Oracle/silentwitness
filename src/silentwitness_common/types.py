@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Annotated, Generic, TypeVar
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     BeforeValidator,
     ConfigDict,
@@ -27,12 +28,7 @@ from pydantic import (
     model_validator,
 )
 
-from silentwitness_common.ids import parse_audit_id
-
-
-def _validate_audit_id_format(value: str) -> str:  # architecture §4.4
-    parse_audit_id(value)
-    return value
+from silentwitness_common.ids import assert_audit_id_format
 
 
 def _normalise_hex(value: object) -> str:
@@ -50,6 +46,13 @@ type Sha256Hex = Annotated[
     str,
     BeforeValidator(_normalise_hex),
     StringConstraints(pattern=r"^[a-f0-9]{64}$"),
+]
+
+# Canonical audit_id type (architecture §4.4) — applied to every model that
+# carries one so the audit log, HMAC ledger, citation gate, and envelope
+# cannot diverge silently on format.
+type AuditId = Annotated[
+    str, StringConstraints(min_length=1), AfterValidator(assert_audit_id_format)
 ]
 
 # ---------------------------------------------------------------------------
@@ -167,7 +170,7 @@ class CitedSpan(BaseModel):
 
     model_config = _BASE_CONFIG
 
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     sha256_of_normalized_output: Sha256Hex
     line_start: int = Field(ge=0)
     line_end: int = Field(ge=0)
@@ -215,7 +218,7 @@ class Observation(BaseModel):
         description="Non-empty list of cited spans. The citation gate "
         "re-verifies each at evaluation time."
     )
-    audit_ids: tuple[str, ...] = Field(
+    audit_ids: tuple[AuditId, ...] = Field(
         description="audit_ids of every MCP tool call this observation derives from."
     )
 
@@ -230,9 +233,7 @@ class Observation(BaseModel):
     @classmethod
     def _non_empty_audit_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
-            raise ValueError("Observation.audit_ids must contain at least one audit_id")
-        if any(not a.strip() for a in value):
-            raise ValueError("Observation.audit_ids cannot contain empty/whitespace entries")
+            raise ValueError("Observation.audit_ids must be non-empty")
         return value
 
 
@@ -310,7 +311,7 @@ class EvidenceRecord(BaseModel):
     sha256: Sha256Hex
     size_bytes: int = Field(ge=0)
     registered_at: datetime
-    registered_audit_id: str = Field(min_length=1)
+    registered_audit_id: AuditId
 
 
 class VerifyResult(BaseModel):
@@ -351,7 +352,7 @@ class AuditEntry(BaseModel):
     model_config = _BASE_CONFIG
 
     ts: datetime
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     tool: str = Field(min_length=1)
     params: dict[str, object]
     result_summary: dict[str, object]
@@ -377,15 +378,13 @@ class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
 
     success: bool
     data: TPayload | None = None
-    audit_id: str = Field(min_length=1)
+    audit_id: AuditId
     examiner: str = Field(min_length=1)
     caveats: tuple[str, ...] = Field(default_factory=tuple)
     advisories: tuple[str, ...] = Field(default_factory=tuple)
     corroboration: tuple[str, ...] = Field(default_factory=tuple)
     discipline_reminder: str | None = None
     data_provenance: DataProvenance
-
-    _validate_audit_id = field_validator("audit_id")(_validate_audit_id_format)
 
     @model_validator(mode="after")
     def _success_implies_data(self) -> ToolResponse[TPayload]:

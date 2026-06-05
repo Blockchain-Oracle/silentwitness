@@ -195,20 +195,16 @@ def test_citation_gate_rejects_random_sha256(
     assert result.reason == CitationRejectReason.OUTPUT_HASH_MISMATCH
 
 
-@given(
-    audit_id=st.text(
-        alphabet=st.characters(min_codepoint=0x61, max_codepoint=0x7A),
-        min_size=4,
-        max_size=20,
-    ).map(lambda s: f"sift-aj-99999999-{s}")
-)
-def test_citation_gate_rejects_unknown_audit_id(audit_id: str) -> None:
-    """An audit_id absent from the index → AUDIT_ID_NOT_FOUND, never
-    a different rejection code that would mislead the agent."""
+@given(seq=st.integers(min_value=1, max_value=999_999))
+def test_citation_gate_rejects_unknown_audit_id(seq: int) -> None:
+    """An audit_id absent from the index → AUDIT_ID_NOT_FOUND. The
+    strategy now produces canonical-format ids (post the AuditId
+    Annotated alias landing in story-response-envelope) so the
+    CitedSpan model accepts the input."""
     from silentwitness_common.types import CitedSpan
 
     span = CitedSpan(
-        audit_id=audit_id,
+        audit_id=f"sift-mallory-20260613-{seq:03d}",
         sha256_of_normalized_output="a" * 64,
         line_start=0,
         line_end=1,

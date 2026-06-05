@@ -82,6 +82,15 @@ def make_audit_id(examiner: str, day: date, seq: int) -> str:
     return f"sift-{slug_examiner(examiner)}-{day.strftime('%Y%m%d')}-{_pad(seq)}"
 
 
+def assert_audit_id_format(value: str) -> str:
+    """Pydantic field-validator hook: rejects any value that doesn't match
+    ``sift-<slug>-<YYYYMMDD>-<NNN>`` (architecture §4.4). Returns the
+    input verbatim so byte-exact discipline for the audit log + HMAC
+    ledger is preserved — parse for side-effect, return as-given."""
+    parse_audit_id(value)
+    return value
+
+
 def parse_audit_id(audit_id: str) -> AuditIdParts:
     """Parse a ``sift-<slug>-<YYYYMMDD>-<NNN>`` audit_id into its parts.
 
@@ -101,6 +110,7 @@ def parse_audit_id(audit_id: str) -> AuditIdParts:
 
 __all__ = [
     "AuditIdParts",
+    "assert_audit_id_format",
     "make_audit_id",
     "make_finding_id",
     "make_timeline_id",
