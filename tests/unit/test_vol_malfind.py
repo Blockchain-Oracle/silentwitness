@@ -266,8 +266,9 @@ def test_malfind_hexdump_capped_at_128_bytes(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Vol3 emits the full VAD hex; the wrapper trims to 256 hex chars
-    (128 bytes) to keep the audit blob bounded."""
+    """Cap is exactly 256 hex chars (= 128 bytes), measured from the
+    BEGINNING of the hex stream — not the end. Vol3 emits the full
+    VAD; storing more balloons the blob for no IR signal."""
     long_hex = "ab " * 1000  # 1000 bytes worth, with whitespace
     _install_mock(
         monkeypatch, _FakeProc(stdout=json.dumps([_hit(Hexdump=long_hex)]).encode("utf-8"))
@@ -286,3 +287,109 @@ def test_malfind_hexdump_capped_at_128_bytes(
     hit = envelope.data.entries[0]
     assert hit.hexdump_first_128 is not None
     assert len(hit.hexdump_first_128) == 256
+    # Verify it's the FIRST 256 chars, not the last (would regress to
+    # `hex[-256:]` silently); all chars must be "ab" repeated.
+    assert hit.hexdump_first_128 == "ab" * 128
+
+
+def test_malfind_hexdump_offset_and_ascii_lines_filtered_out(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vol3 hexdump rows look like:
+        0x00000000:  4d 5a 90 00 ...  MZ..............
+    The non-hex chars (offset prefix, ASCII translation suffix) MUST
+    be stripped so hexdump_first_128 stays an honest hex string."""
+    dirty = "0x00000000:  4d 5a 90 00 03 00 00 00  MZ.............."
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps([_hit(Hexdump=dirty)]).encode("utf-8")))
+    case_dir, evidence, logger, registry = env
+    envelope = asyncio.run(
+        vol_malfind(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    hit = envelope.data.entries[0]
+    assert hit.hexdump_first_128 is not None
+    # Must be hex-only — no "0x", no ":", no "MZ", no periods.
+    assert all(c in "0123456789abcdefABCDEF" for c in hit.hexdump_first_128)
+
+
+def test_malfind_evidence_tampered_returns_evidence_tampered(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Story BDD line 68: tamper on the registered image MUST surface
+    as EVIDENCE_TAMPERED before any subprocess spawns."""
+    case_dir, evidence, logger, registry = env
+    evidence.write_bytes(b"DIFFERENT bytes after registration")
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    envelope = asyncio.run(
+        vol_malfind(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.EVIDENCE_TAMPERED.value
+    assert calls == []
+
+
+def test_malfind_audit_row_result_sha256_matches_blob_hash(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pins the audit-trail contract: result_sha256 in the audit row
+    equals sha256(persisted blob bytes). Malfind hits are the highest-
+    stakes T1055 finding — the audit chain must hold."""
+    import hashlib
+
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps([_hit()]).encode("utf-8")))
+    case_dir, evidence, logger, registry = env
+    envelope = asyncio.run(
+        vol_malfind(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [
+        json.loads(line) for line in audit_log.read_text(encoding="utf-8").splitlines() if line
+    ]
+    row = next(r for r in audit_rows if r["tool"] == "vol_malfind")
+    blob_path = case_dir / "audit" / "blobs" / f"{envelope.audit_id}.txt"
+    assert row["result_sha256"] == hashlib.sha256(blob_path.read_bytes()).hexdigest()
+    assert row["stdout_path"] == str(blob_path)
+
+
+def test_malfind_unknown_column_triggers_output_parse_failed(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vol3 column drift (e.g. a future "Reflective" flag) MUST trigger
+    OUTPUT_PARSE_FAILED, not silent drop. Forensic audit cannot quietly
+    elide schema drift on a T1055 finding."""
+    drifted = [{**_hit(), "Reflective": True}]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(drifted).encode("utf-8")))
+    case_dir, evidence, logger, registry = env
+    envelope = asyncio.run(
+        vol_malfind(
+            evidence,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used=MODEL,
+        )
+    )
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value

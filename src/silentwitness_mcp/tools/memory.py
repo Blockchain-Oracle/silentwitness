@@ -328,16 +328,21 @@ def _parse_flat[TPayload: BaseModel, TEntry: BaseModel](
     return output_cls(entries=entries)
 
 
+_HEX_CHARS: Final = frozenset("0123456789abcdefABCDEF")
+
+
 def _parse_malfind(raw: bytes) -> MalfindOutput:
-    """Trim Hexdump to 256 hex chars (first 128 bytes). Vol3 emits the
-    full VAD hex; storing more balloons the audit blob for no signal."""
+    """Trim Hexdump to 256 hex chars (first 128 bytes). Vol3 emits
+    offset-prefixed + ASCII-suffixed lines; filtering to [0-9a-fA-F]
+    keeps the field name honest (silent-failure LOW from PR #140)."""
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"malfind JSON must be a list, got {type(rows).__name__}")
     hits: list[MalfindHit] = []
     for row in rows:
         if isinstance(row, dict) and isinstance(row.get("Hexdump"), str):
-            row = {**row, "Hexdump": "".join(row["Hexdump"].split())[:_MALFIND_HEXDUMP_CAP]}
+            hex_only = "".join(c for c in row["Hexdump"] if c in _HEX_CHARS)
+            row = {**row, "Hexdump": hex_only[:_MALFIND_HEXDUMP_CAP]}
         hits.append(MalfindHit.model_validate(row))
     return MalfindOutput(entries=tuple(hits))
 
