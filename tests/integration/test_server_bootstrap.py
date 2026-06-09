@@ -17,6 +17,7 @@ import pytest
 
 from silentwitness_mcp import __version__
 from silentwitness_mcp.__main__ import _build_parser, main
+from silentwitness_mcp._errors import ServerConfigurationError
 from silentwitness_mcp._lifecycle import (
     DEFAULT_EVIDENCE_ROOT,
     AppContext,
@@ -33,7 +34,6 @@ from silentwitness_mcp.server import (
     LOOPBACK_ALLOWED,
     SERVER_NAME,
     MountValidationError,
-    ServerConfigurationError,
     Transport,
     _guard_mount,
     _StaticTokenVerifier,
@@ -50,6 +50,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "register_evidence",
         "verify_evidence_hash",
         "vol_malfind",
+        "vol_netscan",
         "vol_pslist",
         "vol_psscan",
         "vol_pstree",
@@ -301,6 +302,7 @@ def test_evidence_bound_tools_set_matches_architecture_4_11() -> None:
             "register_evidence",
             "verify_evidence_hash",
             "vol_malfind",
+            "vol_netscan",
             "vol_pslist",
             "vol_psscan",
             "vol_pstree",

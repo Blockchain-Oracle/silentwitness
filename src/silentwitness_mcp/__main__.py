@@ -19,10 +19,10 @@ import sys
 from typing import Final
 
 from silentwitness_mcp import __version__
+from silentwitness_mcp._errors import ServerConfigurationError
 from silentwitness_mcp.server import (
     DEFAULT_HTTP_HOST,
     DEFAULT_HTTP_PORT,
-    ServerConfigurationError,
     Transport,
     run_server,
 )

@@ -1,16 +1,17 @@
 """Pydantic row + payload models for the Vol3 memory family.
 
-Split from :mod:`memory` to keep the wrapper-body file under the
-400-LOC CI cap as more vol_* plugins land. Every model uses
-``extra="forbid"`` so Vol3 schema drift surfaces as
+Every model uses ``extra="forbid"`` so Vol3 schema drift surfaces as
 :attr:`VolFailureReason.OUTPUT_PARSE_FAILED` — a forensic audit
 trail cannot quietly elide unknown columns."""
 
 from __future__ import annotations
 
+import ipaddress
+import re
 from datetime import datetime
+from typing import Any, Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 _ROW_CONFIG = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -89,9 +90,142 @@ class MalfindOutput(BaseModel):
     entries: tuple[MalfindHit, ...]
 
 
+_WILDCARD: Final = "*"
+"""Vol3 emits the literal ``"*"`` for UDP foreign endpoints — the ONLY
+recognised sentinel. Any other non-IP value on a foreign-side field
+(``"-"``, ``""``, ``"null"``, ``"null:"``, trailing whitespace) is
+treated as schema drift and rejected by :meth:`NetscanEntry._check_ip`
+(which parses via :func:`ipaddress.ip_address` and discards the result
+so verbatim preservation still holds)."""
+
+_UPPERCASE_TOKEN: Final = re.compile(r"\A[A-Z][A-Z0-9_]+\Z")
+"""Uppercase token shape, end-of-string anchored. Matches ESTABLISHED
+/ LISTENING / TIME_WAIT / SYN_RECV / future kernel TCB-state names;
+rejects sentinels (``"-"``, ``""``, ``"null"``), lowercase, AND the
+trailing-newline silent-acceptance case (``"$"`` matches before
+``\\n``; ``\\A``/``\\Z`` are end-of-string-only)."""
+
+
+class NetscanEntry(BaseModel):
+    """Vol3 ``windows.netscan`` row — one TCP/UDP endpoint.
+
+    Two design choices look unusual on first read; both are deliberate
+    forensic-accuracy decisions:
+
+    1. **Addresses are ``str`` not ``IPv4Address``/``IPv6Address``.**
+       The downstream entity gate matches typed observations against
+       verbatim cited spans in tool output. Normalising
+       ``::ffff:192.168.1.50`` to ``192.168.1.50`` here would cause
+       every observation citing the IPv6-mapped form to fail the gate.
+       IP validation parses via :func:`ipaddress.ip_address` then
+       discards the parsed object — verbatim preservation upheld,
+       any sentinel rejected.
+
+    2. **``state`` is ``str | None`` not ``Literal[...]``.** Vol3
+       forwards kernel TCB state verbatim. Future Windows builds may
+       add states (e.g. ``SYN_RECV2``); we'd rather forward them than
+       fail closed. The action-shaping caveat ("filter to ESTABLISHED
+       for live C2 evidence") lives at the caveat layer, not the type
+       layer. ``_UPPERCASE_TOKEN`` validates token shape only.
+
+    Bypass surface: :meth:`model_construct` (Pydantic's no-validation
+    fast path) skips ALL of these defences. Do NOT reach for it as a
+    performance optimisation — every forensic invariant above lives
+    on the validator chain.
+
+    Cross-field invariants:
+
+    - TCP entries MUST carry ``foreign_addr``, ``foreign_port``, and
+      ``state`` (live or historical connection state).
+    - UDP entries have ``state=None`` (connectionless).
+
+    Wildcard handling: Vol3 emits ``"*"`` for UDP foreign endpoints.
+    The ``mode="before"`` validator rewrites it to ``None`` so the
+    typed nullable invariants hold. ``"*"`` is the ONLY recognised
+    sentinel — other strings fail the shape validators."""
+
+    model_config = _ROW_CONFIG
+
+    offset: int = Field(alias="Offset")
+    proto: Literal["TCPv4", "TCPv6", "UDPv4", "UDPv6"] = Field(alias="Proto")
+    local_addr: str = Field(alias="LocalAddr")
+    local_port: int = Field(alias="LocalPort")
+    foreign_addr: str | None = Field(default=None, alias="ForeignAddr")
+    foreign_port: int | None = Field(default=None, alias="ForeignPort")
+    state: str | None = Field(default=None, alias="State")
+    pid: int | None = Field(default=None, alias="PID")
+    owner: str | None = Field(default=None, alias="Owner")
+    created: datetime | None = Field(default=None, alias="Created")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalise_udp_wildcards(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        overrides: dict[str, Any] = {}
+        for key in ("ForeignAddr", "ForeignPort", "State"):
+            if data.get(key) == _WILDCARD:
+                overrides[key] = None
+        return {**data, **overrides} if overrides else data
+
+    @field_validator("local_addr", "foreign_addr")
+    @classmethod
+    def _check_ip(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        # Parse via stdlib then DISCARD the parsed object — the entity gate
+        # downstream matches verbatim cited spans, so canonicalisation here
+        # (e.g. "::ffff:192.168.1.50" -> "192.168.1.50") would break it.
+        # try/except is the closed defence a regex shape can't be: rejects
+        # "null:", "..", "X:", trailing newline, NUL byte, leading whitespace —
+        # any string ipaddress.ip_address() cannot parse. NB: "::" IS the
+        # valid IPv6 unspecified address and IS accepted; the netscan caveat
+        # list flags LISTENING on a non-loopback bind separately.
+        try:
+            ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise ValueError(f"address not a parseable IPv4/IPv6: {value!r}") from exc
+        return value
+
+    @field_validator("state")
+    @classmethod
+    def _check_state_shape(cls, value: str | None) -> str | None:
+        if value is not None and not _UPPERCASE_TOKEN.match(value):
+            raise ValueError(f"state has non-uppercase-token shape: {value!r}")
+        return value
+
+    @model_validator(mode="after")
+    def _check_cross_field_invariants(self) -> NetscanEntry:
+        is_tcp = self.proto in ("TCPv4", "TCPv6")
+        if is_tcp:
+            missing = [
+                name
+                for name, val in (
+                    ("foreign_addr", self.foreign_addr),
+                    ("foreign_port", self.foreign_port),
+                    ("state", self.state),
+                )
+                if val is None
+            ]
+            if missing:
+                raise ValueError(
+                    f"TCP {self.proto} entry missing required field(s): {', '.join(missing)}"
+                )
+        elif self.state is not None:
+            raise ValueError(f"UDP {self.proto} entry must have state=None, got {self.state!r}")
+        return self
+
+
+class NetscanOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[NetscanEntry, ...]
+
+
 __all__ = [
     "MalfindHit",
     "MalfindOutput",
+    "NetscanEntry",
+    "NetscanOutput",
     "PslistEntry",
     "PslistOutput",
     "PsscanEntry",

@@ -1,19 +1,10 @@
 """Shared Volatility 3 subprocess infrastructure (architecture §4.6,
 PRD FR #5).
 
-Every ``vol_*`` wrapper imports :func:`_run_vol`, the family-shared
-refusal helpers (:func:`refuse`, :func:`write_audit_row`,
-:func:`persist_blob`, :func:`delete_orphan_blob`), and the
-:class:`VolFailureReason` enum from here. The skeleton story
-(story-vol-pslist) landed the subprocess helper; the pstree+psscan
-story extracted the refusal-envelope plumbing so subsequent stories
-add ~5 LOC of body, not ~80.
-
-Vol3 binary path is pinned to SilentWitness's OWN venv at
+Vol3 binary is pinned to SilentWitness's OWN venv at
 ``/opt/silentwitness/vol3-venv/bin/vol`` — see CLAUDE.md "Critical pin
 reminders": SIFT pins no Vol3 version (open issue #1985 on Vol3 2.28
-regresses layer detection on large dumps), so we install our own.
-"""
+regresses layer detection on large dumps), so we install our own."""
 
 from __future__ import annotations
 
@@ -21,6 +12,7 @@ import asyncio
 import dataclasses
 import hashlib
 import json
+import logging
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -35,6 +27,8 @@ from silentwitness_common.types import AuditEntry, DataProvenance, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.envelope import make_empty_provenance
 from silentwitness_mcp.verification.normalizer import normalize_output
+
+_LOG = logging.getLogger(__name__)
 
 _BLOB_DIR: Final = "audit/blobs"
 _SENTINEL_PATH: Final = Path("/dev/null")
@@ -119,6 +113,31 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
             "0xE8/0xE9 + nop sled indicates shellcode"
         ),
     ),
+    "netscan": (
+        # Ordered: action-shaping caveat first, build-fragility CYA second,
+        # owner resolution third, listening-state interpretation fourth.
+        (
+            "windows.netscan pool-tag scan returns both active AND "
+            "recently-closed endpoints — filter state to ESTABLISHED for "
+            "live C2 evidence; TIME_WAIT / CLOSE_WAIT / FIN_WAIT_* are "
+            "historical"
+        ),
+        (
+            "windows.netscan is build-fragile on Windows 10/11 — symbol "
+            "drift across builds can drop entries or surface artifacts; "
+            "cross-check with vol_netstat when available"
+        ),
+        (
+            "Owner process resolution requires the PID still being valid "
+            "in pslist — owner may be blank for endpoints whose process "
+            "has exited"
+        ),
+        (
+            "LISTENING state on a non-loopback bind from a non-standard "
+            "process is a backdoor candidate; LISTENING on loopback is "
+            "normal IPC"
+        ),
+    ),
 }
 
 
@@ -147,9 +166,9 @@ async def _run_vol(
     plugin_name: str,
     evidence_path: Path,
     *,
+    normalizer_key: str,
     extra_argv: list[str] | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
-    normalizer_key: str = "vol_pslist",
 ) -> _VolResult:
     """Spawn Vol3 in JSON-renderer mode (`-r json`) against
     ``evidence_path`` and return the typed result.
@@ -229,24 +248,37 @@ def cmd_argv_for(
 # ---------------------------------------------------------------------------
 
 
+def blob_path_for(case_dir: Path, audit_id: str) -> Path:
+    """Single source of truth for the blob path scheme. Persist AND
+    orphan-cleanup paths both go through here — silent drift between
+    a writer and a cleaner would otherwise let orphaned blobs survive
+    on disk past their audit row's death."""
+    return case_dir / _BLOB_DIR / f"{audit_id}.txt"
+
+
 def persist_blob(case_dir: Path, audit_id: str, normalized: bytes) -> Path:
     """Atomic write of the normalized stdout to
     ``cases/<id>/audit/blobs/<audit_id>.txt`` (architecture §4.6)."""
-    blob_dir = case_dir / _BLOB_DIR
-    blob_dir.mkdir(parents=True, exist_ok=True)
-    blob_path = blob_dir / f"{audit_id}.txt"
+    blob_path = blob_path_for(case_dir, audit_id)
+    blob_path.parent.mkdir(parents=True, exist_ok=True)
     write_bytes_atomic(blob_path, normalized)
     return blob_path
 
 
 def delete_orphan_blob(blob_path: Path | None) -> None:
-    """Drop a blob whose audit-row write failed post-persist."""
+    """Drop a blob whose audit-row write failed post-persist.
+
+    Logs at ERROR if the unlink itself fails — a swallowed failure
+    here is a forensic-trail integrity question, not noise. The
+    caller's refusal envelope still surfaces TOOL_FAILED, so the
+    operator sees both signals: the original write failure (in the
+    envelope advisory) and the orphan-cleanup failure (in the log)."""
     if blob_path is None:
         return
     try:
         blob_path.unlink(missing_ok=True)
-    except OSError:
-        pass
+    except OSError as exc:
+        _LOG.error("orphan blob cleanup failed: path=%s errno=%s: %s", blob_path, exc.errno, exc)
 
 
 def write_audit_row(
@@ -352,6 +384,7 @@ __all__ = [
     "VolFailureReason",
     "_VolResult",
     "_run_vol",
+    "blob_path_for",
     "caveats_for",
     "cmd_argv_for",
     "delete_orphan_blob",
