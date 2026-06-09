@@ -221,7 +221,52 @@ class NetscanOutput(BaseModel):
     entries: tuple[NetscanEntry, ...]
 
 
+_PEB_PAGED_OUT_PREFIX: Final = "Required memory at"
+"""Vol3's placeholder when a process's PEB is paged out to pagefile.sys
+and the dump didn't include the pagefile. The string starts with this
+prefix; downstream code normalises it (and the literal ``"null"`` /
+empty string) to ``None`` so the typed ``args: str | None`` field
+honestly distinguishes "no args" from "couldn't read args"."""
+
+
+class CmdlineEntry(BaseModel):
+    """Vol3 ``windows.cmdline`` row — one process's launch command line.
+
+    ``args`` is ``str | None``:
+    - ``str`` when Vol3 successfully read the PEB ProcessParameters
+    - ``None`` for processes with empty args (System / Registry /
+      smss.exe and some service-host processes have this legitimately)
+      AND for paged-out PEBs (Vol3 placeholder collapsed to None)
+
+    The caveat layer flags this ambiguity ("missing Args for paged-out
+    PEBs is a smear artifact, not evidence of tampering"); the type
+    layer just preserves the distinction between "real string" and
+    "no string available"."""
+
+    model_config = _ROW_CONFIG
+
+    pid: int = Field(alias="PID")
+    process: str = Field(alias="Process")
+    args: str | None = Field(default=None, alias="Args")
+
+    @field_validator("args", mode="before")
+    @classmethod
+    def _normalise_args(cls, value: object) -> str | None:
+        if value is None or value == "" or value == "null":
+            return None
+        if isinstance(value, str) and value.startswith(_PEB_PAGED_OUT_PREFIX):
+            return None
+        return value  # type: ignore[return-value]
+
+
+class CmdlineOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[CmdlineEntry, ...]
+
+
 __all__ = [
+    "CmdlineEntry",
+    "CmdlineOutput",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",

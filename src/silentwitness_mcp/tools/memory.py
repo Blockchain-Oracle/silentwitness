@@ -15,6 +15,8 @@ from silentwitness_common.types import ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.tools._memory_models import (
+    CmdlineEntry,
+    CmdlineOutput,
     MalfindHit,
     MalfindOutput,
     NetscanEntry,
@@ -36,6 +38,8 @@ _PSSCAN_PLUGIN: Final = "windows.psscan.PsScan"
 # Vol3 ≥2.29 removes windows.malfind — windows.malware path is future-safe.
 _MALFIND_PLUGIN: Final = "windows.malware.malfind.Malfind"
 _NETSCAN_PLUGIN: Final = "windows.netscan.NetScan"
+# Capital-L: class-suffixed form Vol3 ≥2.27 expects.
+_CMDLINE_PLUGIN: Final = "windows.cmdline.CmdLine"
 
 _MALFIND_HEXDUMP_CAP: Final = 256  # = 128 bytes of hex
 _HEX_CHARS: Final = frozenset("0123456789abcdefABCDEF")
@@ -143,6 +147,35 @@ async def vol_malfind(
     )
 
 
+async def vol_cmdline(
+    evidence_path: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    pid: int | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[CmdlineOutput]:
+    """Per-process command-line recovery from each ``_EPROCESS.Peb.
+    ProcessParameters.CommandLine``. ``pid=None`` scans all processes;
+    an int filters at the Vol3 plugin layer."""
+    return await _run_wrapper(
+        tool_name="vol_cmdline",
+        plugin_name=_CMDLINE_PLUGIN,
+        caveat_key="cmdline",
+        output_cls=CmdlineOutput,
+        parse_rows=lambda raw: _parse_flat(raw, CmdlineEntry, CmdlineOutput),
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+        extra_argv=["--pid", str(pid)] if pid is not None else None,
+    )
+
+
 async def vol_netscan(
     evidence_path: Path,
     *,
@@ -226,6 +259,8 @@ def hidden_or_terminated_candidates(pslist_pids: set[int], psscan_pids: set[int]
 
 
 __all__ = [
+    "CmdlineEntry",
+    "CmdlineOutput",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",
@@ -237,6 +272,7 @@ __all__ = [
     "PstreeEntry",
     "PstreeOutput",
     "hidden_or_terminated_candidates",
+    "vol_cmdline",
     "vol_malfind",
     "vol_netscan",
     "vol_pslist",

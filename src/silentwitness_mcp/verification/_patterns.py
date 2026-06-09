@@ -103,6 +103,7 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "vol_psscan": _VOL3,
     "vol_malfind": _VOL3,
     "vol_netscan": _VOL3,
+    "vol_cmdline": _VOL3,
     "vol_filescan": _VOL3,
     "vol_lsadump": _VOL3,
     "parse_evtx": _EVTX,
