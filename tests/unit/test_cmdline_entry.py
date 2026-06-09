@@ -40,7 +40,16 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "\tNull\n",
         "\x00",
         "   ",
-        # Paged-out PEB placeholder + the two known prefixes from Vol3.
+        # Interleaved NUL + whitespace — chained .strip().strip("\x00")
+        # would miss this (outer NULs go, embedded space remains, the
+        # empty-string sentinel never fires). Regex strip catches it.
+        "\x00 \x00",
+        " \x00 \x00 ",
+        "\x00null\x00",
+        # Paged-out PEB placeholder — Vol3 emits "Required memory at 0x..."
+        # with the hex address; the prefix MUST be anchored on "0x" so
+        # a legitimate "Required memory at boot loader v2.0" cmdline
+        # is NOT silently nulled.
         "Required memory at 0x7ffe4dc8 is not valid (process exited?)",
         " Required memory at 0x7ffe4dc8 is not valid",
         "required memory at 0x7ffe4dc8 is not valid",
@@ -73,6 +82,13 @@ def test_args_no_string_available_collapses_to_none(sentinel: object) -> None:
         # Edge: a literal string CONTAINING the word "null" — must
         # NOT collapse (only the bare sentinel does).
         "null.exe --config=null",
+        # Trap: a real cmdline that starts with the literal "Required
+        # memory at" but is NOT followed by "0x" — anchoring on the
+        # hex suffix prevents this from being silently nulled.
+        "Required memory at boot loader v2.0",
+        "Required memory atomically locked by /lock=on",
+        # Mixed-case + suffix variant of the trap.
+        "required memory at sector 7",
     ],
 )
 def test_args_real_command_lines_preserved_verbatim(real_cmdline: str) -> None:

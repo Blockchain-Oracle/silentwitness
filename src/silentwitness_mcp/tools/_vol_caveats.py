@@ -119,23 +119,22 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
 }
 
 
-class UnknownCaveatKeyError(KeyError):
-    """Raised when ``caveats_for`` is called with a key not in the
-    catalogue. The previous silent-empty-tuple default contradicted
-    the docstring (which warned a typo would "strip safety guidance
-    from the audit row") and would let a renamed-but-not-re-registered
-    tool ship findings with no caveats. Now fails loud so
-    :func:`_run_wrapper` surfaces it as ``OUTPUT_PARSE_FAILED``
-    via the ``ValidationError | ValueError`` catch path."""
+class UnknownCaveatKeyError(ValueError):
+    """Raised when ``caveats_for`` is called with a key not registered
+    in :data:`_VOL_CAVEATS`. Inherits from :class:`ValueError` to match
+    the :class:`UnknownToolError` precedent in
+    :mod:`silentwitness_mcp.verification.normalizer` and so
+    :func:`_run_wrapper`'s ``ValidationError | ValueError`` catch path
+    surfaces it as ``OUTPUT_PARSE_FAILED`` if it ever leaks past the
+    pre-spawn fail-fast check. A typo or rename-without-update would
+    otherwise silently strip safety guidance from the audit row."""
 
 
 def caveats_for(plugin_key: str) -> tuple[str, ...]:
-    """Return the caveat list for ``plugin_key``.
+    """Return the caveat tuple registered for ``plugin_key``.
 
-    Raises :class:`UnknownCaveatKeyError` for unregistered keys —
-    a typo or rename-without-update would otherwise silently strip
-    safety guidance from the audit row, exactly the failure mode
-    the silent-empty-tuple default invited."""
+    Raises :class:`UnknownCaveatKeyError` on unregistered keys so
+    a wiring typo cannot ship findings with an empty caveat list."""
     try:
         return _VOL_CAVEATS[plugin_key]
     except KeyError as exc:

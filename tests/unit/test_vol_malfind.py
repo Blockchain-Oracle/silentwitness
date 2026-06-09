@@ -393,3 +393,7 @@ def test_malfind_unknown_column_triggers_output_parse_failed(
     )
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
+
+
+# vol_malfind pid-guard regression lives in test_vol_pipeline_contract.py
+# (cross-cutting wrapper-input invariant shared with vol_cmdline).
