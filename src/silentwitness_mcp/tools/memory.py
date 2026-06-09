@@ -10,11 +10,10 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ValidationError
 
 from silentwitness_common.types import DataProvenance, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
@@ -23,6 +22,16 @@ from silentwitness_mcp.evidence.registry import (
     EvidenceNotRegisteredError,
     EvidenceRegistry,
     EvidenceRegistryError,
+)
+from silentwitness_mcp.tools._memory_models import (
+    MalfindHit,
+    MalfindOutput,
+    PslistEntry,
+    PslistOutput,
+    PsscanEntry,
+    PsscanOutput,
+    PstreeEntry,
+    PstreeOutput,
 )
 from silentwitness_mcp.tools._vol_common import (
     DEFAULT_TIMEOUT_S,
@@ -40,68 +49,11 @@ from silentwitness_mcp.tools._vol_common import (
 _PSLIST_PLUGIN: Final = "windows.pslist.PsList"
 _PSTREE_PLUGIN: Final = "windows.pstree.PsTree"
 _PSSCAN_PLUGIN: Final = "windows.psscan.PsScan"
+# Vol3 ≥2.29 removes windows.malfind — windows.malware path is future-safe.
+_MALFIND_PLUGIN: Final = "windows.malware.malfind.Malfind"
 _AUDIT_LOG_FILENAME: Final = "memory.jsonl"
 _PARSE_PREVIEW_BYTES: Final = 200
-
-
-# ---------------------------------------------------------------------------
-# Pydantic output models
-# ---------------------------------------------------------------------------
-
-
-class PslistEntry(BaseModel):
-    """Vol3 ``windows.pslist`` row. extra="forbid" so a future Vol3
-    column triggers OUTPUT_PARSE_FAILED instead of being silently
-    dropped — forensic audit cannot quietly elide schema drift."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
-
-    pid: int = Field(alias="PID")
-    ppid: int = Field(alias="PPID")
-    image_file_name: str = Field(alias="ImageFileName")
-    offset_v: int = Field(alias="Offset(V)")
-    threads: int = Field(alias="Threads")
-    handles: int | None = Field(default=None, alias="Handles")
-    session_id: int | None = Field(default=None, alias="SessionId")
-    wow64: bool = Field(alias="Wow64")
-    create_time: datetime | None = Field(default=None, alias="CreateTime")
-    exit_time: datetime | None = Field(default=None, alias="ExitTime")
-    file_output: str | None = Field(default=None, alias="File output")
-
-
-class PslistOutput(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    entries: tuple[PslistEntry, ...]
-
-
-class PstreeEntry(PslistEntry):
-    """Flattened pstree row. audit/cmd/path are pstree-only extras;
-    depth is NOT a column (recomputable downstream from pid pairs)."""
-
-    audit: str | None = Field(default=None, alias="Audit")
-    cmd: str | None = Field(default=None, alias="Cmd")
-    path: str | None = Field(default=None, alias="Path")
-
-
-class PstreeOutput(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    entries: tuple[PstreeEntry, ...]
-
-
-class PsscanEntry(PslistEntry):
-    """psscan returns the same columns as pslist (context/domain/03
-    §7.3). Intentionally empty — preserves the nominal type so a
-    PsscanOutput cannot carry PslistEntry rows. Do NOT collapse."""
-
-
-class PsscanOutput(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
-    entries: tuple[PsscanEntry, ...]
-
-
-# ---------------------------------------------------------------------------
-# Public tool bodies
-# ---------------------------------------------------------------------------
+_MALFIND_HEXDUMP_CAP: Final = 256  # = 128 bytes of hex
 
 
 async def vol_pslist(
@@ -178,9 +130,32 @@ async def vol_pstree(
     )
 
 
-# ---------------------------------------------------------------------------
-# Shared pipeline helpers
-# ---------------------------------------------------------------------------
+async def vol_malfind(
+    evidence_path: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    pid: int | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[MalfindOutput]:
+    """RWX-private-no-mapped-file VAD detection. ``pid=None`` scans
+    all processes; an int filters at the Vol3 plugin layer."""
+    return await _run_wrapper(
+        tool_name="vol_malfind",
+        plugin_name=_MALFIND_PLUGIN,
+        caveat_key="malfind",
+        output_cls=MalfindOutput,
+        parse_rows=_parse_malfind,
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+        extra_argv=["--pid", str(pid)] if pid is not None else None,
+    )
 
 
 def _check_evidence_gates(
@@ -225,6 +200,7 @@ async def _run_wrapper[TPayload: BaseModel](
     audit_logger: AuditLogger,
     model_used: str,
     timeout_s: float,
+    extra_argv: list[str] | None = None,
 ) -> ToolResponse[TPayload]:
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
@@ -238,6 +214,7 @@ async def _run_wrapper[TPayload: BaseModel](
         "audit_logger": audit_logger,
         "evidence_path": evidence_path,
         "model_used": model_used,
+        "extra_argv": extra_argv,
     }
 
     gate = _check_evidence_gates(evidence_path, evidence_registry=evidence_registry)
@@ -251,7 +228,9 @@ async def _run_wrapper[TPayload: BaseModel](
         )
 
     try:
-        result = await _run_vol(plugin_name, evidence_path, timeout_s=timeout_s)
+        result = await _run_vol(
+            plugin_name, evidence_path, extra_argv=extra_argv, timeout_s=timeout_s
+        )
     except TimeoutError:
         return refuse(
             VolFailureReason.TOOL_TIMEOUT,
@@ -334,14 +313,9 @@ async def _run_wrapper[TPayload: BaseModel](
             stdout_path=blob_path,
             result_sha256=result.result_sha256,
             elapsed_ms=result.elapsed_ms,
-            cmd_argv=tuple(cmd_argv_for(plugin_name, evidence_path)),
+            cmd_argv=tuple(cmd_argv_for(plugin_name, evidence_path, extra_argv)),
         ),
     )
-
-
-# ---------------------------------------------------------------------------
-# Parsers
-# ---------------------------------------------------------------------------
 
 
 def _parse_flat[TPayload: BaseModel, TEntry: BaseModel](
@@ -352,6 +326,25 @@ def _parse_flat[TPayload: BaseModel, TEntry: BaseModel](
         raise ValueError(f"Vol3 JSON renderer returned {type(rows).__name__}, expected list")
     entries = tuple(row_cls.model_validate(row) for row in rows)
     return output_cls(entries=entries)
+
+
+_HEX_CHARS: Final = frozenset("0123456789abcdefABCDEF")
+
+
+def _parse_malfind(raw: bytes) -> MalfindOutput:
+    """Trim Hexdump to 256 hex chars (first 128 bytes). Vol3 emits
+    offset-prefixed + ASCII-suffixed lines; filtering to [0-9a-fA-F]
+    keeps the field name honest (silent-failure LOW from PR #140)."""
+    rows = json.loads(raw.decode("utf-8"))
+    if not isinstance(rows, list):
+        raise ValueError(f"malfind JSON must be a list, got {type(rows).__name__}")
+    hits: list[MalfindHit] = []
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get("Hexdump"), str):
+            hex_only = "".join(c for c in row["Hexdump"] if c in _HEX_CHARS)
+            row = {**row, "Hexdump": hex_only[:_MALFIND_HEXDUMP_CAP]}
+        hits.append(MalfindHit.model_validate(row))
+    return MalfindOutput(entries=tuple(hits))
 
 
 def _flatten_pstree(raw: bytes) -> list[PstreeEntry]:
@@ -378,15 +371,15 @@ def _flatten_pstree(raw: bytes) -> list[PstreeEntry]:
 
 
 def hidden_or_terminated_candidates(pslist_pids: set[int], psscan_pids: set[int]) -> set[int]:
-    """The rootkit-detection diff: processes in psscan but NOT in
-    pslist (story BDD line 92). Entries with ``exit_time=None`` are
-    DKOM-hidden candidates; with ``exit_time`` populated, terminated
-    teardown. The diff itself is straight set subtraction — the
-    interpretation lives downstream."""
+    """Rootkit-detection diff: processes in psscan but NOT in pslist.
+    exit_time=None ⇒ DKOM-hidden candidate; populated ⇒ terminated
+    teardown. Interpretation lives downstream."""
     return psscan_pids - pslist_pids
 
 
 __all__ = [
+    "MalfindHit",
+    "MalfindOutput",
     "PslistEntry",
     "PslistOutput",
     "PsscanEntry",
@@ -394,6 +387,7 @@ __all__ = [
     "PstreeEntry",
     "PstreeOutput",
     "hidden_or_terminated_candidates",
+    "vol_malfind",
     "vol_pslist",
     "vol_psscan",
     "vol_pstree",

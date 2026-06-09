@@ -101,6 +101,24 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
             "trusting an entry"
         ),
     ),
+    "malfind": (
+        (
+            "RWX private memory with no mapped file is the classic injection "
+            "pattern — but legitimate JIT engines (.NET CLR, Java JVM, "
+            "V8/Node, Chromium) also allocate RWX; corroborate with "
+            "vol_ldrmodules and process lineage before claiming injection"
+        ),
+        (
+            "windows.malfind misses RX-only code (attacker VirtualProtect'd "
+            "from RWX to RX post-write) and misses file-backed hollowed "
+            "images (use vol_ldrmodules for hollowing detection)"
+        ),
+        (
+            "hexdump_first_128 captures the first 128 bytes of the suspicious "
+            "VAD — MZ + PE\\0\\0 pattern indicates a PE payload; lone "
+            "0xE8/0xE9 + nop sled indicates shellcode"
+        ),
+    ),
 }
 
 
@@ -289,6 +307,7 @@ def refuse[TPayload: BaseModel](
     blob_path: Path | None = None,
     exit_code: int | None = None,
     result_sha256: str | None = None,
+    extra_argv: list[str] | None = None,
 ) -> ToolResponse[TPayload]:
     """Build refusal envelope + audit row. Pre-subprocess refusals get
     an empty-sentinel :class:`DataProvenance`; post-subprocess refusals
@@ -315,7 +334,7 @@ def refuse[TPayload: BaseModel](
             stdout_path=blob_path,
             result_sha256=result_sha256,
             elapsed_ms=elapsed_ms,
-            cmd_argv=tuple(cmd_argv_for(plugin_name, evidence_path)),
+            cmd_argv=tuple(cmd_argv_for(plugin_name, evidence_path, extra_argv)),
         )
     return ToolResponse[TPayload](
         success=False,

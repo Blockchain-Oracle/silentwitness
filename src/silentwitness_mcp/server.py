@@ -49,16 +49,15 @@ from pydantic import AnyHttpUrl
 from silentwitness_mcp import __version__
 from silentwitness_mcp._lifecycle import AppContext, lifespan
 
-# Tools that touch /evidence must refuse to operate when the mount
-# validator (architecture §4.11) reports the mount is missing
-# ``ro,noexec,nosuid``. The lifespan still registers them so MCP
-# clients can introspect the surface, but each call returns
-# MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
+# Tools touching /evidence refuse on bad mount (architecture §4.11).
+# Lifespan still registers them so clients can introspect; each call
+# returns MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
 EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
     {
         "record_observation",
         "register_evidence",
         "verify_evidence_hash",
+        "vol_malfind",
         "vol_pslist",
         "vol_psscan",
         "vol_pstree",
@@ -238,21 +237,18 @@ def _guard_mount(tool_name: str, ctx: Context[ServerSession, AppContext]) -> Non
 
 
 def _register_finding_tool_stubs(mcp: FastMCP) -> None:
-    """Register the architecture §4.2 tools as mount-guarded stubs.
-    Real bodies live in tools/* and findings/*; the MCP surface stays
-    a stub until the case-context-binding story wires lifespan state."""
+    """Architecture §4.2 tools as mount-guarded stubs (bodies in
+    tools/* and findings/*; real wiring pending case-context binding)."""
 
     @mcp.tool()
     def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Record a verifiable observation (architecture §4.5/§4.7). Stub."""
+        """Record a verifiable observation (§4.5/§4.7). Stub."""
         _guard_mount("record_observation", ctx)
         raise NotImplementedError("record_observation is registered but not yet implemented")
 
     @mcp.tool()
-    def record_interpretation(
-        ctx: Context[ServerSession, AppContext],
-    ) -> dict[str, str]:
-        """Record an interpretation that links observations to a hypothesis. Stub."""
+    def record_interpretation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Link observations to a hypothesis. Stub."""
         _guard_mount("record_interpretation", ctx)
         raise NotImplementedError("record_interpretation is registered but not yet implemented")
 
@@ -276,14 +272,12 @@ def _register_finding_tool_stubs(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def register_evidence(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Hash + manifest registration (architecture §4.10). Stub."""
+        """Hash + manifest registration (§4.10). Stub."""
         _guard_mount("register_evidence", ctx)
         raise NotImplementedError("register_evidence is registered but not yet implemented")
 
     @mcp.tool()
-    def verify_evidence_hash(
-        ctx: Context[ServerSession, AppContext],
-    ) -> dict[str, str]:
+    def verify_evidence_hash(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Re-hash on case resume to catch bit-rot. Stub."""
         _guard_mount("verify_evidence_hash", ctx)
         raise NotImplementedError("verify_evidence_hash is registered but not yet implemented")
@@ -305,6 +299,12 @@ def _register_finding_tool_stubs(mcp: FastMCP) -> None:
         """Volatility3 windows.pstree. Stub pending case-context binding."""
         _guard_mount("vol_pstree", ctx)
         raise NotImplementedError("vol_pstree body pending case-context binding")
+
+    @mcp.tool()
+    def vol_malfind(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Vol3 windows.malware.malfind. Stub pending case-context binding."""
+        _guard_mount("vol_malfind", ctx)
+        raise NotImplementedError("vol_malfind body pending case-context binding")
 
 
 # ---------------------------------------------------------------------------
