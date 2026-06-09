@@ -21,6 +21,7 @@ import asyncio
 import dataclasses
 import hashlib
 import json
+import logging
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -35,6 +36,8 @@ from silentwitness_common.types import AuditEntry, DataProvenance, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.envelope import make_empty_provenance
 from silentwitness_mcp.verification.normalizer import normalize_output
+
+_LOG = logging.getLogger(__name__)
 
 _BLOB_DIR: Final = "audit/blobs"
 _SENTINEL_PATH: Final = Path("/dev/null")
@@ -172,9 +175,9 @@ async def _run_vol(
     plugin_name: str,
     evidence_path: Path,
     *,
+    normalizer_key: str,
     extra_argv: list[str] | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
-    normalizer_key: str = "vol_pslist",
 ) -> _VolResult:
     """Spawn Vol3 in JSON-renderer mode (`-r json`) against
     ``evidence_path`` and return the typed result.
@@ -265,13 +268,19 @@ def persist_blob(case_dir: Path, audit_id: str, normalized: bytes) -> Path:
 
 
 def delete_orphan_blob(blob_path: Path | None) -> None:
-    """Drop a blob whose audit-row write failed post-persist."""
+    """Drop a blob whose audit-row write failed post-persist.
+
+    Logs at ERROR if the unlink itself fails — a swallowed failure
+    here is a forensic-trail integrity question, not noise. The
+    caller's refusal envelope still surfaces TOOL_FAILED, so the
+    operator sees both signals: the original write failure (in the
+    envelope advisory) and the orphan-cleanup failure (in the log)."""
     if blob_path is None:
         return
     try:
         blob_path.unlink(missing_ok=True)
-    except OSError:
-        pass
+    except OSError as exc:
+        _LOG.error("orphan blob cleanup failed: path=%s errno=%s: %s", blob_path, exc.errno, exc)
 
 
 def write_audit_row(

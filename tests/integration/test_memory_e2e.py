@@ -143,7 +143,5 @@ def test_netscan_against_nist_image(tmp_path: Path) -> None:
             model_used="claude-sonnet-4-6",
         )
     )
-    # Endpoint count is dataset-dependent; the e2e contract is "Vol3
-    # invocation + JSON parse succeeded".
     assert envelope.success is True
     assert envelope.data is not None

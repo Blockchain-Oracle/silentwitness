@@ -1,11 +1,9 @@
 """Volatility 3 memory-family tool bodies (architecture §4.6, PRD FR #5).
 
-Subprocess + audit + blob + refusal plumbing lives in
-:mod:`_vol_common`. The end-to-end orchestrator (gate check → spawn
-→ persist → parse → audit) lives in :mod:`_vol_pipeline`. Plugin
-names use the class-suffixed form (``windows.pslist.PsList``). The
-``-r json`` renderer emits a flat array for pslist/psscan/netscan
-and an ``__children`` tree for pstree."""
+Plugin names use the class-suffixed form (``windows.pslist.PsList``).
+The ``-r json`` renderer emits a flat array for most plugins and a
+nested ``__children`` tree for pstree — :mod:`_vol_pipeline` wires
+the orchestrator; bespoke parsers live below."""
 
 from __future__ import annotations
 
@@ -189,35 +187,12 @@ def _parse_malfind(raw: bytes) -> MalfindOutput:
 
 
 def _parse_netscan(raw: bytes) -> NetscanOutput:
-    """Vol3 emits ``"*"`` for the UDP foreign address/port — UDP is
-    connectionless so there is no peer to report. Normalise both to
-    ``None`` before model validation so ``NetscanEntry`` can keep
-    typed ``int | None`` / ``str | None`` fields (Pydantic does NOT
-    coerce the literal string ``"*"`` to None). The state field is
-    similarly null for UDP."""
+    """Thin JSON-list adapter. Wildcard normalisation + IP-shape +
+    TCB-state + cross-field invariants all live on ``NetscanEntry``."""
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"netscan JSON must be a list, got {type(rows).__name__}")
-    entries: list[NetscanEntry] = []
-    for row in rows:
-        if isinstance(row, dict):
-            row = {**row, **_netscan_wildcard_overrides(row)}
-        entries.append(NetscanEntry.model_validate(row))
-    return NetscanOutput(entries=tuple(entries))
-
-
-def _netscan_wildcard_overrides(row: dict[str, Any]) -> dict[str, Any]:
-    """Per-field ``"*"`` → ``None`` rewrites. Returns only the keys
-    that need overriding so the caller's spread keeps verbatim values
-    for everything else (no IPv6 normalisation, see story BDD §44)."""
-    overrides: dict[str, Any] = {}
-    if row.get("ForeignAddr") == "*":
-        overrides["ForeignAddr"] = None
-    if row.get("ForeignPort") == "*":
-        overrides["ForeignPort"] = None
-    if row.get("State") == "*":
-        overrides["State"] = None
-    return overrides
+    return NetscanOutput(entries=tuple(NetscanEntry.model_validate(row) for row in rows))
 
 
 def _flatten_pstree(raw: bytes) -> list[PstreeEntry]:

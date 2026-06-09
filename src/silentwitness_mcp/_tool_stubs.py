@@ -1,12 +1,8 @@
-"""Architecture §4.2 tool-stub registry (extracted from
-:mod:`server` to keep ``server.py`` under the 400-LOC CI cap).
+"""Architecture §4.2 tool-stub registry.
 
-Each ``@mcp.tool()`` decorator surfaces a typed FastMCP tool. Bodies
-are placeholders (the real wiring lives in :mod:`tools.*` and
-:mod:`findings.*` and is bound in a later story's case-context
-plumbing); every stub mount-guards via :func:`_guard_mount` so an
-invocation against a misconfigured ``/evidence`` mount fails with the
-typed ``MOUNT_NOT_RO_NOEXEC_NOSUID`` rejection rather than a generic
+Every stub mount-guards via the injected ``guard_mount`` callback so
+a misconfigured ``/evidence`` mount surfaces as the typed
+``MOUNT_NOT_RO_NOEXEC_NOSUID`` rejection rather than a generic
 ``NotImplementedError``."""
 
 from __future__ import annotations
@@ -25,8 +21,15 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     """Bind every architecture §4.2 tool as a mount-guarded stub.
 
     ``guard_mount`` is injected so this module stays decoupled from
-    the server's mount-check internals — the only side effect from
-    here is decorator-driven FastMCP registration."""
+    the server's mount-check internals. A ``None`` here would silently
+    bind every stub to a NoneType-not-callable failure at FIRST tool
+    invocation; reject it at config time instead — the typed
+    ``MOUNT_NOT_RO_NOEXEC_NOSUID`` rejection is too load-bearing to
+    let slip past a configuration footgun."""
+    if guard_mount is None:
+        raise TypeError(
+            "register_finding_tool_stubs requires a non-None guard_mount callable; got None"
+        )
 
     @mcp.tool()
     def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
@@ -72,33 +75,33 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
 
     @mcp.tool()
     def vol_pslist(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Volatility3 windows.pslist. Stub pending case-context binding."""
+        """Volatility3 windows.pslist. Stub."""
         guard_mount("vol_pslist", ctx)
-        raise NotImplementedError("vol_pslist body pending case-context binding")
+        raise NotImplementedError("vol_pslist is registered but not yet implemented")
 
     @mcp.tool()
     def vol_psscan(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Volatility3 windows.psscan. Stub pending case-context binding."""
+        """Volatility3 windows.psscan. Stub."""
         guard_mount("vol_psscan", ctx)
-        raise NotImplementedError("vol_psscan body pending case-context binding")
+        raise NotImplementedError("vol_psscan is registered but not yet implemented")
 
     @mcp.tool()
     def vol_pstree(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Volatility3 windows.pstree. Stub pending case-context binding."""
+        """Volatility3 windows.pstree. Stub."""
         guard_mount("vol_pstree", ctx)
-        raise NotImplementedError("vol_pstree body pending case-context binding")
+        raise NotImplementedError("vol_pstree is registered but not yet implemented")
 
     @mcp.tool()
     def vol_malfind(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Vol3 windows.malware.malfind. Stub pending case-context binding."""
+        """Vol3 windows.malware.malfind. Stub."""
         guard_mount("vol_malfind", ctx)
-        raise NotImplementedError("vol_malfind body pending case-context binding")
+        raise NotImplementedError("vol_malfind is registered but not yet implemented")
 
     @mcp.tool()
     def vol_netscan(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Vol3 windows.netscan. Stub pending case-context binding."""
+        """Vol3 windows.netscan. Stub."""
         guard_mount("vol_netscan", ctx)
-        raise NotImplementedError("vol_netscan body pending case-context binding")
+        raise NotImplementedError("vol_netscan is registered but not yet implemented")
 
 
 __all__ = ["register_finding_tool_stubs"]

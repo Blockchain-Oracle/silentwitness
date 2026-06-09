@@ -1,25 +1,8 @@
 """Shared Vol3 wrapper pipeline (architecture §4.6).
 
-Every ``vol_*`` family member runs the same pre-flight, subprocess,
-persist, parse, audit-write sequence and only differs in the plugin
-name, payload model, caveat key, and row→model parser. This module
-holds that shared body so per-tool entry points in :mod:`memory` stay
-short enough to keep the file under the 400-LOC CI cap.
-
-Three responsibilities live here, ordered the way ``_run_wrapper``
-calls them:
-
-1. :func:`_check_evidence_gates` — registry ``assert_registered`` +
-   ``verify_hash``. Returns a typed :class:`VolFailureReason` tuple
-   on failure so the orchestrator can refuse without spawning Vol3.
-2. :func:`_run_wrapper` — the orchestrator itself. Takes the
-   plugin-specific bits as parameters (tool_name, plugin_name,
-   caveat_key, output_cls, parse_rows, extra_argv).
-3. :func:`_parse_flat` — the default flat-JSON row parser used by
-   pslist / psscan / netscan / cmdline / dlllist / handles. Tools
-   with bespoke output (pstree's ``__children`` tree, malfind's
-   hexdump) ship their own parser into ``parse_rows``.
-"""
+Invariant: :func:`_check_evidence_gates` runs BEFORE
+:func:`_run_vol` — the registry assertion and SHA verification are
+pre-subprocess gates, never post."""
 
 from __future__ import annotations
 
@@ -53,6 +36,28 @@ from silentwitness_mcp.tools._vol_common import (
 
 _AUDIT_LOG_FILENAME: Final = "memory.jsonl"
 _PARSE_PREVIEW_BYTES: Final = 200
+_BLOB_DIR_FRAGMENT: Final = "audit/blobs"
+
+
+def _format_oserror(stage: str, exc: OSError) -> str:
+    """Structured advisory for a forensic OSError: stage + exc type +
+    errno + path. The bare ``str(exc)`` omits ``filename`` (the
+    partially-written target), which the audit reviewer needs to
+    reconcile blob ↔ row state on disk."""
+    parts = [stage, type(exc).__name__]
+    if exc.errno is not None:
+        parts.append(f"errno={exc.errno}")
+    if exc.filename:
+        parts.append(f"path={exc.filename}")
+    parts.append(str(exc))
+    return ": ".join(parts)
+
+
+def _expected_blob_path(case_dir: Path, audit_id: str) -> Path:
+    """Mirror of ``persist_blob``'s output path. Lets the persist
+    failure path delete the partial write without taking a dependency
+    on whether ``persist_blob`` reached its ``return`` statement."""
+    return case_dir / _BLOB_DIR_FRAGMENT / f"{audit_id}.txt"
 
 
 def _check_evidence_gates(
@@ -133,7 +138,11 @@ async def _run_wrapper[TPayload: BaseModel](
 
     try:
         result = await _run_vol(
-            plugin_name, evidence_path, extra_argv=extra_argv, timeout_s=timeout_s
+            plugin_name,
+            evidence_path,
+            extra_argv=extra_argv,
+            timeout_s=timeout_s,
+            normalizer_key=tool_name,
         )
     except TimeoutError:
         return refuse(
@@ -146,20 +155,27 @@ async def _run_wrapper[TPayload: BaseModel](
     try:
         blob_path = persist_blob(case_dir, pre_audit_id, result.stdout_normalized)
     except OSError as exc:
+        # write_bytes_atomic may leave the final file on disk if it failed
+        # AFTER the atomic replace but DURING the parent-dir fsync — see
+        # atomic_io docstring. Always attempt orphan cleanup.
+        delete_orphan_blob(_expected_blob_path(case_dir, pre_audit_id))
         return refuse(
             VolFailureReason.TOOL_FAILED,
             elapsed_ms=result.elapsed_ms,
-            advisories=(f"blob persist failed: {type(exc).__name__}: {exc}",),
+            advisories=(_format_oserror("blob persist failed", exc),),
             exit_code=result.exit_code,
             result_sha256=result.result_sha256,
             **refuse_kw,
         )
 
     if result.exit_code != 0:
+        stderr_advisory = truncated_stderr(result.stderr) or (
+            f"Vol3 {plugin_name} exited {result.exit_code} with no stderr output"
+        )
         return refuse(
             VolFailureReason.TOOL_FAILED,
             elapsed_ms=result.elapsed_ms,
-            advisories=(truncated_stderr(result.stderr),),
+            advisories=(stderr_advisory,),
             blob_path=blob_path,
             exit_code=result.exit_code,
             result_sha256=result.result_sha256,
@@ -200,7 +216,7 @@ async def _run_wrapper[TPayload: BaseModel](
         return refuse(
             VolFailureReason.TOOL_FAILED,
             elapsed_ms=result.elapsed_ms,
-            advisories=(f"audit row write failed: {type(exc).__name__}: {exc}",),
+            advisories=(_format_oserror("audit row write failed", exc),),
             exit_code=result.exit_code,
             result_sha256=result.result_sha256,
             **refuse_kw,

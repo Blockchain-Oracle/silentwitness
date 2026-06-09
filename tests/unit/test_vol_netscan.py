@@ -92,29 +92,30 @@ def _invoke(
     )
 
 
-def _tcp_v4(
-    *,
-    state: str = "ESTABLISHED",
-    pid: int | None = 1234,
-    local_addr: str = "10.0.0.5",
-    foreign_addr: str = "203.0.113.42",
-    foreign_port: int | None = 443,
-    owner: str | None = "svchost.exe",
-    created: str | None = "2026-06-09T08:00:00+00:00",
-    offset: int = 0xFA8001234567,
-) -> dict[str, Any]:
-    return {
-        "Offset": offset,
+def _tcp_v4(**overrides: Any) -> dict[str, Any]:
+    base: dict[str, Any] = {
+        "Offset": 0xFA8001234567,
         "Proto": "TCPv4",
-        "LocalAddr": local_addr,
+        "LocalAddr": "10.0.0.5",
         "LocalPort": 49152,
-        "ForeignAddr": foreign_addr,
-        "ForeignPort": foreign_port,
-        "State": state,
-        "PID": pid,
-        "Owner": owner,
-        "Created": created,
+        "ForeignAddr": "203.0.113.42",
+        "ForeignPort": 443,
+        "State": "ESTABLISHED",
+        "PID": 1234,
+        "Owner": "svchost.exe",
+        "Created": "2026-06-09T08:00:00+00:00",
     }
+    # Convert kwarg names (state, foreign_addr, pid) → JSON keys.
+    alias = {
+        "state": "State",
+        "pid": "PID",
+        "local_addr": "LocalAddr",
+        "foreign_addr": "ForeignAddr",
+        "foreign_port": "ForeignPort",
+    }
+    for k, v in overrides.items():
+        base[alias.get(k, k)] = v
+    return base
 
 
 def test_netscan_established_listening_time_wait_all_parse(
@@ -132,8 +133,14 @@ def test_netscan_established_listening_time_wait_all_parse(
     envelope = _invoke(env)
     assert envelope.success is True
     assert isinstance(envelope.data, NetscanOutput)
+    assert len(envelope.data.entries) == 3
     states = [e.state for e in envelope.data.entries]
     assert states == ["ESTABLISHED", "LISTENING", "TIME_WAIT"]
+    # The LISTENING-on-pid-4 row is forensically meaningful — System owns
+    # the LISTENING side of every legitimate Windows service. Verify pid
+    # round-tripped per-entry, not just the state column.
+    assert envelope.data.entries[1].pid == 4
+    assert all(e.proto == "TCPv4" for e in envelope.data.entries)
 
 
 def test_netscan_ipv6_and_ipv4_mapped_ipv6_preserved_verbatim(
@@ -154,6 +161,12 @@ def test_netscan_ipv6_and_ipv4_mapped_ipv6_preserved_verbatim(
     addrs = [(e.local_addr, e.foreign_addr) for e in envelope.data.entries]
     assert ("2001:db8::1", "::ffff:192.168.1.50") in addrs
     assert ("fe80::1", "::1") in addrs
+    # The IPv6-mapped IPv4 entry rides on TCPv4 (Vol3 reports the
+    # mapped form against the IPv4 endpoint); the bare-IPv6 entry
+    # rides on TCPv6. Pin both bindings.
+    by_addr = {e.foreign_addr: e.proto for e in envelope.data.entries}
+    assert by_addr["::ffff:192.168.1.50"] == "TCPv4"
+    assert by_addr["::1"] == "TCPv6"
 
 
 def test_netscan_udp_wildcard_foreign_normalised_to_none(
@@ -239,12 +252,23 @@ def test_netscan_tool_failed_surfaces_truncated_stderr(
     """Story BDD §59-62: Vol3 non-zero exit → ``TOOL_FAILED`` with
     ``advisories[0]`` carrying the first 500 chars of stderr."""
     stderr = b"Vol3: build-fragility - symbol drift on Win10 22H2\n" + b"Y" * 1000
-    _install_mock(monkeypatch, _FakeProc(stdout=b"", stderr=stderr, returncode=1))
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=b"", stderr=stderr, returncode=1))
+    case_dir = env[0]
     envelope = _invoke(env)
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.TOOL_FAILED.value
     assert "symbol drift" in envelope.advisories[0]
     assert len(envelope.advisories[0]) <= 500
+    # Vol3 WAS spawned once — post-spawn refusal contract.
+    assert len(calls) == 1
+    # Story BDD §62: the audit JSONL line must record exit_code != 0.
+    audit_rows = [
+        json.loads(line)
+        for line in (case_dir / "audit" / "memory.jsonl").read_text("utf-8").splitlines()
+        if line
+    ]
+    row = next(r for r in audit_rows if r["tool"] == "vol_netscan")
+    assert row["params"]["exit_code"] == 1
 
 
 def test_netscan_malformed_pid_field_triggers_output_parse_failed(
@@ -255,10 +279,11 @@ def test_netscan_malformed_pid_field_triggers_output_parse_failed(
     owner) MUST surface as OUTPUT_PARSE_FAILED — silent coercion
     would let downstream consumers compare against bogus int values."""
     bad = [{**_tcp_v4(), "PID": "??"}]
-    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(bad).encode("utf-8")))
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(bad).encode("utf-8")))
     envelope = _invoke(env)
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
+    assert len(calls) == 1  # post-spawn parse failure — Vol3 ran once
 
 
 def test_netscan_cmd_argv_is_class_suffixed_plugin_name(
@@ -315,8 +340,13 @@ def test_netscan_audit_row_result_sha256_matches_blob_hash(
     ]
     row = next(r for r in audit_rows if r["tool"] == "vol_netscan")
     blob_path = case_dir / "audit" / "blobs" / f"{envelope.audit_id}.txt"
-    assert row["result_sha256"] == hashlib.sha256(blob_path.read_bytes()).hexdigest()
+    blob_sha = hashlib.sha256(blob_path.read_bytes()).hexdigest()
+    assert row["result_sha256"] == blob_sha
     assert row["stdout_path"] == str(blob_path)
+    # Envelope's DataProvenance MUST agree with the audit row — drift
+    # between the two surfaces would let a finding cite a stale hash.
+    assert envelope.data_provenance.result_sha256 == blob_sha
+    assert envelope.data_provenance.stdout_path == blob_path
 
 
 def test_netscan_unknown_column_triggers_output_parse_failed(
@@ -327,7 +357,13 @@ def test_netscan_unknown_column_triggers_output_parse_failed(
     OUTPUT_PARSE_FAILED, not silent drop — forensic audit cannot
     quietly elide schema drift on network-attribution findings."""
     drifted = [{**_tcp_v4(), "Family": "AF_INET"}]
-    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(drifted).encode("utf-8")))
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(drifted).encode("utf-8")))
     envelope = _invoke(env)
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
+    assert len(calls) == 1  # post-spawn schema-drift — Vol3 ran once
+
+
+# Model-level validator tests live in test_netscan_entry.py.
+# Cross-cutting pipeline contracts (normalizer_key forwarding,
+# empty-stderr synthetic advisory) live in test_vol_pipeline_contract.py.
