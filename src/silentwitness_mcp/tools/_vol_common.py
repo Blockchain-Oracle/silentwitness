@@ -119,6 +119,31 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
             "0xE8/0xE9 + nop sled indicates shellcode"
         ),
     ),
+    "netscan": (
+        # Ordered: action-shaping caveat first, build-fragility CYA second,
+        # owner resolution third, listening-state interpretation fourth.
+        (
+            "windows.netscan pool-tag scan returns both active AND "
+            "recently-closed endpoints — filter state to ESTABLISHED for "
+            "live C2 evidence; TIME_WAIT / CLOSE_WAIT / FIN_WAIT_* are "
+            "historical"
+        ),
+        (
+            "windows.netscan is build-fragile on Windows 10/11 — symbol "
+            "drift across builds can drop entries or surface artifacts; "
+            "cross-check with vol_netstat when available"
+        ),
+        (
+            "Owner process resolution requires the PID still being valid "
+            "in pslist — owner may be blank for endpoints whose process "
+            "has exited"
+        ),
+        (
+            "LISTENING state on a non-loopback bind from a non-standard "
+            "process is a backdoor candidate; LISTENING on loopback is "
+            "normal IPC"
+        ),
+    ),
 }
 
 

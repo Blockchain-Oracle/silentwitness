@@ -9,6 +9,7 @@ trail cannot quietly elide unknown columns."""
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -89,9 +90,45 @@ class MalfindOutput(BaseModel):
     entries: tuple[MalfindHit, ...]
 
 
+class NetscanEntry(BaseModel):
+    """Vol3 ``windows.netscan`` row — one TCP/UDP endpoint.
+
+    ``local_addr`` and ``foreign_addr`` are preserved verbatim — the
+    entity gate later compares typed observations against cited spans
+    in tool output, so normalising ``::ffff:192.168.1.50`` to
+    ``192.168.1.50`` would let the gate falsely reject an observation
+    citing the IPv6-mapped form (story BDD §44).
+
+    ``state`` is ``str`` rather than ``Literal`` because Vol3 forwards
+    the kernel TCB state verbatim — future Windows builds could add
+    new states (e.g. ``SYN_RECV2``) and we'd rather forward them than
+    fail closed. UDP entries have ``state=None`` (connectionless).
+    """
+
+    model_config = _ROW_CONFIG
+
+    offset: int = Field(alias="Offset")
+    proto: Literal["TCPv4", "TCPv6", "UDPv4", "UDPv6"] = Field(alias="Proto")
+    local_addr: str = Field(alias="LocalAddr")
+    local_port: int = Field(alias="LocalPort")
+    foreign_addr: str | None = Field(default=None, alias="ForeignAddr")
+    foreign_port: int | None = Field(default=None, alias="ForeignPort")
+    state: str | None = Field(default=None, alias="State")
+    pid: int | None = Field(default=None, alias="PID")
+    owner: str | None = Field(default=None, alias="Owner")
+    created: datetime | None = Field(default=None, alias="Created")
+
+
+class NetscanOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[NetscanEntry, ...]
+
+
 __all__ = [
     "MalfindHit",
     "MalfindOutput",
+    "NetscanEntry",
+    "NetscanOutput",
     "PslistEntry",
     "PslistOutput",
     "PsscanEntry",
