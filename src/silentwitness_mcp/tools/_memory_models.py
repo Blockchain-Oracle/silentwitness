@@ -221,12 +221,24 @@ class NetscanOutput(BaseModel):
     entries: tuple[NetscanEntry, ...]
 
 
-_PEB_PAGED_OUT_PREFIX: Final = "Required memory at"
-"""Vol3's placeholder when a process's PEB is paged out to pagefile.sys
-and the dump didn't include the pagefile. The string starts with this
-prefix; downstream code normalises it (and the literal ``"null"`` /
-empty string) to ``None`` so the typed ``args: str | None`` field
-honestly distinguishes "no args" from "couldn't read args"."""
+_PEB_PLACEHOLDER_PREFIXES: Final[tuple[str, ...]] = (
+    "Required memory at",  # Vol3 2.27 — paged-out PEB, pagefile not loaded
+    "Swap layer is not available",  # Vol3 renderer when swap layer disabled
+)
+"""Closed catalogue of Vol3 "couldn't read this memory region" sentinel
+strings. Match is case-insensitive + whitespace-stripped so renderer
+drift on capitalisation or leading indent doesn't silently let a
+placeholder reach the entity gate as a citable evidence span.
+
+Additions to this tuple must be source-traced to a Vol3 commit — the
+``args: str | None`` invariant on :class:`CmdlineEntry` is what lets
+the caveat layer distinguish "no args" from "couldn't read args"
+honestly; widening this set silently would break that distinction."""
+
+_NULL_SENTINELS: Final[frozenset[str]] = frozenset({"", "null", "none"})
+"""Case-insensitive set of sentinel strings Vol3 may emit in lieu of
+a real ``args`` value. Forwarding any of these verbatim would lie
+about the args field downstream."""
 
 
 class CmdlineEntry(BaseModel):
@@ -241,7 +253,13 @@ class CmdlineEntry(BaseModel):
     The caveat layer flags this ambiguity ("missing Args for paged-out
     PEBs is a smear artifact, not evidence of tampering"); the type
     layer just preserves the distinction between "real string" and
-    "no string available"."""
+    "no string available".
+
+    Intentionally no ``process``↔``args`` cross-field invariant —
+    a "System with non-None args" row IS the threat model vol_cmdline
+    exists to detect (PEB tamper via RtlInitUnicodeString). Encoding
+    that pairing as a type invariant would make tampered rows
+    un-representable, defeating the tool's purpose."""
 
     model_config = _ROW_CONFIG
 
@@ -251,12 +269,23 @@ class CmdlineEntry(BaseModel):
 
     @field_validator("args", mode="before")
     @classmethod
-    def _normalise_args(cls, value: object) -> str | None:
-        if value is None or value == "" or value == "null":
+    def _normalise_args(cls, value: object) -> object:
+        # Non-str passes through; pydantic's outer str-typing then
+        # loud-fails on int / list / bool with ValidationError, which
+        # _run_wrapper surfaces as OUTPUT_PARSE_FAILED.
+        if not isinstance(value, str):
+            return value
+        # Strip + lowercase before sentinel + prefix checks so
+        # "  NULL  " / "required memory at..." / "Required memory at\n"
+        # all collapse honestly (silent-failure C1+C3+I3+I4 from
+        # 5-specialist review).
+        stripped = value.strip().strip("\x00")
+        folded = stripped.lower()
+        if folded in _NULL_SENTINELS:
             return None
-        if isinstance(value, str) and value.startswith(_PEB_PAGED_OUT_PREFIX):
+        if any(folded.startswith(p.lower()) for p in _PEB_PLACEHOLDER_PREFIXES):
             return None
-        return value  # type: ignore[return-value]
+        return value  # verbatim preservation for the entity gate
 
 
 class CmdlineOutput(BaseModel):

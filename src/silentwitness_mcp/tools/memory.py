@@ -41,6 +41,20 @@ _NETSCAN_PLUGIN: Final = "windows.netscan.NetScan"
 # Capital-L: class-suffixed form Vol3 ≥2.27 expects.
 _CMDLINE_PLUGIN: Final = "windows.cmdline.CmdLine"
 
+# PID 0 (System Idle) and negative PIDs have no _EPROCESS / PEB —
+# Vol3 returns empty results OR errors with confusing stderr. Reject
+# at the wrapper boundary so an LLM-driven typo gets a clean message.
+_MIN_VALID_PID: Final = 1
+
+
+def _validate_pid_filter(tool_name: str, pid: int | None) -> None:
+    if pid is not None and pid < _MIN_VALID_PID:
+        raise ValueError(
+            f"{tool_name}: pid must be >= {_MIN_VALID_PID} or None; got {pid} "
+            f"(PID 0 = System Idle has no PEB / VAD)"
+        )
+
+
 _MALFIND_HEXDUMP_CAP: Final = 256  # = 128 bytes of hex
 _HEX_CHARS: Final = frozenset("0123456789abcdefABCDEF")
 
@@ -131,6 +145,7 @@ async def vol_malfind(
 ) -> ToolResponse[MalfindOutput]:
     """RWX-private-no-mapped-file VAD detection. ``pid=None`` scans
     all processes; an int filters at the Vol3 plugin layer."""
+    _validate_pid_filter("vol_malfind", pid)
     return await _run_wrapper(
         tool_name="vol_malfind",
         plugin_name=_MALFIND_PLUGIN,
@@ -160,6 +175,7 @@ async def vol_cmdline(
     """Per-process command-line recovery from each ``_EPROCESS.Peb.
     ProcessParameters.CommandLine``. ``pid=None`` scans all processes;
     an int filters at the Vol3 plugin layer."""
+    _validate_pid_filter("vol_cmdline", pid)
     return await _run_wrapper(
         tool_name="vol_cmdline",
         plugin_name=_CMDLINE_PLUGIN,
