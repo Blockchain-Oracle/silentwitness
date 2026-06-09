@@ -41,10 +41,12 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "\x00",
         "   ",
         # Interleaved NUL + whitespace — chained .strip().strip("\x00")
-        # would miss this (outer NULs go, embedded space remains, the
-        # empty-string sentinel never fires). Regex strip catches it.
+        # leaves embedded whitespace, so the empty-string sentinel never
+        # fires. Regex single-pass strip catches it.
         "\x00 \x00",
         " \x00 \x00 ",
+        # NUL-bracketed sentinel (chained strip would also collapse this
+        # one; it's not the same regression but pins a related shape).
         "\x00null\x00",
         # Paged-out PEB placeholder — Vol3 emits "Required memory at 0x..."
         # with the hex address; the prefix MUST be anchored on "0x" so

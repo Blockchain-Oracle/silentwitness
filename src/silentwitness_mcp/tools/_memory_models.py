@@ -228,6 +228,13 @@ _PEB_PLACEHOLDER_PREFIXES: Final[tuple[str, ...]] = (
     "required memory at 0x",
     "swap layer is not available",
 )
+# Mechanical enforcement of the lowercase invariant: the match runs
+# against ``.lower()``-folded input, so a future addition like
+# ``"Paged Out"`` (mixed case) would silently fail to match and let
+# a placeholder reach the entity gate as a citation. Raise at import
+# (assert would strip under -O).
+if any(p != p.lower() for p in _PEB_PLACEHOLDER_PREFIXES):
+    raise ValueError("_PEB_PLACEHOLDER_PREFIXES entries must be pre-lowercased")
 """Closed catalogue of Vol3 "couldn't read this memory region"
 sentinel string prefixes, pre-lowercased at module load. Match is
 case-insensitive + whitespace+NUL-stripped so renderer drift on
