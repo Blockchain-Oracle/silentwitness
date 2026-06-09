@@ -119,11 +119,6 @@ class Transport(StrEnum):
     HTTP = "http"
 
 
-# ServerConfigurationError moved to silentwitness_mcp._errors so
-# _tool_stubs (a leaf consumed by this module) can raise it without
-# triggering a circular import.
-
-
 # ---------------------------------------------------------------------------
 # Bearer-token auth
 # ---------------------------------------------------------------------------

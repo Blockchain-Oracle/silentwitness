@@ -177,8 +177,10 @@ class NetscanEntry(BaseModel):
         # downstream matches verbatim cited spans, so canonicalisation here
         # (e.g. "::ffff:192.168.1.50" -> "192.168.1.50") would break it.
         # try/except is the closed defence a regex shape can't be: rejects
-        # "null:", "::", "..", "X:", trailing newline, leading whitespace —
-        # any string ipaddress can't parse.
+        # "null:", "..", "X:", trailing newline, NUL byte, leading whitespace —
+        # any string ipaddress.ip_address() cannot parse. NB: "::" IS the
+        # valid IPv6 unspecified address and IS accepted; the netscan caveat
+        # list flags LISTENING on a non-loopback bind separately.
         try:
             ipaddress.ip_address(value)
         except ValueError as exc:

@@ -84,47 +84,54 @@ def test_udp_wildcard_combinations_normalised_per_field(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "non_ip",
-    [
-        # Round-1 sentinels (regex-rejected) — kept as baseline.
-        "-",
-        "",
-        "null",
-        "?",
-        # Round-2 silent-failure additions — these PASSED the loose
-        # ``[.:]`` shape gate but are NOT parseable IPs. Locks in the
-        # ipaddress.ip_address() tightening.
-        ".",
-        ":",
-        "..",
-        "null:",
-        "X:",
-        "..foo",
-        "<error>.",
-        # Whitespace / control characters that ``$`` would have
-        # silently accepted at end-of-string on the state regex.
-        "127.0.0.1\n",
-        "127.0.0.1 ",
-        " 127.0.0.1",
-        "127.0.0.1\t",
-    ],
+# Shared rejection-case lists — local_addr and foreign_addr go through
+# the same validator, so the parametrize matrices stay symmetric.
+_NON_IP_SENTINELS: tuple[str, ...] = (
+    # Obvious sentinel characters.
+    "-",
+    "",
+    "null",
+    "?",
+    # Non-IP shapes that pass a loose ``[.:]`` regex but fail
+    # ``ipaddress.ip_address()``.
+    ".",
+    ":",
+    "..",
+    "null:",
+    "X:",
+    "..foo",
+    "<error>.",
+    # Whitespace + CR/LF + NUL — Vol3 on Windows uses CRLF; NUL bytes
+    # are the canonical C-string truncation footgun.
+    "127.0.0.1\n",
+    "127.0.0.1\r\n",
+    "127.0.0.1\r",
+    "127.0.0.1 ",
+    " 127.0.0.1",
+    "127.0.0.1\t",
+    "127.0.0.1\x00",
+    "\x00",
+    "127.0.0.1.",
 )
+
+
+@pytest.mark.parametrize("non_ip", _NON_IP_SENTINELS)
 def test_non_parseable_sentinel_in_foreign_addr_rejected_loud(non_ip: str) -> None:
-    """The IP defence is ``ipaddress.ip_address()`` in try/except, not
-    a regex — anything stdlib can't parse fails loud regardless of
-    shape. Round-1 ``[.:]`` regex passed ``"null:"`` / ``"X:"`` /
-    ``"127.0.0.1\\n"`` silently; the closed defence rejects them.
-    NB: ``"::"`` IS the valid IPv6 unspecified address (all-zeros)
-    and is intentionally accepted — caller's caveat list still flags
-    LISTENING on a non-loopback bind as a backdoor candidate."""
+    """The IP defence is ``ipaddress.ip_address()`` in try/except,
+    not a regex — anything stdlib can't parse fails loud regardless
+    of shape. NB: ``"::"`` IS a valid IPv6 unspecified address and
+    IS accepted — the netscan caveat list flags LISTENING on a
+    non-loopback bind as a backdoor candidate at the action-shaping
+    layer (where it belongs), not at the type layer."""
     with pytest.raises(ValidationError):
         NetscanEntry.model_validate(_udp_row(ForeignAddr=non_ip, ForeignPort=None, State=None))
 
 
-@pytest.mark.parametrize("non_ip", ["-", "null", ":", "127.0.0.1\n", "null:"])
+@pytest.mark.parametrize("non_ip", _NON_IP_SENTINELS)
 def test_non_parseable_sentinel_in_local_addr_rejected_loud(non_ip: str) -> None:
-    """Same closed defence applies to local_addr."""
+    """Same closed defence applies to local_addr — symmetric matrix
+    against foreign_addr so a future split of the shared validator
+    can't silently regress on one side."""
     with pytest.raises(ValidationError):
         NetscanEntry.model_validate(_tcp_row(LocalAddr=non_ip))
 
@@ -132,24 +139,24 @@ def test_non_parseable_sentinel_in_local_addr_rejected_loud(non_ip: str) -> None
 @pytest.mark.parametrize(
     "bad_state",
     [
-        # Round-1 sentinels — baseline.
         "-",
         "",
         "null",
         "?",
         "established",
-        # Round-2 silent-failure addition: trailing newline. The
-        # round-1 ``$``-anchored regex matched BEFORE the newline,
-        # silently accepting ``"ESTABLISHED\\n"``. ``\\A\\Z`` rejects.
+        # CR/LF/NUL/whitespace — ``$`` matched before ``\n`` silently;
+        # ``\A\Z`` anchors close every variant.
         "ESTABLISHED\n",
+        "ESTABLISHED\r\n",
+        "ESTABLISHED\r",
         "ESTABLISHED ",
         " ESTABLISHED",
         "ESTABLISHED\t",
+        "ESTABLISHED\x00",
     ],
 )
 def test_non_uppercase_token_state_rejected_loud(bad_state: str) -> None:
-    """``state`` must be ``\\A[A-Z][A-Z0-9_]+\\Z`` or None.
-    End-of-string anchors close the trailing-newline silent path."""
+    """``state`` must be ``\\A[A-Z][A-Z0-9_]+\\Z`` or None."""
     with pytest.raises(ValidationError):
         NetscanEntry.model_validate(_tcp_row(State=bad_state))
 
@@ -191,6 +198,9 @@ def test_udp_entry_with_non_null_state_rejected() -> None:
     [
         "192.168.1.50",
         "::ffff:192.168.1.50",  # IPv4-mapped IPv6 — must NOT canonicalise
+        "::ffff:c0a8:132",  # Same address in hex form — a refactor
+        # that returns str(parsed) would canonicalise this to the
+        # dotted-quad above and break the entity gate silently.
         "fe80::1",
         "2001:db8::1",
         "::1",
@@ -218,7 +228,7 @@ def test_addresses_preserved_verbatim_no_canonicalisation(addr: str) -> None:
 def test_novel_tcb_states_forwarded_not_rejected(novel_state: str) -> None:
     """``state: str`` (not ``Literal``) is a deliberate forward-compat
     choice — Windows kernel evolution should not silently break the
-    netscan tool. ``_TCB_STATE`` shape (uppercase + underscore + digit)
-    accepts plausible future states."""
+    netscan tool. ``_UPPERCASE_TOKEN`` shape (uppercase + underscore +
+    digit) accepts plausible future states."""
     entry = NetscanEntry.model_validate(_tcp_row(State=novel_state))
     assert entry.state == novel_state
