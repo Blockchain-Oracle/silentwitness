@@ -122,8 +122,8 @@ def test_netscan_established_listening_time_wait_all_parse(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §32-36: three canonical states must round-trip
-    through the typed model with verbatim state preservation."""
+    """Three canonical TCP states must round-trip through the typed
+    model with verbatim state preservation."""
     rows = [
         _tcp_v4(state="ESTABLISHED"),
         _tcp_v4(state="LISTENING", foreign_addr="0.0.0.0", foreign_port=0, pid=4),  # noqa: S104
@@ -147,10 +147,10 @@ def test_netscan_ipv6_and_ipv4_mapped_ipv6_preserved_verbatim(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §42-45: ``::ffff:192.168.1.50`` MUST NOT be
-    normalised. The downstream entity gate matches against the
-    verbatim cited span in tool output — normalisation here would
-    cause every IPv6-cited observation to fail the gate."""
+    """``::ffff:192.168.1.50`` MUST NOT be normalised. The entity
+    gate downstream matches against verbatim cited spans in tool
+    output — normalisation here would cause every IPv6-cited
+    observation to fail the gate."""
     rows = [
         _tcp_v4(local_addr="2001:db8::1", foreign_addr="::ffff:192.168.1.50"),
         {**_tcp_v4(), "Proto": "TCPv6", "LocalAddr": "fe80::1", "ForeignAddr": "::1"},
@@ -173,10 +173,10 @@ def test_netscan_udp_wildcard_foreign_normalised_to_none(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §47-51: Vol3 emits ``"*"`` for UDP foreign addr/port
-    because UDP is connectionless. Pydantic does NOT coerce that
-    literal string to None — the parser's wildcard-override step is
-    what keeps the typed ``int | None`` / ``str | None`` invariant."""
+    """Vol3 emits ``"*"`` for UDP foreign addr/port (connectionless).
+    Pydantic does NOT coerce the literal string to None — the
+    model_validator(mode="before") rewrite is what keeps the typed
+    ``int | None`` / ``str | None`` invariants honest."""
     rows = [
         {
             "Offset": 0xFA8001112222,
@@ -219,8 +219,8 @@ def test_netscan_unregistered_evidence_refuses_without_spawning(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §53-54: ``EVIDENCE_NOT_REGISTERED`` MUST be returned
-    before any subprocess spawn — the registry gate runs first."""
+    """``EVIDENCE_NOT_REGISTERED`` MUST be returned before any
+    subprocess spawn — the registry gate runs first."""
     case_dir = env[0]
     unreg = case_dir.parent / "not-registered.vmem"
     unreg.write_bytes(b"x")
@@ -235,8 +235,8 @@ def test_netscan_evidence_tampered_returns_evidence_tampered(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §56-57: tamper-after-register MUST surface as
-    ``EVIDENCE_TAMPERED`` before any subprocess spawn."""
+    """Tamper-after-register MUST surface as ``EVIDENCE_TAMPERED``
+    before any subprocess spawn."""
     env[1].write_bytes(b"DIFFERENT bytes after registration")
     calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env)
@@ -249,8 +249,9 @@ def test_netscan_tool_failed_surfaces_truncated_stderr(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §59-62: Vol3 non-zero exit → ``TOOL_FAILED`` with
-    ``advisories[0]`` carrying the first 500 chars of stderr."""
+    """Vol3 non-zero exit → ``TOOL_FAILED`` with ``advisories[0]``
+    carrying the first 500 chars of stderr + audit row records
+    exit_code != 0."""
     stderr = b"Vol3: build-fragility - symbol drift on Win10 22H2\n" + b"Y" * 1000
     calls = _install_mock(monkeypatch, _FakeProc(stdout=b"", stderr=stderr, returncode=1))
     case_dir = env[0]
@@ -261,7 +262,7 @@ def test_netscan_tool_failed_surfaces_truncated_stderr(
     assert len(envelope.advisories[0]) <= 500
     # Vol3 WAS spawned once — post-spawn refusal contract.
     assert len(calls) == 1
-    # Story BDD §62: the audit JSONL line must record exit_code != 0.
+    # The audit JSONL line must record the non-zero exit code.
     audit_rows = [
         json.loads(line)
         for line in (case_dir / "audit" / "memory.jsonl").read_text("utf-8").splitlines()
@@ -290,7 +291,7 @@ def test_netscan_cmd_argv_is_class_suffixed_plugin_name(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §36: cmd_argv MUST end with the class-suffixed
+    """cmd_argv MUST end with the class-suffixed
     ``windows.netscan.NetScan`` plugin path — bare ``windows.netscan``
     targets the module and Vol3 rejects it."""
     calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
@@ -308,9 +309,9 @@ def test_netscan_caveats_verbatim_with_filter_to_established_first(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Story BDD §37-40 + spec "Caveat ordering matters": action-
-    shaping caveat MUST appear first so an agent skimming caveats[0]
-    sees the directive ("filter ESTABLISHED") before the CYA flag."""
+    """Action-shaping caveat ("filter to ESTABLISHED") MUST appear
+    first so an agent skimming ``caveats[0]`` sees the directive
+    before the build-fragility CYA flag."""
     _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env)
     assert envelope.success is True

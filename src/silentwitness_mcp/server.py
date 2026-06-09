@@ -47,6 +47,7 @@ from mcp.server.session import ServerSession
 from pydantic import AnyHttpUrl
 
 from silentwitness_mcp import __version__
+from silentwitness_mcp._errors import ServerConfigurationError
 from silentwitness_mcp._lifecycle import AppContext, lifespan
 from silentwitness_mcp._tool_stubs import register_finding_tool_stubs
 
@@ -118,10 +119,9 @@ class Transport(StrEnum):
     HTTP = "http"
 
 
-class ServerConfigurationError(RuntimeError):
-    """Raised when transport/host/port/auth configuration is rejected at
-    startup. Fail-closed: HTTP without a gateway token is an immediate
-    refusal, not a downgraded warning."""
+# ServerConfigurationError moved to silentwitness_mcp._errors so
+# _tool_stubs (a leaf consumed by this module) can raise it without
+# triggering a circular import.
 
 
 # ---------------------------------------------------------------------------

@@ -84,32 +84,72 @@ def test_udp_wildcard_combinations_normalised_per_field(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("sentinel", ["-", "", "null", "?"])
-def test_non_wildcard_sentinel_in_foreign_addr_rejected_loud(sentinel: str) -> None:
-    """Vol3 emitting ``"-"`` / ``""`` / ``"null"`` for ForeignAddr
-    would propagate a fake "host -" citation into the IR report
-    unless rejected. ``_IP_SHAPE`` (must contain ``.`` or ``:``) is
-    the closed defence."""
+@pytest.mark.parametrize(
+    "non_ip",
+    [
+        # Round-1 sentinels (regex-rejected) — kept as baseline.
+        "-",
+        "",
+        "null",
+        "?",
+        # Round-2 silent-failure additions — these PASSED the loose
+        # ``[.:]`` shape gate but are NOT parseable IPs. Locks in the
+        # ipaddress.ip_address() tightening.
+        ".",
+        ":",
+        "..",
+        "null:",
+        "X:",
+        "..foo",
+        "<error>.",
+        # Whitespace / control characters that ``$`` would have
+        # silently accepted at end-of-string on the state regex.
+        "127.0.0.1\n",
+        "127.0.0.1 ",
+        " 127.0.0.1",
+        "127.0.0.1\t",
+    ],
+)
+def test_non_parseable_sentinel_in_foreign_addr_rejected_loud(non_ip: str) -> None:
+    """The IP defence is ``ipaddress.ip_address()`` in try/except, not
+    a regex — anything stdlib can't parse fails loud regardless of
+    shape. Round-1 ``[.:]`` regex passed ``"null:"`` / ``"X:"`` /
+    ``"127.0.0.1\\n"`` silently; the closed defence rejects them.
+    NB: ``"::"`` IS the valid IPv6 unspecified address (all-zeros)
+    and is intentionally accepted — caller's caveat list still flags
+    LISTENING on a non-loopback bind as a backdoor candidate."""
     with pytest.raises(ValidationError):
-        NetscanEntry.model_validate(_udp_row(ForeignAddr=sentinel, ForeignPort=None, State=None))
+        NetscanEntry.model_validate(_udp_row(ForeignAddr=non_ip, ForeignPort=None, State=None))
 
 
-@pytest.mark.parametrize("sentinel", ["-", "", "null", "?"])
-def test_non_wildcard_sentinel_in_local_addr_rejected_loud(sentinel: str) -> None:
-    """Defensive: ``local_addr`` is required and Vol3 doesn't emit
-    wildcards there in practice, but the same IP-shape check applies
-    so a sentinel here also fails loud."""
+@pytest.mark.parametrize("non_ip", ["-", "null", ":", "127.0.0.1\n", "null:"])
+def test_non_parseable_sentinel_in_local_addr_rejected_loud(non_ip: str) -> None:
+    """Same closed defence applies to local_addr."""
     with pytest.raises(ValidationError):
-        NetscanEntry.model_validate(_tcp_row(LocalAddr=sentinel))
+        NetscanEntry.model_validate(_tcp_row(LocalAddr=non_ip))
 
 
 @pytest.mark.parametrize(
     "bad_state",
-    ["-", "", "null", "?", "established"],  # last: lowercase, not TCB-shape
+    [
+        # Round-1 sentinels — baseline.
+        "-",
+        "",
+        "null",
+        "?",
+        "established",
+        # Round-2 silent-failure addition: trailing newline. The
+        # round-1 ``$``-anchored regex matched BEFORE the newline,
+        # silently accepting ``"ESTABLISHED\\n"``. ``\\A\\Z`` rejects.
+        "ESTABLISHED\n",
+        "ESTABLISHED ",
+        " ESTABLISHED",
+        "ESTABLISHED\t",
+    ],
 )
-def test_non_tcb_state_rejected_loud(bad_state: str) -> None:
-    """``state`` must match the TCB pattern (uppercase + digit +
-    underscore) or be None. Lowercase or sentinel values fail."""
+def test_non_uppercase_token_state_rejected_loud(bad_state: str) -> None:
+    """``state`` must be ``\\A[A-Z][A-Z0-9_]+\\Z`` or None.
+    End-of-string anchors close the trailing-newline silent path."""
     with pytest.raises(ValidationError):
         NetscanEntry.model_validate(_tcp_row(State=bad_state))
 
@@ -157,10 +197,10 @@ def test_udp_entry_with_non_null_state_rejected() -> None:
     ],
 )
 def test_addresses_preserved_verbatim_no_canonicalisation(addr: str) -> None:
-    """Story spec §44: the entity gate matches typed observations
-    against verbatim cited spans in tool output. If we canonicalise
-    ``::ffff:192.168.1.50`` to ``192.168.1.50`` here, every IPv6-cited
-    observation fails the gate."""
+    """The entity gate matches typed observations against verbatim
+    cited spans in tool output. Canonicalising ``::ffff:192.168.1.50``
+    to ``192.168.1.50`` here would cause every IPv6-cited observation
+    to fail the gate."""
     proto = "TCPv6" if ":" in addr else "TCPv4"
     entry = NetscanEntry.model_validate(_tcp_row(Proto=proto, ForeignAddr=addr))
     assert entry.foreign_addr == addr  # byte-identical, no normalisation

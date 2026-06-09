@@ -6,6 +6,7 @@ trail cannot quietly elide unknown columns."""
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from datetime import datetime
 from typing import Any, Final, Literal
@@ -91,19 +92,18 @@ class MalfindOutput(BaseModel):
 
 _WILDCARD: Final = "*"
 """Vol3 emits the literal ``"*"`` for UDP foreign endpoints — the ONLY
-recognised sentinel. Any other non-IP-shaped value on a foreign-side
-field (``"-"``, ``""``, ``"null"``, ``"?"``) is treated as schema
-drift and rejected by the IP-shape / TCB-state field validators."""
+recognised sentinel. Any other non-IP value on a foreign-side field
+(``"-"``, ``""``, ``"null"``, ``"null:"``, trailing whitespace) is
+treated as schema drift and rejected by :meth:`NetscanEntry._check_ip`
+(which parses via :func:`ipaddress.ip_address` and discards the result
+so verbatim preservation still holds)."""
 
-_IP_SHAPE: Final = re.compile(r"[.:]")
-"""Rough IP-shape: must contain a dot (IPv4) or colon (IPv6). Tight
-enough to reject sentinel strings, loose enough to forward-compat
-verbatim IPv4-mapped IPv6 like ``::ffff:192.168.1.50`` per spec."""
-
-_TCB_STATE: Final = re.compile(r"^[A-Z][A-Z0-9_]+$")
-"""TCB state shape: uppercase alphanumeric + underscore, ≥2 chars.
-Matches ESTABLISHED / LISTENING / TIME_WAIT / SYN_RECV / future
-states; rejects sentinel strings + lowercase fallbacks."""
+_UPPERCASE_TOKEN: Final = re.compile(r"\A[A-Z][A-Z0-9_]+\Z")
+"""Uppercase token shape, end-of-string anchored. Matches ESTABLISHED
+/ LISTENING / TIME_WAIT / SYN_RECV / future kernel TCB-state names;
+rejects sentinels (``"-"``, ``""``, ``"null"``), lowercase, AND the
+trailing-newline silent-acceptance case (``"$"`` matches before
+``\\n``; ``\\A``/``\\Z`` are end-of-string-only)."""
 
 
 class NetscanEntry(BaseModel):
@@ -117,15 +117,21 @@ class NetscanEntry(BaseModel):
        verbatim cited spans in tool output. Normalising
        ``::ffff:192.168.1.50`` to ``192.168.1.50`` here would cause
        every observation citing the IPv6-mapped form to fail the gate.
-       IP-shape validation (``_IP_SHAPE``) only rejects sentinel
-       strings — it does NOT canonicalise.
+       IP validation parses via :func:`ipaddress.ip_address` then
+       discards the parsed object — verbatim preservation upheld,
+       any sentinel rejected.
 
     2. **``state`` is ``str | None`` not ``Literal[...]``.** Vol3
        forwards kernel TCB state verbatim. Future Windows builds may
        add states (e.g. ``SYN_RECV2``); we'd rather forward them than
        fail closed. The action-shaping caveat ("filter to ESTABLISHED
        for live C2 evidence") lives at the caveat layer, not the type
-       layer. ``_TCB_STATE`` validates shape only.
+       layer. ``_UPPERCASE_TOKEN`` validates token shape only.
+
+    Bypass surface: :meth:`model_construct` (Pydantic's no-validation
+    fast path) skips ALL of these defences. Do NOT reach for it as a
+    performance optimisation — every forensic invariant above lives
+    on the validator chain.
 
     Cross-field invariants:
 
@@ -164,16 +170,26 @@ class NetscanEntry(BaseModel):
 
     @field_validator("local_addr", "foreign_addr")
     @classmethod
-    def _check_ip_shape(cls, value: str | None) -> str | None:
-        if value is not None and not _IP_SHAPE.search(value):
-            raise ValueError(f"address field has non-IP shape (no '.' or ':'): {value!r}")
+    def _check_ip(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        # Parse via stdlib then DISCARD the parsed object — the entity gate
+        # downstream matches verbatim cited spans, so canonicalisation here
+        # (e.g. "::ffff:192.168.1.50" -> "192.168.1.50") would break it.
+        # try/except is the closed defence a regex shape can't be: rejects
+        # "null:", "::", "..", "X:", trailing newline, leading whitespace —
+        # any string ipaddress can't parse.
+        try:
+            ipaddress.ip_address(value)
+        except ValueError as exc:
+            raise ValueError(f"address not a parseable IPv4/IPv6: {value!r}") from exc
         return value
 
     @field_validator("state")
     @classmethod
     def _check_state_shape(cls, value: str | None) -> str | None:
-        if value is not None and not _TCB_STATE.match(value):
-            raise ValueError(f"state has non-TCB shape: {value!r}")
+        if value is not None and not _UPPERCASE_TOKEN.match(value):
+            raise ValueError(f"state has non-uppercase-token shape: {value!r}")
         return value
 
     @model_validator(mode="after")

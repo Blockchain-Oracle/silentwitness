@@ -7,6 +7,7 @@ pre-subprocess gates, never post."""
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Callable
 from pathlib import Path
@@ -25,6 +26,7 @@ from silentwitness_mcp.evidence.registry import (
 from silentwitness_mcp.tools._vol_common import (
     VolFailureReason,
     _run_vol,
+    blob_path_for,
     caveats_for,
     cmd_argv_for,
     delete_orphan_blob,
@@ -36,28 +38,25 @@ from silentwitness_mcp.tools._vol_common import (
 
 _AUDIT_LOG_FILENAME: Final = "memory.jsonl"
 _PARSE_PREVIEW_BYTES: Final = 200
-_BLOB_DIR_FRAGMENT: Final = "audit/blobs"
 
 
 def _format_oserror(stage: str, exc: OSError) -> str:
-    """Structured advisory for a forensic OSError: stage + exc type +
-    errno + path. The bare ``str(exc)`` omits ``filename`` (the
-    partially-written target), which the audit reviewer needs to
-    reconcile blob ↔ row state on disk."""
+    """Structured advisory for a forensic OSError: stage + type + errno
+    + path + msg. Bare ``str(exc)`` omits ``filename`` (which can be
+    bytes on POSIX — :func:`os.fsdecode` normalises) and a
+    bare-constructed ``OSError()`` produces empty errno/filename/msg.
+    The audit reviewer needs SOMETHING greppable in every case."""
     parts = [stage, type(exc).__name__]
     if exc.errno is not None:
         parts.append(f"errno={exc.errno}")
-    if exc.filename:
-        parts.append(f"path={exc.filename}")
-    parts.append(str(exc))
+    if exc.filename is not None:
+        parts.append(f"path={os.fsdecode(exc.filename)}")
+    msg = str(exc)
+    if msg:
+        parts.append(msg)
+    elif exc.errno is None and exc.filename is None:
+        parts.append("no diagnostic detail (bare OSError; check kernel.log / strace)")
     return ": ".join(parts)
-
-
-def _expected_blob_path(case_dir: Path, audit_id: str) -> Path:
-    """Mirror of ``persist_blob``'s output path. Lets the persist
-    failure path delete the partial write without taking a dependency
-    on whether ``persist_blob`` reached its ``return`` statement."""
-    return case_dir / _BLOB_DIR_FRAGMENT / f"{audit_id}.txt"
 
 
 def _check_evidence_gates(
@@ -158,7 +157,7 @@ async def _run_wrapper[TPayload: BaseModel](
         # write_bytes_atomic may leave the final file on disk if it failed
         # AFTER the atomic replace but DURING the parent-dir fsync — see
         # atomic_io docstring. Always attempt orphan cleanup.
-        delete_orphan_blob(_expected_blob_path(case_dir, pre_audit_id))
+        delete_orphan_blob(blob_path_for(case_dir, pre_audit_id))
         return refuse(
             VolFailureReason.TOOL_FAILED,
             elapsed_ms=result.elapsed_ms,

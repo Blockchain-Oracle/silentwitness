@@ -12,6 +12,7 @@ from collections.abc import Callable
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
+from silentwitness_mcp._errors import ServerConfigurationError
 from silentwitness_mcp._lifecycle import AppContext
 
 _GuardFn = Callable[[str, Context[ServerSession, AppContext]], None]
@@ -27,7 +28,7 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     ``MOUNT_NOT_RO_NOEXEC_NOSUID`` rejection is too load-bearing to
     let slip past a configuration footgun."""
     if guard_mount is None:
-        raise TypeError(
+        raise ServerConfigurationError(
             "register_finding_tool_stubs requires a non-None guard_mount callable; got None"
         )
 
