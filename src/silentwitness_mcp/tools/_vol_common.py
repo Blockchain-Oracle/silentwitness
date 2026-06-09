@@ -14,7 +14,6 @@ import hashlib
 import json
 import logging
 import time
-from collections.abc import Mapping
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -26,6 +25,7 @@ from silentwitness_common.atomic_io import append_jsonl_line, write_bytes_atomic
 from silentwitness_common.types import AuditEntry, DataProvenance, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.envelope import make_empty_provenance
+from silentwitness_mcp.tools._vol_caveats import caveats_for
 from silentwitness_mcp.verification.normalizer import normalize_output
 
 _LOG = logging.getLogger(__name__)
@@ -59,94 +59,6 @@ class VolFailureReason(StrEnum):
     TOOL_FAILED = "TOOL_FAILED"
     TOOL_TIMEOUT = "TOOL_TIMEOUT"
     OUTPUT_PARSE_FAILED = "OUTPUT_PARSE_FAILED"
-
-
-_VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
-    # context/domain/03 §7.2 Gotchas — quoted verbatim.
-    "pslist": (
-        (
-            "windows.pslist walks PsActiveProcessHead — DKOM-hidden "
-            "processes are invisible; corroborate with vol_psscan"
-        ),
-        ("ImageFileName is truncated to 15 chars; use vol_cmdline or vol_dlllist for full paths"),
-        ("ExitTime may be set for processes still referenced by other handles (orphan teardown)"),
-    ),
-    "pstree": (
-        ("Parent PIDs can refer to dead processes via PID reuse — cross-check CreateTime ordering"),
-        (
-            "Process hollowing produces legitimate-looking lineage with "
-            "malicious code — vol_pstree alone cannot detect it; "
-            "corroborate with vol_malfind + ldrmodules"
-        ),
-    ),
-    "psscan": (
-        (
-            "windows.psscan may show terminated processes that pslist no "
-            "longer sees — entries with ExitTime set are normal teardown "
-            "artifacts, not malice"
-        ),
-        (
-            "diff vs vol_pslist: processes in psscan but NOT in pslist "
-            "are DKOM-hidden OR terminated; ExitTime distinguishes the two"
-        ),
-        (
-            "pool-tag scan can produce false positives from non-process "
-            "allocations — validate Threads/Handles plausibility before "
-            "trusting an entry"
-        ),
-    ),
-    "malfind": (
-        (
-            "RWX private memory with no mapped file is the classic injection "
-            "pattern — but legitimate JIT engines (.NET CLR, Java JVM, "
-            "V8/Node, Chromium) also allocate RWX; corroborate with "
-            "vol_ldrmodules and process lineage before claiming injection"
-        ),
-        (
-            "windows.malfind misses RX-only code (attacker VirtualProtect'd "
-            "from RWX to RX post-write) and misses file-backed hollowed "
-            "images (use vol_ldrmodules for hollowing detection)"
-        ),
-        (
-            "hexdump_first_128 captures the first 128 bytes of the suspicious "
-            "VAD — MZ + PE\\0\\0 pattern indicates a PE payload; lone "
-            "0xE8/0xE9 + nop sled indicates shellcode"
-        ),
-    ),
-    "netscan": (
-        # Ordered: action-shaping caveat first, build-fragility CYA second,
-        # owner resolution third, listening-state interpretation fourth.
-        (
-            "windows.netscan pool-tag scan returns both active AND "
-            "recently-closed endpoints — filter state to ESTABLISHED for "
-            "live C2 evidence; TIME_WAIT / CLOSE_WAIT / FIN_WAIT_* are "
-            "historical"
-        ),
-        (
-            "windows.netscan is build-fragile on Windows 10/11 — symbol "
-            "drift across builds can drop entries or surface artifacts; "
-            "cross-check with vol_netstat when available"
-        ),
-        (
-            "Owner process resolution requires the PID still being valid "
-            "in pslist — owner may be blank for endpoints whose process "
-            "has exited"
-        ),
-        (
-            "LISTENING state on a non-loopback bind from a non-standard "
-            "process is a backdoor candidate; LISTENING on loopback is "
-            "normal IPC"
-        ),
-    ),
-}
-
-
-def caveats_for(plugin_key: str) -> tuple[str, ...]:
-    """Return the caveat list for ``plugin_key`` or ``()`` if unknown.
-    Tools that pass an unknown key get empty caveats — caller should
-    have registered them first; a silent ``KeyError`` here would let
-    a typo strip safety guidance from the audit row."""
-    return _VOL_CAVEATS.get(plugin_key, ())
 
 
 @dataclasses.dataclass(slots=True, frozen=True)

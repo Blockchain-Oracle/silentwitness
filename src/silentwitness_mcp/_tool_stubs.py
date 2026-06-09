@@ -104,5 +104,11 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         guard_mount("vol_netscan", ctx)
         raise NotImplementedError("vol_netscan is registered but not yet implemented")
 
+    @mcp.tool()
+    def vol_cmdline(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Vol3 windows.cmdline. Stub."""
+        guard_mount("vol_cmdline", ctx)
+        raise NotImplementedError("vol_cmdline is registered but not yet implemented")
+
 
 __all__ = ["register_finding_tool_stubs"]

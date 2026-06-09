@@ -105,3 +105,39 @@ def test_tool_failed_with_empty_stderr_yields_synthetic_advisory(
     assert "exited -9" in envelope.advisories[0]
     assert "windows.netscan.NetScan" in envelope.advisories[0]
     assert "no stderr output" in envelope.advisories[0]
+
+
+# ---------------------------------------------------------------------------
+# Wrapper-input invariant shared across tools with --pid filter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("tool", ["vol_cmdline", "vol_malfind"])
+@pytest.mark.parametrize("bad_pid", [0, -1, -1234])
+def test_pid_filter_rejects_zero_and_negative_synchronously(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tool: str,
+    bad_pid: int,
+) -> None:
+    """PID 0 (System Idle) and negative pids have no _EPROCESS — Vol3
+    returns empty or errors confusingly. _validate_pid_filter rejects
+    at the wrapper boundary so an LLM-driven typo gets a clean
+    diagnostic; a refactor dropping it from ONE tool only would
+    otherwise slip past CI."""
+    from silentwitness_mcp.tools import memory as _memory
+
+    _install_proc(monkeypatch, _FakeProc(stdout=b"[]"))
+    case_dir, evidence, logger, registry = env
+    fn = getattr(_memory, tool)
+    with pytest.raises(ValueError, match="pid must be >= 1"):
+        asyncio.run(
+            fn(
+                evidence,
+                case_dir=case_dir,
+                evidence_registry=registry,
+                audit_logger=logger,
+                model_used=MODEL,
+                pid=bad_pid,
+            )
+        )

@@ -15,6 +15,8 @@ from silentwitness_common.types import ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.tools._memory_models import (
+    CmdlineEntry,
+    CmdlineOutput,
     MalfindHit,
     MalfindOutput,
     NetscanEntry,
@@ -36,6 +38,22 @@ _PSSCAN_PLUGIN: Final = "windows.psscan.PsScan"
 # Vol3 ≥2.29 removes windows.malfind — windows.malware path is future-safe.
 _MALFIND_PLUGIN: Final = "windows.malware.malfind.Malfind"
 _NETSCAN_PLUGIN: Final = "windows.netscan.NetScan"
+# Capital-L: class-suffixed form Vol3 ≥2.27 expects.
+_CMDLINE_PLUGIN: Final = "windows.cmdline.CmdLine"
+
+# PID 0 (System Idle) and negative PIDs have no _EPROCESS / PEB —
+# Vol3 returns empty results OR errors with confusing stderr. Reject
+# at the wrapper boundary so an LLM-driven typo gets a clean message.
+_MIN_VALID_PID: Final = 1
+
+
+def _validate_pid_filter(tool_name: str, pid: int | None) -> None:
+    if pid is not None and pid < _MIN_VALID_PID:
+        raise ValueError(
+            f"{tool_name}: pid must be >= {_MIN_VALID_PID} or None; got {pid} "
+            f"(PID 0 = System Idle has no PEB / VAD)"
+        )
+
 
 _MALFIND_HEXDUMP_CAP: Final = 256  # = 128 bytes of hex
 _HEX_CHARS: Final = frozenset("0123456789abcdefABCDEF")
@@ -127,12 +145,43 @@ async def vol_malfind(
 ) -> ToolResponse[MalfindOutput]:
     """RWX-private-no-mapped-file VAD detection. ``pid=None`` scans
     all processes; an int filters at the Vol3 plugin layer."""
+    _validate_pid_filter("vol_malfind", pid)
     return await _run_wrapper(
         tool_name="vol_malfind",
         plugin_name=_MALFIND_PLUGIN,
         caveat_key="malfind",
         output_cls=MalfindOutput,
         parse_rows=_parse_malfind,
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+        extra_argv=["--pid", str(pid)] if pid is not None else None,
+    )
+
+
+async def vol_cmdline(
+    evidence_path: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    pid: int | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[CmdlineOutput]:
+    """Per-process command-line recovery from each ``_EPROCESS.Peb.
+    ProcessParameters.CommandLine``. ``pid=None`` scans all processes;
+    an int filters at the Vol3 plugin layer."""
+    _validate_pid_filter("vol_cmdline", pid)
+    return await _run_wrapper(
+        tool_name="vol_cmdline",
+        plugin_name=_CMDLINE_PLUGIN,
+        caveat_key="cmdline",
+        output_cls=CmdlineOutput,
+        parse_rows=lambda raw: _parse_flat(raw, CmdlineEntry, CmdlineOutput),
         evidence_path=evidence_path,
         case_dir=case_dir,
         evidence_registry=evidence_registry,
@@ -226,6 +275,8 @@ def hidden_or_terminated_candidates(pslist_pids: set[int], psscan_pids: set[int]
 
 
 __all__ = [
+    "CmdlineEntry",
+    "CmdlineOutput",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",
@@ -237,6 +288,7 @@ __all__ = [
     "PstreeEntry",
     "PstreeOutput",
     "hidden_or_terminated_candidates",
+    "vol_cmdline",
     "vol_malfind",
     "vol_netscan",
     "vol_pslist",

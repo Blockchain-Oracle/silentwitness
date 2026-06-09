@@ -110,6 +110,10 @@ async def _run_wrapper[TPayload: BaseModel](
     keeps the orchestrator agnostic to whether the row stream is a
     flat list (psXXXX family), a nested ``__children`` tree (pstree),
     or a custom-cleaned hexdump (malfind)."""
+    # Validate caveat_key BEFORE any subprocess or audit-row writes —
+    # a typo'd or unregistered key surfaces synchronously rather than
+    # leaving an audit row with no envelope.
+    caveats = caveats_for(caveat_key)
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
     # dict[str, Any] for the splat; refuse() checks types at the call.
@@ -226,7 +230,7 @@ async def _run_wrapper[TPayload: BaseModel](
         data=output,
         audit_id=pre_audit_id,
         examiner=audit_logger.examiner,
-        caveats=caveats_for(caveat_key),
+        caveats=caveats,
         data_provenance=DataProvenance(
             tool=tool_name,
             stdout_path=blob_path,

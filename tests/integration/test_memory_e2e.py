@@ -16,6 +16,7 @@ from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.tools._vol_common import VOL_BIN
 from silentwitness_mcp.tools.memory import (
+    vol_cmdline,
     vol_malfind,
     vol_netscan,
     vol_pslist,
@@ -136,6 +137,29 @@ def test_netscan_against_nist_image(tmp_path: Path) -> None:
     registry.register(_NIST_FIXTURE, EvidenceType.MEMORY_DUMP, audit_id="sift-aj-20260609-001")
     envelope = asyncio.run(
         vol_netscan(
+            _NIST_FIXTURE,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used="claude-sonnet-4-6",
+        )
+    )
+    assert envelope.success is True
+    assert envelope.data is not None
+
+
+@pytest.mark.skipif(
+    not _NIST_FIXTURE.exists() or not VOL_BIN.exists(),
+    reason="NIST memory fixture and/or Vol3 binary not present in this environment",
+)
+def test_cmdline_against_nist_image(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case-nist-cmdline"
+    case_dir.mkdir()
+    logger = AuditLogger(case_dir, examiner="aj")
+    registry = EvidenceRegistry(case_dir=case_dir)
+    registry.register(_NIST_FIXTURE, EvidenceType.MEMORY_DUMP, audit_id="sift-aj-20260609-001")
+    envelope = asyncio.run(
+        vol_cmdline(
             _NIST_FIXTURE,
             case_dir=case_dir,
             evidence_registry=registry,

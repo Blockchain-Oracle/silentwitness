@@ -59,6 +59,7 @@ EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
         "record_observation",
         "register_evidence",
         "verify_evidence_hash",
+        "vol_cmdline",
         "vol_malfind",
         "vol_netscan",
         "vol_pslist",
