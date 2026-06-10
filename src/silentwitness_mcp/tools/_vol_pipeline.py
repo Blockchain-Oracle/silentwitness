@@ -113,9 +113,9 @@ async def _run_wrapper[TPayload: BaseModel](
     or a custom-cleaned hexdump (malfind).
 
     ``discipline_reminder`` is non-None only for credential-material
-    tools (vol_lsadump). It carries forward to the response envelope
-    so the agent prompt template can seed Restricted classification
-    and the approve_finding flow can prompt the examiner."""
+    tools — it carries forward to the response envelope so the agent
+    prompt template can seed Restricted classification and the
+    approve_finding flow can prompt the examiner."""
     # Validate caveat_key BEFORE any subprocess or audit-row writes —
     # a typo'd or unregistered key surfaces synchronously rather than
     # leaving an audit row with no envelope.

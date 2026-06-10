@@ -13,9 +13,17 @@ schema-drift behaviour matches the sibling models in
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+import re
 
-from silentwitness_mcp.tools._lsa_secret_decode import is_printable_secret
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from silentwitness_mcp.tools._lsa_secret_decode import BINARY_KEY_NAMES, is_printable_secret
+
+# Matches valid Hex shape on input AFTER whitespace removal — used as
+# a defense-in-depth check that the byte stream is byte-paired (even
+# length). Vol3 may wrap long blobs with internal whitespace which the
+# field_validator strips before checking.
+_HEX_NON_WHITESPACE_RE = re.compile(r"\s+")
 
 _ROW_CONFIG = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -54,24 +62,43 @@ class LsaSecretEntry(BaseModel):
     ``str | None``.)
 
     ``model_construct`` bypasses validators — never use it on this
-    type. The parser is the only sanctioned construction site."""
+    type. Bypassing :meth:`_check_secret_printable_contract` or
+    :meth:`_check_binary_key_forces_secret_none` would let a non-
+    printable or host-managed-key "decrypted" string into the audit
+    chain. The parser is the only sanctioned construction site."""
 
     model_config = _ROW_CONFIG
 
     # min_length=1: a zero-length key is never legitimate (Vol3 never
     # emits one); guards the silent-empty-string failure mode.
     key: str = Field(alias="Key", min_length=1)
-    # pattern: hex digits with optional internal whitespace (Vol3 may
-    # wrap long blobs); min_length=1 guards the silent-empty-hex case.
-    # Forcing the shape here disambiguates "binary bytes, non-printable"
-    # (legitimate, surfaces secret=None) from "schema drift / malformed
-    # Hex" (forces OUTPUT_PARSE_FAILED at the model boundary).
+    # pattern: at least one hex digit, then hex digits / internal
+    # whitespace (Vol3 may wrap long blobs). Requiring a leading hex
+    # digit closes the whitespace-only loophole that the looser
+    # ``[0-9a-fA-F\s]+`` would otherwise allow (`"   "` would pass).
+    # Disambiguates "binary bytes, non-printable" (legitimate,
+    # surfaces secret=None) from "schema drift / malformed Hex"
+    # (forces OUTPUT_PARSE_FAILED at the model boundary).
     hex_value: str = Field(
         alias="Hex",
         min_length=1,
-        pattern=r"^[0-9a-fA-F\s]+$",
+        pattern=r"^[0-9a-fA-F][0-9a-fA-F\s]*$",
     )
     secret: str | None = Field(default=None, alias="Secret")
+
+    @field_validator("hex_value", mode="after")
+    @classmethod
+    def _check_hex_byte_paired(cls, value: str) -> str:
+        """Hex is byte-paired — odd length after whitespace strip is
+        schema drift. ``bytes.fromhex`` would reject it downstream
+        anyway, but catching it at the type boundary produces a
+        cleaner audit advisory."""
+        stripped = _HEX_NON_WHITESPACE_RE.sub("", value)
+        if not stripped:
+            raise ValueError("hex_value cannot be whitespace-only")
+        if len(stripped) % 2:
+            raise ValueError(f"hex_value byte-pairing failed: odd length {len(stripped)}")
+        return value
 
     @field_validator("secret", mode="after")
     @classmethod
@@ -86,6 +113,24 @@ class LsaSecretEntry(BaseModel):
                 "or None; see _lsa_secret_decode.is_printable_secret"
             )
         return value
+
+    @model_validator(mode="after")
+    def _check_binary_key_forces_secret_none(self) -> LsaSecretEntry:
+        """Host-managed binary keys (NTLM hash, AES key material, DPAPI
+        seed) MUST surface ``secret=None`` — even when the bytes happen
+        to decode to a printable Unicode glyph string. The parser
+        already enforces this by passing ``key=...`` into
+        :func:`decode_secret`, but the round-1 ratchet to enforce the
+        printable contract at the type boundary applies with equal
+        force here: a direct ``model_validate`` from a future caller
+        must not be able to surface a "decrypted" rendering of an NTLM
+        hash. Fail closed."""
+        if self.key in BINARY_KEY_NAMES and self.secret is not None:
+            raise ValueError(
+                f"LsaSecretEntry.key={self.key!r} is host-managed (random bytes); "
+                "secret MUST be None — see _lsa_secret_decode.BINARY_KEY_NAMES"
+            )
+        return self
 
 
 class LsaDumpOutput(BaseModel):

@@ -48,10 +48,9 @@ _STDERR_ADVISORY_CAP: Final = 500
 
 
 class VolFailureReason(StrEnum):
-    """Closed reject-reason set for ``vol_*`` wrappers. Architecture
-    §4.6 + §4.10 + §4.11 surface all four failure modes through one
-    typed enum so the agent's reason-branching logic stays uniform
-    across the memory family."""
+    """Closed reject-reason set for ``vol_*`` wrappers — every Vol3
+    failure mode surfaces through one typed enum so the agent's
+    reason-branching logic stays uniform across the memory family."""
 
     EVIDENCE_NOT_REGISTERED = "EVIDENCE_NOT_REGISTERED"
     EVIDENCE_TAMPERED = "EVIDENCE_TAMPERED"

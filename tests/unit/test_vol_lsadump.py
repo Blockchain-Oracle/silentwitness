@@ -179,6 +179,10 @@ def test_lsadump_empty_output_does_not_imply_credential_guard(
     assert envelope.success is True
     assert envelope.data.entries == ()
     assert envelope.discipline_reminder is not None
+    # The same propagation argument as the refuse-path tests: an agent
+    # narrating an empty success must read the Credential-Guard caveat.
+    assert len(envelope.caveats) == 6
+    assert "Credential Guard does NOT" in envelope.caveats[0]
 
 
 def test_lsadump_cmd_argv_uses_registry_lsadump_class_path(

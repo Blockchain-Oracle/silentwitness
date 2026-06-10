@@ -119,7 +119,62 @@ def test_lsasecretentry_rejects_empty_hex() -> None:
 
 
 def test_lsasecretentry_rejects_non_hex_pattern() -> None:
-    """The Hex regex (``^[0-9a-fA-F\\s]+$``) catches non-hex strings
-    at the model boundary, even if the parser is bypassed."""
+    """The Hex regex catches non-hex strings at the model boundary,
+    even if the parser is bypassed."""
     with pytest.raises(ValidationError):
         LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "definitely-not-hex"})
+
+
+def test_lsasecretentry_rejects_whitespace_only_hex() -> None:
+    """Regex starts with ``[0-9a-fA-F]`` (require at least one hex
+    digit) to forbid the whitespace-only case — would otherwise
+    produce a silent empty-decode."""
+    with pytest.raises(ValidationError):
+        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "   "})
+
+
+def test_lsasecretentry_rejects_odd_length_hex() -> None:
+    """Hex is byte-paired; odd length after whitespace strip is
+    schema drift. The hex_value field_validator catches it cleanly."""
+    with pytest.raises(ValidationError):
+        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "deadb"})
+
+
+def test_lsasecretentry_rejects_empty_key() -> None:
+    """min_length=1 on key — a zero-length Key is never legitimate."""
+    with pytest.raises(ValidationError):
+        LsaSecretEntry.model_validate({"Key": "", "Hex": "0123abcd"})
+
+
+def test_lsasecretentry_binary_key_forces_secret_none_at_model_boundary() -> None:
+    """BINARY_KEY allowlist must hold at the model boundary, not only
+    in the parser. A direct ``model_validate`` from a future caller
+    MUST not surface a "decrypted" rendering of an NTLM hash / DPAPI
+    seed / NL$KM AES key — even if the bytes incidentally decoded to
+    a printable Unicode glyph."""
+    for binary_key in BINARY_KEY_NAMES:
+        with pytest.raises(ValidationError):
+            LsaSecretEntry.model_validate({"Key": binary_key, "Hex": "61006200", "Secret": "ab"})
+
+
+def test_decode_secret_raises_on_truncated_utf16le() -> None:
+    """UnicodeDecodeError branch coverage — a 1-byte hex is too short
+    to be a valid UTF-16LE codepoint and surfaces as ValueError."""
+    with pytest.raises(ValueError, match=r"not valid hex|UTF-16LE"):
+        decode_secret("ab")
+
+
+def test_decode_secret_raises_on_lone_high_surrogate() -> None:
+    """Lone surrogate halves fail UTF-16LE decode in strict mode (the
+    default) and surface as ValueError → OUTPUT_PARSE_FAILED. This is
+    stricter than the Cs-category check but more honest about the
+    underlying byte stream being malformed."""
+    # 0x00 0xD8 → U+D800 lone high surrogate; strict decode rejects.
+    with pytest.raises(ValueError, match="UTF-16LE"):
+        decode_secret("00d8")
+
+
+def test_decode_secret_handles_hex_with_internal_whitespace() -> None:
+    """Vol3 may wrap long Hex blobs with whitespace. The strip-then-
+    fromhex path must round-trip transparently."""
+    assert decode_secret("48 00 69 00") == "Hi"

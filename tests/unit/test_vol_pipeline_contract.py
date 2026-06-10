@@ -216,3 +216,27 @@ def test_validate_pid_filter_rejects_float_and_str() -> None:
         validate_pid_filter("vol_cmdline", 1.5)  # type: ignore[arg-type]
     with pytest.raises(TypeError, match="pid must be int"):
         validate_pid_filter("vol_cmdline", "1234")  # type: ignore[arg-type]
+
+
+def test_refuse_path_propagates_caveats_and_classification_metadata(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cross-cutting regression: ``refuse()`` MUST propagate the
+    wrapper's caveat block on every refuse path so an agent reading
+    a refused envelope still gets the action-shaping guidance. A
+    regression that dropped ``caveats=`` from the splat would leave
+    the 8 non-credential wrappers (currently the only ones tested
+    end-to-end via vol_lsadump) shipping empty caveats on refuse —
+    silently. ``vol_netscan`` represents the non-credential family
+    (no discipline_reminder); pin it through a TOOL_FAILED refuse."""
+    _install_proc(monkeypatch, _FakeProc(stdout=b"", stderr=b"Vol3 broken", returncode=2))
+    envelope = _run(env)
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.TOOL_FAILED.value
+    # caveats MUST propagate on refuse, the action-shaping guidance for
+    # the netscan family (pool-tag scan caveat, build-fragility caveat).
+    assert len(envelope.caveats) >= 1
+    assert any("pool-tag" in c for c in envelope.caveats)
+    # vol_netscan does not set discipline_reminder; should be None.
+    assert envelope.discipline_reminder is None

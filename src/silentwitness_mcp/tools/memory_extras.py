@@ -2,11 +2,14 @@
 
 Credential material — record_observation against this output should be
 reviewed at Restricted classification and HMAC-approved before report
-inclusion (see :data:`_DISCIPLINE_REMINDER`). The wrapper is split out
-of :mod:`tools.memory` because the Restricted-classification surface
-warrants a separate review boundary; consolidating it with the other
-eight wrappers would dilute the per-module review focus on credential
-handling.
+inclusion (see :data:`_DISCIPLINE_REMINDER`). The wrapper lives outside
+:mod:`tools.memory` for two reasons: (1) the 400-LOC CI gate would
+otherwise force a split anyway (:mod:`tools.memory` is already in the
+high 300s with the rest of the memory family); (2) the Restricted-
+classification surface warrants its own review boundary. Future
+credential-material wrappers (vol_hashdump, vol_cachedump, …) should
+land here too — at that point this module's name may want to evolve
+to ``memory_restricted.py`` to match its actual scope.
 
 A row from Vol3's JSON renderer carries ``Key`` (secret name like
 ``$MACHINE.ACC`` / ``DefaultPassword`` / ``_SC_<service>`` /

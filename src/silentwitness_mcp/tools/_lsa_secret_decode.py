@@ -1,9 +1,9 @@
 """Shared UTF-16LE printable-acceptance and host-managed-key catalogue
 for the LSA-secret tool family. Lives in a standalone module so the
-typed model (:class:`LsaSecretEntry` field_validator) and the wrapper
-parser (:func:`memory_extras._parse_lsadump`) can share one definition
-without an import cycle between :mod:`_memory_models` and
-:mod:`memory_extras`.
+pure-function helpers (acceptance band, binary-key allowlist, UTF-16LE
+decode) are unit-testable in isolation from the Pydantic model boundary,
+and so a future second LSA-family model can import the helpers without
+pulling in :class:`LsaSecretEntry`.
 
 A printable rendering of LSA-secret Hex bytes is best-effort: it
 exists for analyst comfort, not as the audit-trail authority. The Hex
@@ -74,7 +74,16 @@ def decode_secret(hex_str: str, *, key: str | None = None) -> str | None:
     unrenderable"). Return ``None`` when the bytes decode successfully
     but the result is non-printable per :func:`is_printable_secret`,
     or when ``key`` is in :data:`BINARY_KEY_NAMES` (host-managed
-    random bytes — Hex is the only meaningful representation)."""
+    random bytes — Hex is the only meaningful representation).
+
+    The BINARY_KEY short-circuit fires BEFORE ``bytes.fromhex``;
+    callers that need malformed-hex detection on a binary-key row
+    rely on the :class:`LsaSecretEntry.hex_value` regex catching
+    it at the model boundary (the primary guard). The two layers
+    are jointly load-bearing — do not reorder without also adding
+    a parser-side hex-shape check, or schema drift on binary-key
+    rows will silently return ``None`` indistinguishable from the
+    legitimate binary-bytes case."""
     if key is not None and key in BINARY_KEY_NAMES:
         return None
     try:
