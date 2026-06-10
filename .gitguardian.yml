@@ -6,6 +6,7 @@
 # material is committed.
 version: 2
 
-ignored_paths:
-  - "tests/unit/test_vol_lsadump.py"
-  - "tests/unit/test_lsa_secret_decode.py"
+secret:
+  ignored_paths:
+    - "tests/unit/test_vol_lsadump.py"
+    - "tests/unit/test_lsa_secret_decode.py"

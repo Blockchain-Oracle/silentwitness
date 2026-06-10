@@ -52,6 +52,20 @@ def test_is_printable_secret_rejects_control_chars() -> None:
     assert is_printable_secret("Hi\x01") is False
 
 
+def test_is_printable_secret_rejects_lone_surrogate() -> None:
+    """Cs (surrogate) category supplied directly as a Python str —
+    Pydantic does not reject these in str fields by default, so the
+    type-boundary field_validator must catch them via the acceptance-
+    band check."""
+    assert is_printable_secret("\ud800") is False  # high surrogate
+    assert is_printable_secret("\udc00") is False  # low surrogate
+
+
+def test_is_printable_secret_rejects_unassigned_codepoint() -> None:
+    """Cn (unassigned codepoint) — U+0378 is unassigned in Unicode 15."""
+    assert is_printable_secret("͸") is False
+
+
 # ---------------------------------------------------------------------------
 # decode_secret — error-paths and branch coverage
 # ---------------------------------------------------------------------------
@@ -151,10 +165,20 @@ def test_lsasecretentry_binary_key_forces_secret_none_at_model_boundary() -> Non
     in the parser. A direct ``model_validate`` from a future caller
     MUST not surface a "decrypted" rendering of an NTLM hash / DPAPI
     seed / NL$KM AES key — even if the bytes incidentally decoded to
-    a printable Unicode glyph."""
+    a printable Unicode glyph. ``match=`` pins the model_validator as
+    the source of the failure so a future merge into the secret
+    field_validator is caught."""
     for binary_key in BINARY_KEY_NAMES:
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="host-managed"):
             LsaSecretEntry.model_validate({"Key": binary_key, "Hex": "61006200", "Secret": "ab"})
+
+
+def test_lsasecretentry_binary_key_check_is_case_insensitive() -> None:
+    """Windows registry value names are case-insensitive; the BINARY_KEY
+    guard goes through is_binary_key (case-folded) so an upstream
+    casing-normalization regression cannot silently disable it."""
+    with pytest.raises(ValidationError, match="host-managed"):
+        LsaSecretEntry.model_validate({"Key": "$machine.acc", "Hex": "61006200", "Secret": "ab"})
 
 
 def test_decode_secret_raises_on_truncated_utf16le() -> None:

@@ -225,11 +225,11 @@ def test_refuse_path_propagates_caveats_and_classification_metadata(
     """Cross-cutting regression: ``refuse()`` MUST propagate the
     wrapper's caveat block on every refuse path so an agent reading
     a refused envelope still gets the action-shaping guidance. A
-    regression that dropped ``caveats=`` from the splat would leave
-    the 8 non-credential wrappers (currently the only ones tested
-    end-to-end via vol_lsadump) shipping empty caveats on refuse —
-    silently. ``vol_netscan`` represents the non-credential family
-    (no discipline_reminder); pin it through a TOOL_FAILED refuse."""
+    regression that dropped ``caveats=`` from the ``refuse_kw`` splat
+    would silently ship empty caveats on every non-credential
+    wrapper's refuse path. ``vol_netscan`` represents the non-
+    credential family (no discipline_reminder); pin it through a
+    TOOL_FAILED refuse."""
     _install_proc(monkeypatch, _FakeProc(stdout=b"", stderr=b"Vol3 broken", returncode=2))
     envelope = _run(env)
     assert envelope.success is False
@@ -239,4 +239,32 @@ def test_refuse_path_propagates_caveats_and_classification_metadata(
     assert len(envelope.caveats) >= 1
     assert any("pool-tag" in c for c in envelope.caveats)
     # vol_netscan does not set discipline_reminder; should be None.
+    assert envelope.discipline_reminder is None
+
+
+def test_blob_persist_oserror_carries_refuse_metadata(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A disk-full / EACCES OSError during blob persistence is one of
+    the production failure modes for the credential-material path.
+    Pin: the wrapper surfaces TOOL_FAILED with the structured
+    _format_oserror advisory, AND caveats + (where applicable)
+    discipline_reminder propagate through the refuse splat."""
+    import os
+
+    _install_proc(monkeypatch, _FakeProc(stdout=b"[]"))
+
+    def _enospc(*_a: Any, **_k: Any) -> Path:
+        raise OSError(28, os.strerror(28), str(env[0] / "audit" / "stdout-stub"))
+
+    monkeypatch.setattr("silentwitness_mcp.tools._vol_pipeline.persist_blob", _enospc)
+    envelope = _run(env)
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.TOOL_FAILED.value
+    assert "blob persist failed" in envelope.advisories[0]
+    assert "errno=28" in envelope.advisories[0]
+    # caveats propagate through the OSError refuse path too.
+    assert len(envelope.caveats) >= 1
+    # vol_netscan does not set discipline_reminder.
     assert envelope.discipline_reminder is None

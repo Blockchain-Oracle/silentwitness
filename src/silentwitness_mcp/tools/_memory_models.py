@@ -13,7 +13,6 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from silentwitness_mcp.tools._lsa_models import LsaDumpOutput, LsaSecretEntry
 from silentwitness_mcp.tools._peb_helpers import (
     normalise_cmdline_args,
     normalise_peb_path_or_name,
@@ -356,8 +355,6 @@ __all__ = [
     "DllListOutput",
     "HandleEntry",
     "HandlesOutput",
-    "LsaDumpOutput",
-    "LsaSecretEntry",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",

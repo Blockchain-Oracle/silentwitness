@@ -17,13 +17,15 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from silentwitness_mcp.tools._lsa_secret_decode import BINARY_KEY_NAMES, is_printable_secret
+from silentwitness_mcp.tools._lsa_secret_decode import is_binary_key, is_printable_secret
 
-# Matches valid Hex shape on input AFTER whitespace removal — used as
-# a defense-in-depth check that the byte stream is byte-paired (even
-# length). Vol3 may wrap long blobs with internal whitespace which the
-# field_validator strips before checking.
-_HEX_NON_WHITESPACE_RE = re.compile(r"\s+")
+# Matches runs of whitespace inside a Hex value; used by
+# :meth:`LsaSecretEntry._check_hex_byte_paired` to strip wrap-
+# formatting before checking byte-pairing. Vol3's json renderer
+# does not wrap today, but the tolerance is preserved as defense
+# against a future renderer-switch (e.g. operator debugging with
+# the ``pretty`` renderer wired through).
+_WHITESPACE_RE = re.compile(r"\s+")
 
 _ROW_CONFIG = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -93,7 +95,12 @@ class LsaSecretEntry(BaseModel):
         schema drift. ``bytes.fromhex`` would reject it downstream
         anyway, but catching it at the type boundary produces a
         cleaner audit advisory."""
-        stripped = _HEX_NON_WHITESPACE_RE.sub("", value)
+        # The pattern= regex already rejects whitespace-only by
+        # requiring a leading hex digit; this strip+check is the
+        # byte-pairing guard. The empty-after-strip branch is
+        # unreachable through the sanctioned construction path but
+        # kept as defense against a future regex loosening.
+        stripped = _WHITESPACE_RE.sub("", value)
         if not stripped:
             raise ValueError("hex_value cannot be whitespace-only")
         if len(stripped) % 2:
@@ -120,12 +127,14 @@ class LsaSecretEntry(BaseModel):
         seed) MUST surface ``secret=None`` — even when the bytes happen
         to decode to a printable Unicode glyph string. The parser
         already enforces this by passing ``key=...`` into
-        :func:`decode_secret`, but the round-1 ratchet to enforce the
-        printable contract at the type boundary applies with equal
-        force here: a direct ``model_validate`` from a future caller
-        must not be able to surface a "decrypted" rendering of an NTLM
-        hash. Fail closed."""
-        if self.key in BINARY_KEY_NAMES and self.secret is not None:
+        :func:`decode_secret`, but a direct ``model_validate`` from a
+        future caller must not be able to surface a "decrypted"
+        rendering of an NTLM hash. Fail closed.
+
+        Comparison goes through :func:`is_binary_key` (case-folded)
+        so an upstream key-normalization step cannot silently disable
+        the guard."""
+        if is_binary_key(self.key) and self.secret is not None:
             raise ValueError(
                 f"LsaSecretEntry.key={self.key!r} is host-managed (random bytes); "
                 "secret MUST be None — see _lsa_secret_decode.BINARY_KEY_NAMES"

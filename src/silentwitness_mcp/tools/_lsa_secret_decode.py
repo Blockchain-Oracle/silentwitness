@@ -1,9 +1,8 @@
 """Shared UTF-16LE printable-acceptance and host-managed-key catalogue
 for the LSA-secret tool family. Lives in a standalone module so the
 pure-function helpers (acceptance band, binary-key allowlist, UTF-16LE
-decode) are unit-testable in isolation from the Pydantic model boundary,
-and so a future second LSA-family model can import the helpers without
-pulling in :class:`LsaSecretEntry`.
+decode) are unit-testable in isolation from the Pydantic model
+boundary — exercised directly by ``tests/unit/test_lsa_secret_decode.py``.
 
 A printable rendering of LSA-secret Hex bytes is best-effort: it
 exists for analyst comfort, not as the audit-trail authority. The Hex
@@ -48,6 +47,20 @@ BINARY_KEY_NAMES: Final = frozenset(
         "DPAPI_SYSTEM",  # DPAPI master-key seed (machine + user halves)
     }
 )
+# Pre-casefolded mirror of :data:`BINARY_KEY_NAMES` for case-insensitive
+# comparison. Windows registry value names are case-insensitive in the
+# underlying NTRegistry semantics — comparing case-foldedly here closes
+# a speculative future-bug surface where an upstream key-normalization
+# step (parser refactor, Pydantic ``field_validator("key", mode="before")``)
+# could cause a byte-exact ``in BINARY_KEY_NAMES`` check to silently miss.
+_BINARY_KEY_NAMES_CASEFOLDED: Final = frozenset(n.casefold() for n in BINARY_KEY_NAMES)
+
+
+def is_binary_key(key: str) -> bool:
+    """Case-insensitive membership check against :data:`BINARY_KEY_NAMES`.
+    Matches Windows registry value-name semantics and guards against
+    an upstream casing-normalization regression."""
+    return key.casefold() in _BINARY_KEY_NAMES_CASEFOLDED
 
 
 def is_printable_secret(text: str) -> bool:
@@ -78,16 +91,20 @@ def decode_secret(hex_str: str, *, key: str | None = None) -> str | None:
 
     The BINARY_KEY short-circuit fires BEFORE ``bytes.fromhex``;
     callers that need malformed-hex detection on a binary-key row
-    rely on the :class:`LsaSecretEntry.hex_value` regex catching
-    it at the model boundary (the primary guard). The two layers
-    are jointly load-bearing — do not reorder without also adding
-    a parser-side hex-shape check, or schema drift on binary-key
-    rows will silently return ``None`` indistinguishable from the
-    legitimate binary-bytes case."""
-    if key is not None and key in BINARY_KEY_NAMES:
+    rely on the :class:`LsaSecretEntry.hex_value` shape regex AND
+    :meth:`LsaSecretEntry._check_hex_byte_paired` together catching
+    it at the model boundary. The two layers are jointly load-
+    bearing — do not reorder without also adding a parser-side
+    hex-shape check, or schema drift on binary-key rows will
+    silently return ``None`` indistinguishable from the legitimate
+    binary-bytes case."""
+    # `None in frozenset({...})` is False; the helper accepts str only,
+    # so a bare `if key and is_binary_key(key)` is equivalent — keep the
+    # explicit `is not None` for legibility on a credential-material path.
+    if key is not None and is_binary_key(key):
         return None
     try:
-        raw = bytes.fromhex(hex_str.replace(" ", "").replace("\n", ""))
+        raw = bytes.fromhex("".join(hex_str.split()))
     except ValueError as exc:
         raise ValueError(f"lsadump Hex field is not valid hex (len={len(hex_str)}): {exc}") from exc
     try:
@@ -102,4 +119,4 @@ def decode_secret(hex_str: str, *, key: str | None = None) -> str | None:
     return text if is_printable_secret(text) else None
 
 
-__all__ = ["BINARY_KEY_NAMES", "decode_secret", "is_printable_secret"]
+__all__ = ["BINARY_KEY_NAMES", "decode_secret", "is_binary_key", "is_printable_secret"]

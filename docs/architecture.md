@@ -198,7 +198,7 @@ silentwitness/
 │   │   ├── envelope.py                    # Pydantic response envelope (§5.2)
 │   │   ├── tools/
 │   │   │   ├── memory.py                  # Vol3 wrappers: pslist, pstree, psscan, malfind, netscan, cmdline, dlllist, handles
-│   │   │   ├── memory_extras.py           # Credential-material Vol3 wrappers (lsadump; future: hashdump, cachedump). Separate module per 400-LOC budget + Restricted-classification review boundary.
+│   │   │   ├── memory_extras.py           # Credential-material Vol3 wrappers (currently vol_lsadump). Separate module per 400-LOC budget + Restricted-classification review boundary.
 │   │   │   ├── disk.py                    # MFT, Amcache, Shimcache, Prefetch, Shellbags via EZ Tools
 │   │   │   ├── log.py                     # EVTX, Hayabusa CSV timeline, Chainsaw hunt
 │   │   │   ├── network.py                 # Zeek run, Suricata run
