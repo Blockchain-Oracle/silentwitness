@@ -22,8 +22,15 @@ if any(p != p.lower() for p in _PEB_PLACEHOLDER_PREFIXES):
     raise ValueError("_PEB_PLACEHOLDER_PREFIXES entries must be pre-lowercased")
 
 _NULL_SENTINELS: Final[frozenset[str]] = frozenset({"", "null", "none"})
-"""Case-insensitive set of sentinel strings Vol3 may emit in lieu of
-a real string value."""
+"""Case-insensitive sentinel strings Vol3 may emit in lieu of a real
+command-line string. **Consumed ONLY by**
+:func:`normalise_cmdline_args` — NOT by
+:func:`normalise_peb_path_or_name`. Bare ``"null"`` is a legitimate
+kernel-namespace object name (some malware uses it deliberately), so
+the peb-path normaliser preserves it verbatim. If you add a sentinel
+here, decide explicitly whether peb-paths should ALSO collapse it;
+if yes, extract a separate ``_PEB_NULL_SENTINELS`` and consume in
+both."""
 
 _OUTER_WHITESPACE_NUL: Final = re.compile(r"^[\s\x00]+|[\s\x00]+$")
 """Strip outer whitespace + NUL bytes in one pass. Chained
@@ -109,12 +116,24 @@ def validate_pid_filter(tool_name: str, pid: int | None) -> None:
 
 
 def validate_object_types_filter(tool_name: str, object_types: list[str] | None) -> None:
-    """``None`` = no filter; ``[]`` = caller-side typo. Rejects empty,
-    whitespace-bearing (would silently produce zero matches inside
-    Vol3's comma-joined arg), pre-joined-with-comma, and non-
-    catalogue entries. ``object_types`` must be a ``list``, not a
-    ``set`` / ``tuple`` — ``",".join(set)`` is non-deterministic and
-    would corrupt audit-trail reproducibility."""
+    """``None`` = no filter; ``[]`` = caller-side typo.
+
+    Three rejection layers:
+
+    1. **Type guard**: must be a ``list``. ``set`` iterates non-
+       deterministically and would corrupt audit-trail reproducibility
+       via a different ``",".join`` ordering on each call. ``tuple`` is
+       deterministic but rejected for signature consistency
+       (annotation is ``list[str] | None``).
+    2. **Per-entry shape**: non-str, empty, comma-bearing, or
+       ``str.strip()``-bearing entries fail. ``str.strip()`` catches
+       ASCII whitespace + NBSP + ideographic space; it does NOT catch
+       zero-width-class characters (U+200B/C/D). Those rely on the
+       catalogue check below for rejection.
+    3. **Action-shaping catalogue**: entries not in
+       :data:`HANDLE_OBJECT_TYPES`. Vol3 accepts arbitrary kernel
+       object names, so this is the wrapper's curation, not Vol3's
+       allowlist."""
     if object_types is None:
         return
     if not isinstance(object_types, list):

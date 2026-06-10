@@ -186,3 +186,33 @@ def test_object_types_filter_rejects_malformed_lists_synchronously(
                 object_types=bad_object_types,
             )
         )
+
+
+# ---------------------------------------------------------------------------
+# Wrapper-input invariant — direct pid/object_types type-guard pins
+# ---------------------------------------------------------------------------
+
+
+def test_validate_pid_filter_rejects_bool_via_int_subclass_trap() -> None:
+    """``True`` and ``False`` are ``isinstance(True, int) == True`` in
+    Python — without the explicit ``bool`` exclusion they would round-
+    trip to ``str(True)`` and Vol3 would reject ``--pid True`` with a
+    cryptic message. Pin the bool-as-int trap branch."""
+    from silentwitness_mcp.tools._peb_helpers import validate_pid_filter
+
+    with pytest.raises(TypeError, match="pid must be int"):
+        validate_pid_filter("vol_cmdline", True)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="pid must be int"):
+        validate_pid_filter("vol_cmdline", False)  # type: ignore[arg-type]
+
+
+def test_validate_pid_filter_rejects_float_and_str() -> None:
+    """Non-int non-bool inputs must fail with the same TypeError shape
+    (catches a regression that loosened the guard to ``isinstance(..., int)``
+    only — float and str-bearing pids would slip past)."""
+    from silentwitness_mcp.tools._peb_helpers import validate_pid_filter
+
+    with pytest.raises(TypeError, match="pid must be int"):
+        validate_pid_filter("vol_cmdline", 1.5)  # type: ignore[arg-type]
+    with pytest.raises(TypeError, match="pid must be int"):
+        validate_pid_filter("vol_cmdline", "1234")  # type: ignore[arg-type]

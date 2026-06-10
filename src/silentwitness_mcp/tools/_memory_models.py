@@ -332,7 +332,7 @@ class HandleEntry(BaseModel):
     # ALPC Port, Mailslot, ... appear on essentially every image and
     # are NOT in HANDLE_OBJECT_TYPES, which is an action-shaping
     # caveat catalogue for --object-types filtering, NOT a schema-
-    # validation allowlist. Same rationale as NetscanEntry.state.
+    # validation allowlist.
     type: str = Field(alias="Type")
     granted_access: int = Field(alias="GrantedAccess", ge=0, le=0xFFFFFFFF)
     name: str | None = Field(default=None, alias="Name")

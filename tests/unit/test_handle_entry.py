@@ -35,7 +35,7 @@ def _row(**overrides: Any) -> dict[str, Any]:
 @pytest.mark.parametrize(
     "kernel_type",
     [
-        # Documented common types.
+        # Documented common types covered by the action-shaping catalogue.
         "Process",
         "Thread",
         "File",
@@ -47,9 +47,11 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "Token",
         "Directory",
         "SymbolicLink",
-        # Standard types Vol3 emits on essentially every memory image
-        # that a closed Literal[...] would silently reject — the
-        # exact silent-failure-hunter round-2 finding (CRITICAL-1).
+        # Standard kernel object types Vol3 has been observed emitting
+        # on Windows 7-11 images that would silently fail under a closed
+        # Literal[...] catalogue. Presence is session/role-dependent
+        # (e.g. DxgkSharedResource needs an active graphics session;
+        # Composition is DWM-only).
         "Job",
         "Timer",
         "IoCompletion",
@@ -72,16 +74,15 @@ def _row(**overrides: Any) -> dict[str, Any]:
         "Composition",
         "DxgkSharedResource",
         "FilterCommunicationPort",
-        "TmTm",
+        "PowerRequest",
         "TmTx",
-        "RegistryTransaction",
     ],
 )
 def test_type_accepts_kernel_object_namespace_verbatim(kernel_type: str) -> None:
-    """Vol3 walks ``ObTypeIndexTable`` and forwards ``_OBJECT_TYPE.
-    Name`` verbatim — the type set is open. A closed Literal[...]
-    would fail-closed on any of these on the first real invocation.
-    Mirror of :class:`NetscanEntry.state`'s open-string rationale."""
+    """Vol3 walks ``ObTypeIndexTable`` and forwards ``_OBJECT_TYPE.Name``
+    verbatim — the kernel-side set is open. A closed ``Literal[...]``
+    would fail-closed at the first emission of any type not on the
+    list."""
     entry = HandleEntry.model_validate(_row(Type=kernel_type))
     assert entry.type == kernel_type
 
