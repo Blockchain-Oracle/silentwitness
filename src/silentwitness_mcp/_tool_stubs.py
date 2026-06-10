@@ -110,5 +110,17 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         guard_mount("vol_cmdline", ctx)
         raise NotImplementedError("vol_cmdline is registered but not yet implemented")
 
+    @mcp.tool()
+    def vol_dlllist(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Vol3 windows.dlllist. Stub."""
+        guard_mount("vol_dlllist", ctx)
+        raise NotImplementedError("vol_dlllist is registered but not yet implemented")
+
+    @mcp.tool()
+    def vol_handles(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Vol3 windows.handles. Stub."""
+        guard_mount("vol_handles", ctx)
+        raise NotImplementedError("vol_handles is registered but not yet implemented")
+
 
 __all__ = ["register_finding_tool_stubs"]
