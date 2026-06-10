@@ -238,3 +238,48 @@ def test_dlllist_unknown_column_triggers_output_parse_failed(
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
     assert len(calls) == 1
+
+
+# ---------------------------------------------------------------------------
+# Tool-specific regression coverage (PR #142 + #144 precedents)
+# ---------------------------------------------------------------------------
+
+
+def test_dlllist_normalizer_key_is_vol_dlllist_not_default(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pipeline MUST forward ``vol_dlllist`` as normalizer key — a
+    silent default-key fallback would break citation-gate matching."""
+    from silentwitness_mcp.verification import normalizer as _norm
+
+    captured: list[str] = []
+    real = _norm.normalize_output
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._vol_common.normalize_output",
+        lambda raw, tool: (captured.append(tool), real(raw, tool))[1],
+    )
+    _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    envelope = _invoke(env)
+    assert envelope.success is True
+    assert captured == ["vol_dlllist"]
+
+
+def test_dlllist_audit_row_tool_name_is_vol_dlllist(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit-trail integrity: success-path JSONL row's ``tool`` field
+    MUST be ``vol_dlllist`` (not a copy-paste artefact like
+    ``vol_cmdline``)."""
+    rows = [_row()]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    case_dir = env[0]
+    envelope = _invoke(env)
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [json.loads(line) for line in audit_log.read_text("utf-8").splitlines() if line]
+    row = audit_rows[-1]
+    assert row["tool"] == "vol_dlllist"
+    assert row["audit_id"] == envelope.audit_id
+    assert row["params"]["exit_code"] == 0

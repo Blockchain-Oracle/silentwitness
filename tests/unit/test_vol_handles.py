@@ -151,6 +151,9 @@ def test_handles_injection_prerequisite_bitmask_preserved(
     _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
     envelope = _invoke(env)
     ga = envelope.data.entries[0].granted_access
+    # Byte-equality first (catches a regression that decodes / re-encodes
+    # / widens the bitmask), then bit-membership for caveat-style checks.
+    assert ga == combo
     assert ga & _PROCESS_VM_WRITE
     assert ga & _PROCESS_CREATE_THREAD
 
@@ -284,3 +287,45 @@ def test_handles_caveats_verbatim_with_injection_prerequisites_first(
     assert "Global\\<random>" in caveats[2]
     assert "PhysicalMemory" in caveats[3]
     assert "deleted files" in caveats[4]
+
+
+# ---------------------------------------------------------------------------
+# Tool-specific regression coverage (PR #142 + #144 precedents)
+# ---------------------------------------------------------------------------
+
+
+def test_handles_normalizer_key_is_vol_handles_not_default(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Pipeline MUST forward ``vol_handles`` as normalizer key."""
+    from silentwitness_mcp.verification import normalizer as _norm
+
+    captured: list[str] = []
+    real = _norm.normalize_output
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._vol_common.normalize_output",
+        lambda raw, tool: (captured.append(tool), real(raw, tool))[1],
+    )
+    _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    envelope = _invoke(env)
+    assert envelope.success is True
+    assert captured == ["vol_handles"]
+
+
+def test_handles_audit_row_tool_name_is_vol_handles(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit-trail integrity: row tool field MUST be ``vol_handles``."""
+    rows = [_row()]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    case_dir = env[0]
+    envelope = _invoke(env)
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [json.loads(line) for line in audit_log.read_text("utf-8").splitlines() if line]
+    row = audit_rows[-1]
+    assert row["tool"] == "vol_handles"
+    assert row["audit_id"] == envelope.audit_id
+    assert row["params"]["exit_code"] == 0

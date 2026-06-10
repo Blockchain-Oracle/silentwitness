@@ -112,7 +112,7 @@ def test_tool_failed_with_empty_stderr_yields_synthetic_advisory(
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("tool", ["vol_cmdline", "vol_malfind"])
+@pytest.mark.parametrize("tool", ["vol_cmdline", "vol_malfind", "vol_dlllist", "vol_handles"])
 @pytest.mark.parametrize("bad_pid", [0, -1, -1234])
 def test_pid_filter_rejects_zero_and_negative_synchronously(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
@@ -139,5 +139,47 @@ def test_pid_filter_rejects_zero_and_negative_synchronously(
                 audit_logger=logger,
                 model_used=MODEL,
                 pid=bad_pid,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# Wrapper-input invariant — vol_handles object_types filter
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "bad_object_types",
+    [
+        [],  # empty list — caller-side typo
+        [""],  # empty string entry
+        [" "],  # whitespace-only entry
+        ["\t"],  # tab-only entry
+        ["File,Mutant"],  # pre-joined string from a bad caller
+        ["Mailslot"],  # not in Vol3 allowlist
+        ["File", "Bogus"],  # one valid + one bogus
+    ],
+)
+def test_object_types_filter_rejects_malformed_lists_synchronously(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    bad_object_types: list[str],
+) -> None:
+    """``object_types=[]`` / whitespace / pre-joined / non-allowlist
+    entries must reject pre-spawn. A success envelope with zero rows
+    would otherwise mask an LLM-driven slop input as real ground truth."""
+    from silentwitness_mcp.tools.memory import vol_handles
+
+    _install_proc(monkeypatch, _FakeProc(stdout=b"[]"))
+    case_dir, evidence, logger, registry = env
+    with pytest.raises(ValueError):
+        asyncio.run(
+            vol_handles(
+                evidence,
+                case_dir=case_dir,
+                evidence_registry=registry,
+                audit_logger=logger,
+                model_used=MODEL,
+                object_types=bad_object_types,
             )
         )

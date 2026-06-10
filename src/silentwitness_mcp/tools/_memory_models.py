@@ -13,6 +13,8 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from silentwitness_mcp.tools._peb_helpers import normalise_peb_string
+
 _ROW_CONFIG = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
@@ -221,42 +223,6 @@ class NetscanOutput(BaseModel):
     entries: tuple[NetscanEntry, ...]
 
 
-_PEB_PLACEHOLDER_PREFIXES: Final[tuple[str, ...]] = (
-    # Anchored on Vol3's hex-address suffix so a real command line that
-    # legitimately starts with "Required memory at" (some Windows
-    # bootloader / firmware utilities) is preserved verbatim.
-    "required memory at 0x",
-    "swap layer is not available",
-)
-# Mechanical enforcement of the lowercase invariant: the match runs
-# against ``.lower()``-folded input, so a future addition like
-# ``"Paged Out"`` (mixed case) would silently fail to match and let
-# a placeholder reach the entity gate as a citation. Raise at import
-# (assert would strip under -O).
-if any(p != p.lower() for p in _PEB_PLACEHOLDER_PREFIXES):
-    raise ValueError("_PEB_PLACEHOLDER_PREFIXES entries must be pre-lowercased")
-"""Closed catalogue of Vol3 "couldn't read this memory region"
-sentinel string prefixes, pre-lowercased at module load. Match is
-case-insensitive + whitespace+NUL-stripped so renderer drift on
-capitalisation or leading indent doesn't silently let a placeholder
-reach the entity gate as a citable evidence span.
-
-Additions must be source-traced to a Vol3 commit — the
-``args: str | None`` invariant on :class:`CmdlineEntry` is what lets
-the caveat layer distinguish "no args" from "couldn't read args"
-honestly; widening this set silently would break that distinction."""
-
-_NULL_SENTINELS: Final[frozenset[str]] = frozenset({"", "null", "none"})
-"""Case-insensitive set of sentinel strings Vol3 may emit in lieu of
-a real ``args`` value."""
-
-_OUTER_WHITESPACE_NUL: Final = re.compile(r"^[\s\x00]+|[\s\x00]+$")
-"""Strip outer whitespace + NUL bytes in one pass. ``str.strip()``
-alone leaves embedded NULs; chaining ``.strip().strip("\\x00")``
-mishandles interleaved cases like ``"\\x00 \\x00"`` (outer NULs
-removed, inner space remains, sentinel check then fails)."""
-
-
 class CmdlineEntry(BaseModel):
     """Vol3 ``windows.cmdline`` row — one process's launch command line.
 
@@ -286,20 +252,7 @@ class CmdlineEntry(BaseModel):
     @field_validator("args", mode="before")
     @classmethod
     def _normalise_args(cls, value: object) -> object:
-        # Non-str passes through; pydantic's outer str-typing then
-        # loud-fails on int / list / bool with ValidationError, which
-        # _run_wrapper surfaces as OUTPUT_PARSE_FAILED.
-        if not isinstance(value, str):
-            return value
-        # Single-pass strip of outer whitespace AND NUL bytes — chained
-        # .strip().strip("\x00") misses "\x00 \x00" (outer NULs go,
-        # embedded space remains, the empty-string sentinel never fires).
-        folded = _OUTER_WHITESPACE_NUL.sub("", value).lower()
-        if folded in _NULL_SENTINELS or any(
-            folded.startswith(p) for p in _PEB_PLACEHOLDER_PREFIXES
-        ):
-            return None
-        return value  # verbatim preservation for the entity gate
+        return normalise_peb_string(value)
 
 
 class CmdlineOutput(BaseModel):
@@ -311,9 +264,15 @@ class DllEntry(BaseModel):
     """Vol3 ``windows.dlllist`` row — one loaded DLL per process,
     walked from the PEB's ``InLoadOrderModuleList``.
 
-    Reflectively-loaded DLLs are INVISIBLE here (they bypass the
-    loader list). The caveat layer flags that; the type layer just
-    preserves the typed loader-list view honestly."""
+    Reflectively-loaded DLLs bypass this list and are not visible
+    here — see the caveat layer and :func:`vol_malfind`.
+
+    ``path`` is ``str | None``: ``None`` for paged-out loader
+    entries (Vol3 emits the same ``"Required memory at 0x..."`` /
+    ``"Swap layer is not available"`` placeholder strings the
+    cmdline plugin emits for unreadable Args). The normaliser
+    collapses those placeholders so the entity gate cannot cite a
+    placeholder string as a DLL load path."""
 
     model_config = _ROW_CONFIG
 
@@ -326,6 +285,11 @@ class DllEntry(BaseModel):
     load_time: datetime | None = Field(default=None, alias="LoadTime")
     file_output: str | None = Field(default=None, alias="File output")
 
+    @field_validator("path", mode="before")
+    @classmethod
+    def _normalise_path(cls, value: object) -> object:
+        return normalise_peb_string(value)
+
 
 class DllListOutput(BaseModel):
     model_config = _OUT_CONFIG
@@ -335,21 +299,50 @@ class DllListOutput(BaseModel):
 class HandleEntry(BaseModel):
     """Vol3 ``windows.handles`` row — one open handle per process.
 
-    ``granted_access`` is the raw kernel bitmask (int). NOT decoded
-    here — the entity gate cites the raw integer; downstream consumers
-    decode contextually (PROCESS_VM_WRITE = 0x20, PROCESS_VM_READ =
-    0x10, PROCESS_CREATE_THREAD = 0x2, etc.). The caveat layer flags
-    the injection/credential-theft prerequisite bitmask shapes."""
+    ``granted_access`` is preserved as raw ``int`` so the audit
+    citation is byte-exact against Vol3 output. Decoding (e.g. bit-
+    AND against ``PROCESS_VM_WRITE = 0x20``) is downstream analysis,
+    not the type layer. The caveat layer names the injection /
+    credential-theft prerequisite bitmask shapes.
+
+    ``handle_value`` + ``granted_access`` are bounded to the unsigned
+    DWORD range Windows ABI guarantees for user-mode HANDLE and
+    ACCESS_MASK; out-of-range surfaces as OUTPUT_PARSE_FAILED rather
+    than shipping garbled hex.
+
+    Intentionally no ``type``↔``name`` cross-field validator. Handle
+    table tampering (DKOM unlink, type-confusion, ObReferenceObject-
+    ByHandle interception returning a falsified _OBJECT_HEADER) is
+    exactly what vol_handles exists to surface; rejecting at the
+    type layer would make tampered rows un-representable and defeat
+    the tool's purpose."""
 
     model_config = _ROW_CONFIG
 
     pid: int = Field(alias="PID")
     process: str = Field(alias="Process")
     offset: int = Field(alias="Offset")
-    handle_value: int = Field(alias="HandleValue")
-    type: str = Field(alias="Type")
-    granted_access: int = Field(alias="GrantedAccess")
+    handle_value: int = Field(alias="HandleValue", ge=0, le=0xFFFFFFFF)
+    type: Literal[
+        "Process",
+        "Thread",
+        "File",
+        "Key",
+        "Section",
+        "Event",
+        "Mutant",
+        "Semaphore",
+        "Token",
+        "Directory",
+        "SymbolicLink",
+    ] = Field(alias="Type")
+    granted_access: int = Field(alias="GrantedAccess", ge=0, le=0xFFFFFFFF)
     name: str | None = Field(default=None, alias="Name")
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _normalise_name(cls, value: object) -> object:
+        return normalise_peb_string(value)
 
 
 class HandlesOutput(BaseModel):
