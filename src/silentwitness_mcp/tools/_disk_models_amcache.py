@@ -177,13 +177,22 @@ class ShimcacheOutput(BaseModel):
     def row_count(self) -> int:
         return len(self.entries)
 
-    @model_validator(mode="after")
-    def _sort_by_position(self) -> ShimcacheOutput:
-        sorted_entries = tuple(
-            sorted(self.entries, key=lambda e: (e.cache_entry_position, e.control_set))
-        )
-        object.__setattr__(self, "entries", sorted_entries)
-        return self
+    @model_validator(mode="before")
+    @classmethod
+    def _sort_entries(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        entries = data.get("entries")
+        if not entries:
+            return data
+
+        def _key(e: Any) -> tuple[int, int]:
+            if hasattr(e, "cache_entry_position"):
+                return (e.cache_entry_position, e.control_set)
+            return (int(e.get("CacheEntryPosition", 0)), int(e.get("ControlSet", 0)))
+
+        data["entries"] = tuple(sorted(entries, key=_key))
+        return data
 
 
 SHIMCACHE_CAVEATS: tuple[str, ...] = (

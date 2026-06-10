@@ -77,4 +77,21 @@ def force_mount_ok(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-__all__ = ["FakeProc", "force_dotnet", "force_mount_ok", "install_dotnet_mock"]
+def force_mount_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    advisory: str = "mount missing noexec",
+) -> None:
+    """Force the mount gate to fail — tests MOUNT_NOT_RO_NOEXEC_NOSUID."""
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._disk_common.check_mount",
+        lambda: MountCheckResult(ok=False, advisories=[advisory]),
+    )
+
+
+__all__ = [
+    "FakeProc",
+    "force_dotnet",
+    "force_mount_fail",
+    "force_mount_ok",
+    "install_dotnet_mock",
+]
