@@ -259,11 +259,11 @@ stories:
 
   - id: story-vol-lsadump
     epic: "Epic 5 — Memory tool wrappers (Vol3)"
-    status: PENDING
+    status: COMPLETE
     depends_on: [vol-pslist]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/29"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/148"
+    merged_at: "2026-06-10T19:28:44Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 6 — Disk + Registry tool wrappers
