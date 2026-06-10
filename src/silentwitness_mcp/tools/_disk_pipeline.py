@@ -6,10 +6,11 @@ glob+read+normalize+blob → parse → audit-row + success envelope."""
 from __future__ import annotations
 
 import hashlib
+import re
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from pydantic import BaseModel, ValidationError
 
@@ -32,6 +33,15 @@ from silentwitness_mcp.tools._disk_common import (
     write_audit_row,
 )
 from silentwitness_mcp.verification.normalizer import normalize_output
+
+# AmcacheParser + AppCompatCacheParser call Environment.Exit(0) even on
+# errors — exit code alone cannot signal failure. Check stderr for Serilog
+# [ERR]/[FTL] markers (CLAUDE.md §SIFT 2026 paths note).
+_SERILOG_ERR_RE: Final = re.compile(r"^\[\d{2}:\d{2}:\d{2} (?:ERR|FTL)\]", re.MULTILINE)
+
+
+def _has_serilog_error(stderr: bytes) -> bool:
+    return bool(_SERILOG_ERR_RE.search(stderr.decode("utf-8", errors="replace")))
 
 
 def _is_under(child: Path, parent: Path) -> bool:
@@ -62,11 +72,18 @@ async def run_disk_wrapper[TPayload: BaseModel](
     audit_logger: AuditLogger,
     model_used: str,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    check_serilog_stderr: bool = False,
+    corroboration: tuple[str, ...] = (),
 ) -> ToolResponse[TPayload]:
     """Drive one EZ-Tools wrapper end-to-end. Errors at any stage fall
     through to :func:`refuse` with the appropriate
     :class:`DiskFailureReason`. Caveats + audit row propagate on
-    every refuse path (architecture §4.6, PRD FR #5)."""
+    every refuse path (architecture §4.6, PRD FR #5).
+
+    ``check_serilog_stderr=True`` enables post-exit-0 stderr scanning for
+    Serilog ``[ERR]``/``[FTL]`` markers — required for tools whose exit
+    code is unreliable (AmcacheParser, AppCompatCacheParser, PECmd, SBECmd).
+    ``corroboration`` is forwarded verbatim to :class:`ToolResponse`."""
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
     cmd_argv = tuple(cmd_argv_for(ez_tool, ez_argv))
@@ -124,6 +141,18 @@ async def run_disk_wrapper[TPayload: BaseModel](
         # before calling run_disk_wrapper if needed.
         advisory = truncated_stderr(result.stderr) or (
             f"dotnet {ez_tool} exited {result.exit_code} with no stderr output"
+        )
+        return refuse(
+            DiskFailureReason.TOOL_FAILED,
+            elapsed_ms=result.elapsed_ms,
+            advisories=(advisory,),
+            exit_code=result.exit_code,
+            **refuse_kw,
+        )
+
+    if check_serilog_stderr and _has_serilog_error(result.stderr):
+        advisory = truncated_stderr(result.stderr) or (
+            f"dotnet {ez_tool} Serilog [ERR]/[FTL] on stderr with exit 0"
         )
         return refuse(
             DiskFailureReason.TOOL_FAILED,
@@ -254,6 +283,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
         examiner=audit_logger.examiner,
         advisories=success_advisories,
         caveats=caveats,
+        corroboration=corroboration,
         data_provenance=DataProvenance(
             tool=tool_name,
             stdout_path=blob_path,
