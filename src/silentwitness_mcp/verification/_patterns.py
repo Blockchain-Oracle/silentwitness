@@ -108,6 +108,10 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "vol_handles": _VOL3,
     "vol_filescan": _VOL3,
     "vol_lsadump": _VOL3,
+    # EZ-Tools CSV outputs are byte-stable — MFTECmd does NOT emit a
+    # banner into the CSV (the version banner goes to stdout, never
+    # to the CSV). Universal-rules-only suffices.
+    "parse_mft": EMPTY_PATTERNS,
     "parse_evtx": _EVTX,
     # Explicit "universal rules only" sentinel — callers that don't need
     # per-tool transforms use this rather than a typo'd tool name silently
