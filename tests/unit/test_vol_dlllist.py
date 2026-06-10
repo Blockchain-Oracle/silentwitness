@@ -241,7 +241,7 @@ def test_dlllist_unknown_column_triggers_output_parse_failed(
 
 
 # ---------------------------------------------------------------------------
-# Tool-specific regression coverage (PR #142 + #144 precedents)
+# Tool-specific regression coverage — normalizer key + audit row tool_name
 # ---------------------------------------------------------------------------
 
 

@@ -290,7 +290,7 @@ def test_handles_caveats_verbatim_with_injection_prerequisites_first(
 
 
 # ---------------------------------------------------------------------------
-# Tool-specific regression coverage (PR #142 + #144 precedents)
+# Tool-specific regression coverage — normalizer key + audit row tool_name
 # ---------------------------------------------------------------------------
 
 

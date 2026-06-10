@@ -155,8 +155,11 @@ def test_pid_filter_rejects_zero_and_negative_synchronously(
         [""],  # empty string entry
         [" "],  # whitespace-only entry
         ["\t"],  # tab-only entry
+        ["File "],  # trailing-space (would silently match zero in Vol3)
+        [" File"],  # leading-space
+        ["File\n"],  # embedded newline
         ["File,Mutant"],  # pre-joined string from a bad caller
-        ["Mailslot"],  # not in Vol3 allowlist
+        ["Bogus"],  # not in action-shaping catalogue
         ["File", "Bogus"],  # one valid + one bogus
     ],
 )

@@ -13,7 +13,10 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from silentwitness_mcp.tools._peb_helpers import normalise_peb_string
+from silentwitness_mcp.tools._peb_helpers import (
+    normalise_cmdline_args,
+    normalise_peb_path_or_name,
+)
 
 _ROW_CONFIG = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
@@ -252,7 +255,7 @@ class CmdlineEntry(BaseModel):
     @field_validator("args", mode="before")
     @classmethod
     def _normalise_args(cls, value: object) -> object:
-        return normalise_peb_string(value)
+        return normalise_cmdline_args(value)
 
 
 class CmdlineOutput(BaseModel):
@@ -288,7 +291,7 @@ class DllEntry(BaseModel):
     @field_validator("path", mode="before")
     @classmethod
     def _normalise_path(cls, value: object) -> object:
-        return normalise_peb_string(value)
+        return normalise_peb_path_or_name(value)
 
 
 class DllListOutput(BaseModel):
@@ -323,26 +326,21 @@ class HandleEntry(BaseModel):
     process: str = Field(alias="Process")
     offset: int = Field(alias="Offset")
     handle_value: int = Field(alias="HandleValue", ge=0, le=0xFFFFFFFF)
-    type: Literal[
-        "Process",
-        "Thread",
-        "File",
-        "Key",
-        "Section",
-        "Event",
-        "Mutant",
-        "Semaphore",
-        "Token",
-        "Directory",
-        "SymbolicLink",
-    ] = Field(alias="Type")
+    # Vol3 forwards _OBJECT_TYPE.Name verbatim from the kernel's
+    # ObTypeIndexTable — the kernel-side set is open (Job, Timer,
+    # IoCompletion, WindowStation, Desktop, Driver, Device, Section,
+    # ALPC Port, Mailslot, ... appear on essentially every image and
+    # are NOT in HANDLE_OBJECT_TYPES, which is an action-shaping
+    # caveat catalogue for --object-types filtering, NOT a schema-
+    # validation allowlist. Same rationale as NetscanEntry.state.
+    type: str = Field(alias="Type")
     granted_access: int = Field(alias="GrantedAccess", ge=0, le=0xFFFFFFFF)
     name: str | None = Field(default=None, alias="Name")
 
     @field_validator("name", mode="before")
     @classmethod
     def _normalise_name(cls, value: object) -> object:
-        return normalise_peb_string(value)
+        return normalise_peb_path_or_name(value)
 
 
 class HandlesOutput(BaseModel):

@@ -230,12 +230,11 @@ async def vol_handles(
     object_types: list[str] | None = None,
     timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> ToolResponse[HandlesOutput]:
-    """Open handle table per process. ``object_types`` is validated
-    against the closed Vol3 allowlist (see ``HANDLE_OBJECT_TYPES``)
-    and passed verbatim as a single comma-joined ``--object-types``
-    arg. The non-obvious detail is the single comma-joined form;
-    the type set itself is consulted via :data:`HANDLE_OBJECT_TYPES`
-    to stay version-honest."""
+    """Open handle table per process. ``object_types`` is a CLI
+    filter input — entries are checked against
+    :data:`HANDLE_OBJECT_TYPES` (the common-cases catalogue) and
+    passed verbatim as a single comma-joined ``--object-types``
+    arg (Vol3 splits on comma, not on repeated flags)."""
     _validate_pid_filter("vol_handles", pid)
     _validate_object_types_filter("vol_handles", object_types)
     extra: list[str] = []
@@ -289,7 +288,7 @@ async def vol_netscan(
 def _parse_malfind(raw: bytes) -> MalfindOutput:
     """Trim Hexdump to 256 hex chars (first 128 bytes). Vol3 emits
     offset-prefixed + ASCII-suffixed lines; filtering to [0-9a-fA-F]
-    keeps the field name honest (silent-failure LOW from PR #140)."""
+    keeps the field name honest."""
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"malfind JSON must be a list, got {type(rows).__name__}")

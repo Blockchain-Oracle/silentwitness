@@ -43,21 +43,48 @@ HANDLE_OBJECT_TYPES: Final[tuple[str, ...]] = (
     "Directory",
     "SymbolicLink",
 )
-"""Closed kernel-object-type set Vol3 ``windows.handles`` emits.
-Stable across Windows 7→11; a new type appearing here is schema
-drift that SHOULD fail closed (downstream caveats hard-code these
-names). Vol3 source: ``ObTypeIndexTable`` walk."""
+"""Action-shaping catalogue of the common kernel object types an
+investigator most often filters on with ``--object-types``. This is
+a **caller-input allowlist for the Vol3 CLI filter**, NOT a schema
+allowlist for Vol3's output: the kernel's ``ObTypeIndexTable`` is
+open-ended (Job, Timer, IoCompletion, WindowStation, Desktop,
+Driver, Device, ALPC Port, Mailslot, etc. all appear on real
+images). :class:`HandleEntry.type` is ``str``; this tuple gates only
+what the wrapper accepts as a filter argument."""
 
 
-def normalise_peb_string(value: object) -> object:
-    """Collapse Vol3 "no string available" cases to None for any
-    PEB-sourced ``str | None`` field (cmdline.Args, dlllist.Path,
-    handles.Name). A real string round-trips verbatim. Non-str
-    values fall through so Pydantic's outer typing loud-fails."""
+def normalise_cmdline_args(value: object) -> object:
+    """Collapse Vol3 "no string available" cases for ``CmdlineEntry.args``.
+
+    Used ONLY for cmdline.Args, where ``"null"`` / ``"none"`` /
+    empty-after-strip are legitimate sentinels for "process had no
+    command line". Vol3's renderer is the source of these strings,
+    not the kernel namespace, so collapsing them is honest."""
     if not isinstance(value, str):
         return value
     folded = _OUTER_WHITESPACE_NUL.sub("", value).lower()
     if folded in _NULL_SENTINELS or any(folded.startswith(p) for p in _PEB_PLACEHOLDER_PREFIXES):
+        return None
+    return value
+
+
+def normalise_peb_path_or_name(value: object) -> object:
+    """Collapse only Vol3-emitted paged-out placeholders for fields
+    sourced from the kernel object namespace (``DllEntry.path``,
+    ``HandleEntry.name``). Unlike :func:`normalise_cmdline_args`,
+    bare ``"null"`` / ``"none"`` strings are preserved verbatim —
+    the kernel allows naming an object literally ``"null"`` (some
+    malware does this), and collapsing would erase audit evidence.
+
+    Empty-after-strip still collapses to ``None`` because an empty
+    path/name is structurally "no value", not a legitimate name."""
+    if not isinstance(value, str):
+        return value
+    stripped = _OUTER_WHITESPACE_NUL.sub("", value)
+    if not stripped:
+        return None
+    folded = stripped.lower()
+    if any(folded.startswith(p) for p in _PEB_PLACEHOLDER_PREFIXES):
         return None
     return value
 
@@ -68,8 +95,13 @@ _MIN_VALID_PID: Final = 1
 def validate_pid_filter(tool_name: str, pid: int | None) -> None:
     """PID 0 (System Idle) and negative pids have no _EPROCESS / PEB —
     reject at the wrapper boundary so an LLM-driven typo gets a clean
-    diagnostic before subprocess spawn."""
-    if pid is not None and pid < _MIN_VALID_PID:
+    diagnostic before subprocess spawn. ``bool`` is excluded
+    explicitly (Python's bool-as-int subclass trap)."""
+    if pid is None:
+        return
+    if not isinstance(pid, int) or isinstance(pid, bool):
+        raise TypeError(f"{tool_name}: pid must be int or None; got {type(pid).__name__}")
+    if pid < _MIN_VALID_PID:
         raise ValueError(
             f"{tool_name}: pid must be >= {_MIN_VALID_PID} or None; got {pid} "
             f"(PID 0 = System Idle has no PEB / VAD)"
@@ -77,32 +109,40 @@ def validate_pid_filter(tool_name: str, pid: int | None) -> None:
 
 
 def validate_object_types_filter(tool_name: str, object_types: list[str] | None) -> None:
-    """``None`` = no filter; ``[]`` = caller-side typo. Reject loudly
-    so the diagnostic surfaces pre-spawn. Also rejects whitespace-only,
-    comma-bearing (pre-joined by a bad caller), and non-allowlist
-    entries — Vol3 would otherwise receive a malformed comma-joined
-    arg and ship a success envelope with zero rows."""
+    """``None`` = no filter; ``[]`` = caller-side typo. Rejects empty,
+    whitespace-bearing (would silently produce zero matches inside
+    Vol3's comma-joined arg), pre-joined-with-comma, and non-
+    catalogue entries. ``object_types`` must be a ``list``, not a
+    ``set`` / ``tuple`` — ``",".join(set)`` is non-deterministic and
+    would corrupt audit-trail reproducibility."""
     if object_types is None:
         return
+    if not isinstance(object_types, list):
+        raise TypeError(
+            f"{tool_name}: object_types must be list[str] or None; got "
+            f"{type(object_types).__name__} (set/tuple iteration order is "
+            f"non-deterministic in comma-joined argv)"
+        )
     if not object_types:
         raise ValueError(f"{tool_name}: object_types must be a non-empty list or None")
-    bad = [t for t in object_types if not isinstance(t, str) or not t.strip() or "," in t]
+    bad = [t for t in object_types if not isinstance(t, str) or not t or t != t.strip() or "," in t]
     if bad:
         raise ValueError(
             f"{tool_name}: object_types entries must be non-empty, "
-            f"whitespace-free, comma-free strings; got {bad!r}"
+            f"non-whitespace-bearing, comma-free strings; got {bad!r}"
         )
     unknown = [t for t in object_types if t not in HANDLE_OBJECT_TYPES]
     if unknown:
         raise ValueError(
             f"{tool_name}: unknown object_type(s) {unknown!r}; "
-            f"Vol3 allowlist: {list(HANDLE_OBJECT_TYPES)}"
+            f"catalogue (action-shaping): {list(HANDLE_OBJECT_TYPES)}"
         )
 
 
 __all__ = [
     "HANDLE_OBJECT_TYPES",
-    "normalise_peb_string",
+    "normalise_cmdline_args",
+    "normalise_peb_path_or_name",
     "validate_object_types_filter",
     "validate_pid_filter",
 ]
