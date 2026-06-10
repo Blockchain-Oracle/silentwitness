@@ -207,8 +207,14 @@ async def run_disk_wrapper[TPayload: BaseModel](
             **refuse_kw,
         )
 
+    # Surface partial parse on EITHER the CSV-level truncation flag
+    # (MFTECmd cut mid-write) OR the post-parse truncated flag set by
+    # parse_csv when it skipped per-row ValidationErrors. row-by-row
+    # skips are hidden inside parse_csv and only surface via the
+    # output model's truncated property.
     success_advisories: tuple[str, ...] = ()
-    if truncated:
+    output_truncated = getattr(output, "truncated", False)
+    if truncated or output_truncated:
         success_advisories = (f"partial parse: {len(rows)} rows recovered before truncation",)
 
     try:
