@@ -215,7 +215,12 @@ async def run_disk_wrapper[TPayload: BaseModel](
     success_advisories: tuple[str, ...] = ()
     output_truncated = getattr(output, "truncated", False)
     if truncated or output_truncated:
-        success_advisories = (f"partial parse: {len(rows)} rows recovered before truncation",)
+        trunc_reason = "CSV truncated mid-write" if truncated else "rows skipped on validation"
+        # row_count from output preferred over len(rows) — len(rows) counts pre-skip
+        # input rows; output.row_count reflects only entries that passed validation.
+        # getattr bridges until TPayload gains a typed Protocol (tracked tech debt).
+        row_count: int = getattr(output, "row_count", len(rows))
+        success_advisories = (f"partial parse: {row_count} rows recovered ({trunc_reason})",)
 
     try:
         write_audit_row(

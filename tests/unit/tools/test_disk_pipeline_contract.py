@@ -32,6 +32,7 @@ from silentwitness_mcp.tools._disk_models import MFT_CAVEATS, MftOutput
 from silentwitness_mcp.tools.disk import parse_mft
 
 _MFT_SAMPLE = Path(__file__).resolve().parents[2] / "fixtures" / "disk" / "mft_sample.csv"
+_MFT_BAD_ROW = Path(__file__).resolve().parents[2] / "fixtures" / "disk" / "mft_with_bad_row.csv"
 
 # ---------------------------------------------------------------------------
 # read_csv_with_truncation_from_bytes — exception-branch coverage
@@ -41,7 +42,7 @@ _MFT_SAMPLE = Path(__file__).resolve().parents[2] / "fixtures" / "disk" / "mft_s
 def test_read_csv_truncation_handles_invalid_utf8_via_truncated_flag() -> None:
     """A UTF-8 decode failure mid-stream MUST surface as ``truncated``
     rather than blowing up the wrapper — partial recovery is the
-    forensic-preferred shape (story-parse-mft note line 120)."""
+    forensic-preferred shape (story-parse-mft, 'Truncation detection')."""
     # Raw bytes that are not valid UTF-8 (lone continuation 0xFF).
     raw = b"\xff\xfe garbage bytes that are not utf-8"
     rows, truncated = read_csv_with_truncation_from_bytes(raw)
@@ -61,7 +62,9 @@ def test_read_csv_truncation_handles_unbalanced_quote() -> None:
 def test_read_csv_truncation_short_last_row_dropped_via_post_read_scan() -> None:
     """When the LAST row has fewer cells than the header, DictReader
     silently pads with None. The post-read scan drops that row and
-    flags ``truncated`` — the dual-mechanism is the round-1 fix."""
+    flags ``truncated`` — the dual mechanism (csv.Error catch +
+    post-read None-scan) catches both mid-stream and silently-padded
+    short rows."""
     raw = b"a,b,c\n1,2,3\n4,5\n"
     rows, truncated = read_csv_with_truncation_from_bytes(raw)
     assert len(rows) == 1
@@ -118,10 +121,9 @@ def test_mft_output_accepts_distinct_record_identities() -> None:
 
 
 def test_mft_entry_rejects_is_deleted_as_input_under_extra_forbid() -> None:
-    """The round-1 migration to @computed_field MUST be defense-in-
-    depth: a future caller passing IsDeleted explicitly to
-    ``model_validate`` cannot desync the derivation. ``extra="forbid"``
-    rejects the unknown key (since IsDeleted isn't a field anymore)."""
+    """``IsDeleted`` is a ``@computed_field`` derived from ``not in_use``,
+    not a wire column. ``extra="forbid"`` rejects any caller that passes
+    it explicitly to ``model_validate``, preventing derivation desync."""
     from silentwitness_mcp.tools._disk_models import MFTEntry
 
     with pytest.raises(ValidationError, match="Extra inputs"):
@@ -129,8 +131,8 @@ def test_mft_entry_rejects_is_deleted_as_input_under_extra_forbid() -> None:
 
 
 def test_mft_entry_rejects_si_fn_delta_as_input_under_extra_forbid() -> None:
-    """Same defense-in-depth contract for SiFnDelta — also a
-    @computed_field, not a wire column."""
+    """``SiFnDelta`` is a ``@computed_field`` aliasing ``timestomped``,
+    not a wire column. ``extra="forbid"`` rejects explicit supply."""
     from silentwitness_mcp.tools._disk_models import MFTEntry
 
     with pytest.raises(ValidationError, match="Extra inputs"):
@@ -263,21 +265,7 @@ def test_pipeline_row_by_row_partial_parse_surfaces_skipped(
     force_dotnet(monkeypatch, tmp_path)
     force_mount_ok(monkeypatch)
     csv_out = disk_env[2]
-    fixture = csv_out.parent / "mft_with_bad_row.csv"
-    fixture.parent.mkdir(parents=True, exist_ok=True)
-    header = (
-        "EntryNumber,SequenceNumber,InUse,ParentEntryNumber,ParentSequenceNumber,"
-        "ParentPath,FileName,Extension,FileSize,IsDirectory,HasAds,"
-        "Created0x10,Created0x30,LastModified0x10,LastModified0x30,"
-        "LastRecordChange0x10,LastRecordChange0x30,LastAccess0x10,"
-        "LastAccess0x30,Timestomped,uSecZeros\n"
-    )
-    dates = ",".join(["2020-01-01"] * 8)
-    good_a = f"1,1,True,5,5,.\\,$MFT,,,False,False,{dates},False,False\n"
-    bad = f"NOT_AN_INT,1,True,5,5,.\\,bad.exe,.exe,0,False,False,{dates},False,False\n"
-    good_b = f"2,1,True,5,5,.\\,b.txt,.txt,10,False,False,{dates},False,False\n"
-    fixture.write_text(header + good_a + bad + good_b)
-    install_dotnet_mock(monkeypatch, csv_fixture=fixture, csv_out_dir=csv_out)
+    install_dotnet_mock(monkeypatch, csv_fixture=_MFT_BAD_ROW, csv_out_dir=csv_out)
     envelope = _run_parse_mft(disk_env)
     assert envelope.success is True
     assert envelope.data is not None
