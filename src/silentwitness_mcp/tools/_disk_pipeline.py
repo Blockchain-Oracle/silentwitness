@@ -25,13 +25,25 @@ from silentwitness_mcp.tools._disk_common import (
     delete_orphan_blob,
     glob_csv_output,
     persist_blob,
-    read_csv_with_truncation,
+    read_csv_with_truncation_from_bytes,
     refuse,
     run_dotnet_ez_tool,
     truncated_stderr,
     write_audit_row,
 )
 from silentwitness_mcp.verification.normalizer import normalize_output
+
+
+def _is_under(child: Path, parent: Path) -> bool:
+    """``True`` iff ``child.resolve()`` lives under ``parent.resolve()``.
+    Closes the caller-controlled-path escape (an agent passing
+    ``csv_out=/etc`` would otherwise drop a CSV outside the case dir
+    AND have the wrapper create that directory tree on a refuse path)."""
+    try:
+        child.resolve().relative_to(parent.resolve())
+    except ValueError:
+        return False
+    return True
 
 
 async def run_disk_wrapper[TPayload: BaseModel](
@@ -42,7 +54,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
     csv_glob_pattern: str,
     csv_out_dir: Path,
     output_cls: type[TPayload],
-    parse_csv: Callable[[list[dict[str, str]], bool], TPayload],
+    parse_csv: Callable[[list[dict[str, str | None]], bool], TPayload],
     caveats: tuple[str, ...],
     evidence_path: Path,
     case_dir: Path,
@@ -78,6 +90,23 @@ async def run_disk_wrapper[TPayload: BaseModel](
             advisories=(advisory,),
             **refuse_kw,
         )
+
+    # csv_out path-traversal guard — only AFTER the evidence gate so a
+    # refused call has no filesystem side-effects (no surprise mkdir).
+    if not _is_under(csv_out_dir, case_dir):
+        return refuse(
+            DiskFailureReason.OUTPUT_PARSE_FAILED,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+            advisories=(
+                f"csv_out_dir {csv_out_dir} is not under case_dir {case_dir}; "
+                "refusing to write CSV outside the case directory",
+            ),
+            **refuse_kw,
+        )
+    csv_out_dir.mkdir(parents=True, exist_ok=True)
+    # Capture wall-clock before spawn so stale residue (a CSV that
+    # predates this run) can be detected via mtime.
+    spawn_wall = time.time()
 
     try:
         result = await run_dotnet_ez_tool(ez_tool, ez_argv, timeout_s=timeout_s)
@@ -117,6 +146,21 @@ async def run_disk_wrapper[TPayload: BaseModel](
             **refuse_kw,
         )
 
+    # Stale-residue guard — a CSV that predates the spawn means we
+    # got someone else's output (prior run, racing dotnet). One-second
+    # slack absorbs mtime granularity on coarse filesystems.
+    if csv_path.stat().st_mtime < spawn_wall - 1.0:
+        return refuse(
+            DiskFailureReason.OUTPUT_PARSE_FAILED,
+            elapsed_ms=result.elapsed_ms,
+            advisories=(
+                f"CSV {csv_path.name} mtime predates spawn — stale residue, "
+                "refusing to surface as parse_mft output",
+            ),
+            exit_code=result.exit_code,
+            **refuse_kw,
+        )
+
     try:
         raw_bytes = csv_path.read_bytes()
     except OSError as exc:
@@ -144,7 +188,11 @@ async def run_disk_wrapper[TPayload: BaseModel](
             **refuse_kw,
         )
 
-    rows, truncated = read_csv_with_truncation(csv_path)
+    # Parse from the SAME bytes we hashed + persisted — re-reading
+    # the CSV from disk would open a TOCTOU window where blob_sha256
+    # and the parsed rows could diverge (housekeeping race, MFTECmd
+    # retry, etc.).
+    rows, truncated = read_csv_with_truncation_from_bytes(normalized)
 
     try:
         output = parse_csv(rows, truncated)

@@ -64,6 +64,7 @@ _TERMINATE_GRACE_S: Final = 5.0
 _STDERR_ADVISORY_CAP: Final = 500
 _BLOB_DIR: Final = "audit/blobs"
 _SENTINEL_PATH: Final = Path("/dev/null")
+_AUDIT_DIR: Final = "audit"
 _AUDIT_LOG_FILENAME: Final = "disk.jsonl"
 
 
@@ -73,6 +74,7 @@ class DiskFailureReason(StrEnum):
     Tools depend on the dotnet SDK being on disk at :data:`DOTNET_BIN`."""
 
     EVIDENCE_NOT_REGISTERED = "EVIDENCE_NOT_REGISTERED"
+    EVIDENCE_HASH_MISMATCH = "EVIDENCE_HASH_MISMATCH"
     EVIDENCE_TAMPERED = "EVIDENCE_TAMPERED"
     MOUNT_NOT_RO_NOEXEC_NOSUID = "MOUNT_NOT_RO_NOEXEC_NOSUID"
     DOTNET_NOT_FOUND = "DOTNET_NOT_FOUND"
@@ -153,25 +155,37 @@ def glob_csv_output(csv_out_dir: Path, pattern: str) -> Path | None:
     return matches[-1] if matches else None
 
 
-def read_csv_with_truncation(path: Path) -> tuple[list[dict[str, str]], bool]:
-    """Parse a CSV via :class:`csv.DictReader`; return rows-so-far +
-    ``truncated=True`` when mid-stream truncation is detected.
+def read_csv_with_truncation_from_bytes(
+    raw: bytes,
+) -> tuple[list[dict[str, str | None]], bool]:
+    """Parse CSV bytes via :class:`csv.DictReader`; return rows + a
+    ``truncated`` flag.
 
-    :class:`csv.DictReader` silently pads short rows with ``None`` and
-    spills unmatched extra cells into a ``None``-keyed list, so we
-    also post-process the last row: if any expected column ended up
-    ``None`` (i.e. the row was cut short of the header column count),
-    we drop it and flag ``truncated=True``. EZ Tools that die
-    mid-write leave exactly this shape — partial recovery is
-    forensically preferable to a hard reject."""
-    rows: list[dict[str, str]] = []
+    Partial-success: EZ Tools that die mid-write leave a CSV with a
+    truncated final row, and that recovery surface is forensically
+    preferable to a hard reject. Truncation is detected via two
+    independent signals because :class:`csv.DictReader` silently pads
+    short rows with ``None``:
+
+    1. The exception branch catches encoding errors / malformed
+       quoting — rare but real.
+    2. The post-read scan inspects the last row's values; if any
+       column ended up ``None`` (header column count > row column
+       count), the row was cut short of the header — drop and flag.
+
+    Input is bytes (NOT a path) so the caller can guarantee parse
+    and blob-hash see the same byte stream — re-reading from disk
+    would open a TOCTOU window."""
+    import io
+
+    rows: list[dict[str, str | None]] = []
     truncated = False
     try:
-        with path.open("r", encoding="utf-8", newline="") as fh:
-            reader = csv.DictReader(fh)
-            for row in reader:
-                rows.append({k: v for k, v in row.items() if k is not None})
-    except (csv.Error, UnicodeDecodeError, OSError):
+        text = raw.decode("utf-8")
+        reader = csv.DictReader(io.StringIO(text, newline=""))
+        for row in reader:
+            rows.append({k: v for k, v in row.items() if k is not None})
+    except (csv.Error, UnicodeDecodeError):
         truncated = True
     if rows and any(v is None for v in rows[-1].values()):
         rows.pop()
@@ -217,7 +231,11 @@ def check_evidence_and_mount_gates(
             f"registry error during verify_hash: {type(exc).__name__}: {exc}"
         )
     if not verify.matches:
-        return DiskFailureReason.EVIDENCE_TAMPERED, (
+        # Per story-parse-mft BDD §7 (line 81): SHA256 drift surfaces
+        # as EVIDENCE_HASH_MISMATCH (the integrity failure mode);
+        # generic EVIDENCE_TAMPERED covers "evidence vanished" /
+        # "registry error" — semantically distinct.
+        return DiskFailureReason.EVIDENCE_HASH_MISMATCH, (
             f"SHA256 drift on registered evidence: "
             f"expected={verify.expected} actual={verify.actual}"
         )
@@ -270,8 +288,10 @@ def write_audit_row(
 ) -> None:
     """One audit JSONL row per tool invocation (PRD FR #5). Both
     success and refuse paths call this — the differentiator is
-    ``result_summary``."""
-    audit_log = case_dir / _AUDIT_LOG_FILENAME
+    ``result_summary``. Path follows architecture §4.4:
+    ``cases/<case_id>/audit/<backend>.jsonl``."""
+    audit_log = case_dir / _AUDIT_DIR / _AUDIT_LOG_FILENAME
+    audit_log.parent.mkdir(parents=True, exist_ok=True)
     fallback_sha = hashlib.sha256(repr(result).encode("utf-8")).hexdigest()
     params: dict[str, Any] = {"evidence_path": str(evidence_path)}
     if exit_code is not None:
@@ -362,7 +382,7 @@ __all__ = [
     "dll_path_for",
     "glob_csv_output",
     "persist_blob",
-    "read_csv_with_truncation",
+    "read_csv_with_truncation_from_bytes",
     "refuse",
     "run_dotnet_ez_tool",
     "truncated_stderr",
