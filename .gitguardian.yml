@@ -1,0 +1,11 @@
+# GitGuardian ggshield ignore rules.
+# Test fixtures for the LSA-secret family wrap synthetic hex-byte
+# strings around an in-process Volatility3 mock. None contain real
+# credential material; the parser is tested against shape-only,
+# non-credential-bearing inputs.
+version: 2
+
+secret:
+  ignored_paths:
+    - "tests/unit/test_vol_lsadump.py"
+    - "tests/unit/test_lsa_secret_decode.py"

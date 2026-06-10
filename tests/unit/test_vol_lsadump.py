@@ -104,7 +104,7 @@ def test_lsadump_canonical_secret_set_parses_with_discipline_reminder(
         _row("$MACHINE.ACC", "deadbeefdeadbeef"),  # pragma: allowlist secret
         _row("DefaultPassword", _utf16le_hex(_FIXTURE_PRINTABLE_A)),
         _row("_SC_MSSQLServer", _utf16le_hex(_FIXTURE_PRINTABLE_B)),
-        _row("DPAPI_SYSTEM", "0102030405060708090a0b0c0d0e0f10"),
+        _row("DPAPI_SYSTEM", "0102030405060708"),
         _row("NL$KM", "1111222233334444"),
     ]
     _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
@@ -151,7 +151,7 @@ def test_lsadump_non_printable_hex_keeps_secret_none(
     hash) MUST surface ``secret=None`` — silently mangling non-
     printable bytes into a string would corrupt the audit chain. The
     Vol3 renderer-side ``Secret`` field, if present, is IGNORED."""
-    binary_hex = "cafe0001cafe0002cafe0003cafe0004"  # pragma: allowlist secret
+    binary_hex = "cafe0001cafe0002"  # pragma: allowlist secret
     rows = [
         {
             **_row("$MACHINE.ACC", binary_hex),
