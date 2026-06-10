@@ -141,6 +141,40 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
             "open — vol_dumpfiles can recover the content even after del"
         ),
     ),
+    "lsadump": (
+        # Ordered: Credential-Guard misconception correction FIRST
+        # (action-shaping — distinguishes "empty output" interpretations),
+        # then the operational caveats (DefaultPassword, $MACHINE.ACC,
+        # _SC_<service>), then the technical preconditions, then the
+        # field-citation contract.
+        (
+            "VBS / Credential Guard does NOT protect LSA secrets the same "
+            "way it protects LSASS process memory — lsadump output is "
+            "generally intact even on Credential Guard systems; do not "
+            "assume empty output means the host is Credential-Guarded"
+        ),
+        (
+            "DefaultPassword may contain auto-logon plaintext credentials "
+            "— sensitive material, treat as Restricted in the report and "
+            "the HMAC ledger"
+        ),
+        (
+            "$MACHINE.ACC is the machine account password hash (NTLM) — "
+            "usable for silver-ticket attacks; report as credential-"
+            "rotation requirement"
+        ),
+        ("_SC_<service> contains passwords for services configured with non-default credentials"),
+        (
+            "windows.lsadump decrypts LSA secrets using the SysKey from "
+            "the SYSTEM hive — requires both SYSTEM and SECURITY hives "
+            "present in memory (true by default on a running system)"
+        ),
+        (
+            "the Secret field is best-effort UTF-16LE decode — the "
+            "authoritative bytes are in Hex; cite Hex when recording the "
+            "observation"
+        ),
+    ),
     "netscan": (
         (
             "windows.netscan pool-tag scan returns both active AND "

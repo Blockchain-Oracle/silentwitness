@@ -1,0 +1,10 @@
+# GitGuardian ignore patterns. The GitHub App uses this format (the
+# `.gitguardian.yml` schema is for the ggshield CLI tool).
+#
+# Test fixtures for the LSA-secret family pair real Windows LSA secret
+# key names (DefaultPassword, $MACHINE.ACC, NL$KM, DPAPI_SYSTEM,
+# _SC_<service>) with short synthetic hex blobs — necessary to exercise
+# the Vol3 windows.registry.lsadump output shape. No real credential
+# material is committed.
+tests/unit/test_vol_lsadump.py
+tests/unit/test_lsa_secret_decode.py

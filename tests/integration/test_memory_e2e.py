@@ -25,6 +25,7 @@ from silentwitness_mcp.tools.memory import (
     vol_psscan,
     vol_pstree,
 )
+from silentwitness_mcp.tools.memory_extras import vol_lsadump
 
 _FIXTURE_NAME = "nist-hacking-case.mem"
 _NIST_FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "memory" / _FIXTURE_NAME
@@ -217,3 +218,28 @@ def test_handles_against_nist_image(tmp_path: Path) -> None:
     )
     assert envelope.success is True
     assert envelope.data is not None
+
+
+@pytest.mark.skipif(
+    not _NIST_FIXTURE.exists() or not VOL_BIN.exists(),
+    reason="NIST memory fixture and/or Vol3 binary not present in this environment",
+)
+def test_lsadump_against_nist_image(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case-nist-lsadump"
+    case_dir.mkdir()
+    logger = AuditLogger(case_dir, examiner="aj")
+    registry = EvidenceRegistry(case_dir=case_dir)
+    registry.register(_NIST_FIXTURE, EvidenceType.MEMORY_DUMP, audit_id="sift-aj-20260610-001")
+    envelope = asyncio.run(
+        vol_lsadump(
+            _NIST_FIXTURE,
+            case_dir=case_dir,
+            evidence_registry=registry,
+            audit_logger=logger,
+            model_used="claude-sonnet-4-6",
+        )
+    )
+    assert envelope.success is True
+    assert envelope.data is not None
+    # Discipline-reminder contract holds on real evidence too.
+    assert envelope.discipline_reminder is not None

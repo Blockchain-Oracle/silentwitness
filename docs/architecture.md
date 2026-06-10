@@ -197,7 +197,8 @@ silentwitness/
 │   │   ├── server.py                      # FastMCP entry point; tool registration; stdio + HTTP transports
 │   │   ├── envelope.py                    # Pydantic response envelope (§5.2)
 │   │   ├── tools/
-│   │   │   ├── memory.py                  # Vol3 wrappers: pslist, pstree, psscan, malfind, netscan, cmdline, dlllist, handles, lsadump
+│   │   │   ├── memory.py                  # Vol3 wrappers: pslist, pstree, psscan, malfind, netscan, cmdline, dlllist, handles
+│   │   │   ├── memory_extras.py           # Credential-material Vol3 wrappers (currently vol_lsadump). Separate module per 400-LOC budget + Restricted-classification review boundary.
 │   │   │   ├── disk.py                    # MFT, Amcache, Shimcache, Prefetch, Shellbags via EZ Tools
 │   │   │   ├── log.py                     # EVTX, Hayabusa CSV timeline, Chainsaw hunt
 │   │   │   ├── network.py                 # Zeek run, Suricata run
@@ -300,7 +301,7 @@ The full catalog is 22 production tools across six families plus three meta-tool
 | `vol_cmdline` | memory | `VolCmdlineInput(evidence_path, pid: int \| None)` | `CmdlineOutput` | `vol -f <img> windows.cmdline.CmdLine` | `tools/memory.py` | 35 |
 | `vol_dlllist` | memory | `VolDlllistInput(evidence_path, pid: int \| None)` | `DllListOutput` | `vol -f <img> windows.dlllist.DllList` | `tools/memory.py` | 35 |
 | `vol_handles` | memory | `VolHandlesInput(evidence_path, pid: int \| None)` | `HandlesOutput` | `vol -f <img> windows.handles.Handles` | `tools/memory.py` | 35 |
-| `vol_lsadump` | memory | `VolLsadumpInput(evidence_path)` | `LsaDumpOutput` (fields: `Key: str`, `Secret: str`, `Hex: str`) | `vol -f <img> windows.registry.lsadump.Lsadump` (NOT `windows.lsadump.Lsadump` — deprecation stub `removal_date="2026-09-25"`) | `tools/memory.py` | 35 |
+| `vol_lsadump` | memory | `VolLsadumpInput(evidence_path)` | `LsaDumpOutput` (entry fields snake_case: `key: str`, `hex_value: str`, `secret: str \| None` — wire aliases `Key`/`Hex`/`Secret`) | `vol -f <img> windows.registry.lsadump.Lsadump` (NOT `windows.lsadump.Lsadump` — deprecation stub `removal_date="2026-09-25"`) | `tools/memory_extras.py` | 35 |
 | `parse_mft` | disk | `MftInput(evidence_path, csv_out: Path)` | `MftOutput` | `MFTECmd --csv <out> -f <mft>` | `tools/disk.py` | 40 |
 | `parse_amcache` | disk | `AmcacheInput(evidence_path, csv_out)` | `AmcacheOutput` | `AmcacheParser --csv <out> -f <hive>` | `tools/disk.py` | 40 |
 | `parse_shimcache` | disk | `ShimcacheInput(evidence_path, csv_out)` | `ShimcacheOutput` | `AppCompatCacheParser --csv <out> -f <hive>` | `tools/disk.py` | 40 |

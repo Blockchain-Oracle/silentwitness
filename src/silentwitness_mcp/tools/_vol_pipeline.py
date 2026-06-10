@@ -102,6 +102,7 @@ async def _run_wrapper[TPayload: BaseModel](
     model_used: str,
     timeout_s: float,
     extra_argv: list[str] | None = None,
+    discipline_reminder: str | None = None,
 ) -> ToolResponse[TPayload]:
     """Drive one vol_* invocation end-to-end.
 
@@ -109,7 +110,12 @@ async def _run_wrapper[TPayload: BaseModel](
     the parser produces it, the envelope carries it. ``parse_rows``
     keeps the orchestrator agnostic to whether the row stream is a
     flat list (psXXXX family), a nested ``__children`` tree (pstree),
-    or a custom-cleaned hexdump (malfind)."""
+    or a custom-cleaned hexdump (malfind).
+
+    ``discipline_reminder`` is non-None only for credential-material
+    tools — it carries forward to the response envelope so the agent
+    prompt template can seed Restricted classification and the
+    approve_finding flow can prompt the examiner."""
     # Validate caveat_key BEFORE any subprocess or audit-row writes —
     # a typo'd or unregistered key surfaces synchronously rather than
     # leaving an audit row with no envelope.
@@ -117,6 +123,12 @@ async def _run_wrapper[TPayload: BaseModel](
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
     # dict[str, Any] for the splat; refuse() checks types at the call.
+    # caveats + discipline_reminder propagate on refuse so the agent
+    # interpreting an empty/refused envelope still gets the action-
+    # shaping guidance (e.g. "empty lsadump output does NOT mean
+    # Credential Guard"; "refused vol_pslist is not an empty process
+    # list"). Classification metadata is set by the tool author once
+    # at construction; the pipeline forwards it verbatim.
     refuse_kw: dict[str, Any] = {
         "tool_name": tool_name,
         "plugin_name": plugin_name,
@@ -127,6 +139,8 @@ async def _run_wrapper[TPayload: BaseModel](
         "evidence_path": evidence_path,
         "model_used": model_used,
         "extra_argv": extra_argv,
+        "caveats": caveats,
+        "discipline_reminder": discipline_reminder,
     }
 
     gate = _check_evidence_gates(evidence_path, evidence_registry=evidence_registry)
@@ -231,6 +245,7 @@ async def _run_wrapper[TPayload: BaseModel](
         audit_id=pre_audit_id,
         examiner=audit_logger.examiner,
         caveats=caveats,
+        discipline_reminder=discipline_reminder,
         data_provenance=DataProvenance(
             tool=tool_name,
             stdout_path=blob_path,
