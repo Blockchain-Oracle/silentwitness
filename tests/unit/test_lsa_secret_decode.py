@@ -105,7 +105,7 @@ def test_lsasecretentry_field_validator_blocks_direct_unprintable_construction()
     with pytest.raises(ValidationError):
         LsaSecretEntry.model_validate(
             {
-                "Key": "DefaultPassword",
+                "Key": "_SC_MSSQLServer",
                 "Hex": "0123abcd",  # pragma: allowlist secret
                 "Secret": "Hi\x01",  # pragma: allowlist secret
             }
@@ -115,14 +115,14 @@ def test_lsasecretentry_field_validator_blocks_direct_unprintable_construction()
 def test_lsasecretentry_rejects_empty_hex() -> None:
     """min_length=1 on Hex — empty hex is silent-empty-string drift."""
     with pytest.raises(ValidationError):
-        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": ""})
+        LsaSecretEntry.model_validate({"Key": "_SC_MSSQLServer", "Hex": ""})
 
 
 def test_lsasecretentry_rejects_non_hex_pattern() -> None:
     """The Hex regex catches non-hex strings at the model boundary,
     even if the parser is bypassed."""
     with pytest.raises(ValidationError):
-        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "definitely-not-hex"})
+        LsaSecretEntry.model_validate({"Key": "_SC_MSSQLServer", "Hex": "definitely-not-hex"})
 
 
 def test_lsasecretentry_rejects_whitespace_only_hex() -> None:
@@ -130,14 +130,14 @@ def test_lsasecretentry_rejects_whitespace_only_hex() -> None:
     digit) to forbid the whitespace-only case — would otherwise
     produce a silent empty-decode."""
     with pytest.raises(ValidationError):
-        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "   "})
+        LsaSecretEntry.model_validate({"Key": "_SC_MSSQLServer", "Hex": "   "})
 
 
 def test_lsasecretentry_rejects_odd_length_hex() -> None:
     """Hex is byte-paired; odd length after whitespace strip is
     schema drift. The hex_value field_validator catches it cleanly."""
     with pytest.raises(ValidationError):
-        LsaSecretEntry.model_validate({"Key": "DefaultPassword", "Hex": "deadb"})
+        LsaSecretEntry.model_validate({"Key": "_SC_MSSQLServer", "Hex": "deadb"})
 
 
 def test_lsasecretentry_rejects_empty_key() -> None:
