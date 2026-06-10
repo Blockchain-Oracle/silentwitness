@@ -2,8 +2,9 @@
 
 Column reality (verified against context/domain/06 §5.5 + story notes):
  - PECmd emits PreviousRun0..PreviousRun6 (max 7 prior runs — Win10/11
-   stores last 8 total: LastRun + 7 prior). Win7 rows have all PreviousRunN
-   empty. Extracted into the synthetic ``previous_run_times`` field.
+   stores last 8 total: LastRun + 7 prior). Format version 17/23 (Win7/8)
+   rows have all PreviousRunN columns present but empty in the CSV —
+   previous_run_times will be () for those entries.
  - FilesLoaded and Directories are single CSV cells with items separated
    by ``", "`` (comma-space). Split on parse; do NOT deduplicate.
  - Volume columns are hardcoded max-2 (Volume0* / Volume1*). Overflow
@@ -17,6 +18,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+# extra="ignore": _coerce_and_extract extracts PreviousRunN columns before
+# Pydantic's extra-field policy fires; remaining unknowns are PECmd-version-
+# specific. Contrast with AmcacheEntry (extra="forbid") — stable schema.
 _ROW_CONFIG = ConfigDict(frozen=True, extra="ignore", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
@@ -33,7 +37,7 @@ class PrefetchEntry(BaseModel):
     source_filename: str = Field(alias="SourceFilename")
     run_count: int = Field(alias="RunCount")
     last_run: datetime | None = Field(default=None, alias="LastRun")
-    previous_run_times: list[datetime] = Field(default_factory=list)
+    previous_run_times: tuple[datetime, ...] = Field(default=())
     volume0_name: str | None = Field(default=None, alias="Volume0Name")
     volume0_serial: str | None = Field(default=None, alias="Volume0Serial")
     volume0_created: datetime | None = Field(default=None, alias="Volume0Created")
@@ -41,8 +45,8 @@ class PrefetchEntry(BaseModel):
     volume1_serial: str | None = Field(default=None, alias="Volume1Serial")
     volume1_created: datetime | None = Field(default=None, alias="Volume1Created")
     note: str | None = Field(default=None, alias="Note")
-    files_loaded: list[str] = Field(default_factory=list, alias="FilesLoaded")
-    directories: list[str] = Field(default_factory=list, alias="Directories")
+    files_loaded: tuple[str, ...] = Field(default=(), alias="FilesLoaded")
+    directories: tuple[str, ...] = Field(default=(), alias="Directories")
     parsing_error: bool = Field(default=False, alias="ParsingError")
 
     @model_validator(mode="before")
@@ -67,7 +71,7 @@ class PrefetchEntry(BaseModel):
         pe = (data.get("ParsingError") or "False").strip()
         data["ParsingError"] = pe in ("True", "true", "1", "Yes", "yes")
 
-        # Coerce empty strings → None for optional datetime/str fields.
+        # Coerce empty/whitespace-only strings → None for optional fields.
         for k in (
             "LastRun",
             "Volume0Name",
@@ -78,9 +82,17 @@ class PrefetchEntry(BaseModel):
             "Volume1Created",
             "Note",
         ):
-            if data.get(k) == "":
+            if not (data.get(k) or "").strip():
                 data[k] = None
         return data
+
+    @model_validator(mode="after")
+    def _check_run_times_bound(self) -> PrefetchEntry:
+        if len(self.previous_run_times) > 7:
+            raise ValueError(
+                f"PECmd emits at most 7 PreviousRunN columns; got {len(self.previous_run_times)}"
+            )
+        return self
 
 
 class PrefetchOutput(BaseModel):

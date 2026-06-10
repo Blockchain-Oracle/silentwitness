@@ -287,10 +287,11 @@ async def parse_prefetch(
         )
     if envelope.data.parsing_error_count > 0:
         bad = [e.executable_name for e in envelope.data.entries if e.parsing_error]
+        suffix = f" (+{len(bad) - 5} more)" if len(bad) > 5 else ""
         extra.append(
             f"{envelope.data.parsing_error_count} entr"
             f"{'y' if envelope.data.parsing_error_count == 1 else 'ies'} "
-            f"had PECmd parsing errors: {', '.join(bad[:5])}"
+            f"had PECmd parsing errors: {', '.join(bad[:5])}{suffix}"
         )
     if extra:
         return envelope.model_copy(update={"advisories": (*envelope.advisories, *extra)})

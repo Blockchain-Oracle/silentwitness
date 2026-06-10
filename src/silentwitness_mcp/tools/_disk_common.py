@@ -325,6 +325,7 @@ def refuse[TPayload: BaseModel](
     model_used: str,
     advisories: tuple[str, ...],
     caveats: tuple[str, ...],
+    corroboration: tuple[str, ...] = (),
     cmd_argv: tuple[str, ...],
     blob_path: Path | None = None,
     exit_code: int | None = None,
@@ -366,6 +367,7 @@ def refuse[TPayload: BaseModel](
         examiner=audit_logger.examiner,
         advisories=(*advisories, reason.value),
         caveats=caveats,
+        corroboration=corroboration,
         data_provenance=provenance,
     )
 
@@ -380,7 +382,6 @@ __all__ = [
     "check_evidence_and_mount_gates",
     "cmd_argv_for",
     "delete_orphan_blob",
-    "dll_path_for",
     "dll_path_for",
     "glob_csv_output",
     "persist_blob",

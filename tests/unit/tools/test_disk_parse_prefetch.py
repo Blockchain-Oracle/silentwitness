@@ -147,7 +147,7 @@ def test_parse_prefetch_win7_row_has_empty_previous_run_times(
     by_name = {e.executable_name: e for e in envelope.data.entries}
     cmd = by_name["CMD.EXE"]
     assert cmd.last_run is not None
-    assert cmd.previous_run_times == []
+    assert cmd.previous_run_times == ()
 
 
 def test_parse_prefetch_multi_volume_note_preserved(

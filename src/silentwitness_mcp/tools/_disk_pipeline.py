@@ -96,6 +96,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
         "evidence_path": evidence_path,
         "model_used": model_used,
         "caveats": caveats,
+        "corroboration": corroboration,
         "cmd_argv": cmd_argv,
     }
 
@@ -266,7 +267,11 @@ async def run_disk_wrapper[TPayload: BaseModel](
         # input rows; output.row_count reflects only entries that passed validation.
         # getattr bridges until TPayload gains a typed Protocol (tracked tech debt).
         row_count: int = getattr(output, "row_count", len(rows))
-        success_advisories = (f"partial parse: {row_count} rows recovered ({trunc_reason})",)
+        dropped = len(rows) - row_count
+        drop_note = f", {dropped} dropped" if dropped > 0 else ""
+        success_advisories = (
+            f"partial parse: {row_count} rows recovered{drop_note} ({trunc_reason})",
+        )
 
     try:
         write_audit_row(
