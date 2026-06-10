@@ -62,6 +62,7 @@ EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
         "vol_cmdline",
         "vol_dlllist",
         "vol_handles",
+        "vol_lsadump",
         "vol_malfind",
         "vol_netscan",
         "vol_pslist",

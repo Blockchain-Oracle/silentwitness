@@ -348,6 +348,29 @@ class HandlesOutput(BaseModel):
     entries: tuple[HandleEntry, ...]
 
 
+class LsaSecretEntry(BaseModel):
+    """Vol3 ``windows.registry.lsadump`` row — one decrypted LSA secret.
+
+    ``Hex`` is the authoritative byte stream (verbatim hex-encoded
+    output from Vol3). ``Secret`` is a best-effort UTF-16LE printable
+    decode of those bytes — convenience only; the entity gate cites
+    ``Hex``. ``Secret`` is ``None`` when the decoded chars fall
+    outside the printable Unicode range, preserving the audit
+    invariant that ``Secret is not None`` means "we showed a
+    printable rendering" and never "we silently mangled bytes"."""
+
+    model_config = _ROW_CONFIG
+
+    Key: str = Field(alias="Key")
+    Hex: str = Field(alias="Hex")
+    Secret: str | None = Field(default=None, alias="Secret")
+
+
+class LsaDumpOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[LsaSecretEntry, ...]
+
+
 __all__ = [
     "CmdlineEntry",
     "CmdlineOutput",
@@ -355,6 +378,8 @@ __all__ = [
     "DllListOutput",
     "HandleEntry",
     "HandlesOutput",
+    "LsaDumpOutput",
+    "LsaSecretEntry",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",
