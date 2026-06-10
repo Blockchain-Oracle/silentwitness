@@ -10,13 +10,14 @@ PRD §6."""
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Final
 
 from pydantic import ValidationError
 
 from silentwitness_common.types import ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
-from silentwitness_mcp.tools._disk_common import DEFAULT_TIMEOUT_S
+from silentwitness_mcp.tools._disk_common import DEFAULT_TIMEOUT_S, dll_path_for
 from silentwitness_mcp.tools._disk_models import MFT_CAVEATS, MFTEntry, MftOutput
 from silentwitness_mcp.tools._disk_models_amcache import (
     AMCACHE_CAVEATS,
@@ -28,7 +29,17 @@ from silentwitness_mcp.tools._disk_models_amcache import (
     ShimcacheEntry,
     ShimcacheOutput,
 )
+from silentwitness_mcp.tools._disk_models_prefetch import (
+    PREFETCH_CAVEATS,
+    PREFETCH_CORROBORATION,
+    PrefetchEntry,
+    PrefetchOutput,
+)
 from silentwitness_mcp.tools._disk_pipeline import run_disk_wrapper
+
+# PECmd is NOT pre-installed on stock SIFT 2026 — absence produces
+# PECMD_NOT_INSTALLED advisory. Testable via monkeypatch on this constant.
+_PECMD_DLL: Final[Path] = dll_path_for("PECmd")
 
 
 def _parse_mft_rows(rows: list[dict[str, str | None]], truncated: bool) -> MftOutput:
@@ -207,4 +218,83 @@ async def parse_shimcache(
     )
 
 
-__all__ = ["parse_amcache", "parse_mft", "parse_shimcache"]
+def _parse_prefetch_rows(rows: list[dict[str, str | None]], truncated: bool) -> PrefetchOutput:
+    """Row-by-row parse of PECmd CSV. Per-row ValidationErrors are skipped
+    (partial-success preferred over hard reject)."""
+    entries: list[PrefetchEntry] = []
+    skipped = 0
+    for row in rows:
+        try:
+            entries.append(PrefetchEntry.model_validate(row))
+        except ValidationError:
+            skipped += 1
+    return PrefetchOutput(entries=tuple(entries), truncated=truncated or skipped > 0)
+
+
+async def parse_prefetch(
+    evidence_path: Path,
+    csv_out: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[PrefetchOutput]:
+    """Parse a Prefetch directory or .pf file via PECmd → typed
+    :class:`PrefetchOutput`.
+
+    ``evidence_path`` may be a directory (batch ``-d``) or a single .pf
+    file (``-f``). PECmd is NOT pre-installed on stock SIFT 2026;
+    ``EZ_TOOL_NOT_FOUND`` fires if the DLL is absent. PECmd exit code is
+    unreliable; Serilog stderr scanning is mandatory
+    (``check_serilog_stderr=True``).
+
+    Post-success advisories are added for: entries exceeding the 1024
+    historical cap, and entries with ``ParsingError=True``."""
+    ez_argv = [
+        "--csv",
+        str(csv_out),
+        "-d" if evidence_path.is_dir() else "-f",
+        str(evidence_path),
+    ]
+    envelope = await run_disk_wrapper(
+        tool_name="parse_prefetch",
+        ez_tool="PECmd",
+        ez_argv=ez_argv,
+        csv_glob_pattern="*_PECmd_Output.csv",
+        csv_out_dir=csv_out,
+        output_cls=PrefetchOutput,
+        parse_csv=_parse_prefetch_rows,
+        caveats=PREFETCH_CAVEATS,
+        corroboration=PREFETCH_CORROBORATION,
+        check_serilog_stderr=True,
+        dll_check_override=_PECMD_DLL,
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+    )
+    if not envelope.success or envelope.data is None:
+        return envelope
+    extra: list[str] = []
+    if envelope.data.row_count > 1024:
+        extra.append(
+            f"Prefetch directory contains {envelope.data.row_count} entries; "
+            "historical cap is 1024 — older entries may have been LRU-evicted"
+        )
+    if envelope.data.parsing_error_count > 0:
+        bad = [e.executable_name for e in envelope.data.entries if e.parsing_error]
+        extra.append(
+            f"{envelope.data.parsing_error_count} entr"
+            f"{'y' if envelope.data.parsing_error_count == 1 else 'ies'} "
+            f"had PECmd parsing errors: {', '.join(bad[:5])}"
+        )
+    if extra:
+        return envelope.model_copy(update={"advisories": (*envelope.advisories, *extra)})
+    return envelope
+
+
+__all__ = ["parse_amcache", "parse_mft", "parse_prefetch", "parse_shimcache"]

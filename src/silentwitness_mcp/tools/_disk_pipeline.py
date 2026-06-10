@@ -74,6 +74,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
     timeout_s: float = DEFAULT_TIMEOUT_S,
     check_serilog_stderr: bool = False,
     corroboration: tuple[str, ...] = (),
+    dll_check_override: Path | None = None,
 ) -> ToolResponse[TPayload]:
     """Drive one EZ-Tools wrapper end-to-end. Errors at any stage fall
     through to :func:`refuse` with the appropriate
@@ -97,6 +98,22 @@ async def run_disk_wrapper[TPayload: BaseModel](
         "caveats": caveats,
         "cmd_argv": cmd_argv,
     }
+
+    # Optional per-tool DLL check (for EZ Tools not pre-installed on SIFT,
+    # e.g. PECmd). Runs before evidence gates so a missing install surfaces
+    # before any I/O.  Pass dll_check_override=_PECMD_DLL from the caller;
+    # default None skips the check for pre-installed tools.
+    if dll_check_override is not None and not dll_check_override.exists():
+        return refuse(
+            DiskFailureReason.EZ_TOOL_NOT_FOUND,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+            advisories=(
+                f"{ez_tool.upper()}_NOT_INSTALLED — run install.sh per "
+                "context/.raw-design-research/03 to add "
+                f"{ez_tool} to the EZ Tools tree",
+            ),
+            **refuse_kw,
+        )
 
     gate = check_evidence_and_mount_gates(evidence_path, evidence_registry=evidence_registry)
     if gate is not None:

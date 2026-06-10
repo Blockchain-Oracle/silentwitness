@@ -78,6 +78,7 @@ class DiskFailureReason(StrEnum):
     EVIDENCE_TAMPERED = "EVIDENCE_TAMPERED"
     MOUNT_NOT_RO_NOEXEC_NOSUID = "MOUNT_NOT_RO_NOEXEC_NOSUID"
     DOTNET_NOT_FOUND = "DOTNET_NOT_FOUND"
+    EZ_TOOL_NOT_FOUND = "EZ_TOOL_NOT_FOUND"
     TOOL_FAILED = "TOOL_FAILED"
     TOOL_TIMEOUT = "TOOL_TIMEOUT"
     OUTPUT_PARSE_FAILED = "OUTPUT_PARSE_FAILED"
@@ -379,6 +380,7 @@ __all__ = [
     "check_evidence_and_mount_gates",
     "cmd_argv_for",
     "delete_orphan_blob",
+    "dll_path_for",
     "dll_path_for",
     "glob_csv_output",
     "persist_blob",
