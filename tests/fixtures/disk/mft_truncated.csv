@@ -1,0 +1,4 @@
+EntryNumber,SequenceNumber,InUse,ParentEntryNumber,ParentSequenceNumber,ParentPath,FileName,Extension,FileSize,IsDirectory,HasAds,Created0x10,Created0x30,LastModified0x10,LastModified0x30,LastRecordChange0x10,LastRecordChange0x30,LastAccess0x10,LastAccess0x30,Timestomped,uSecZeros
+5,5,True,5,5,.\,$MFT,,,False,False,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,False,False
+42,1,True,5,5,.\Program Files\Ethereal,ethereal.exe,.exe,1048576,False,False,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,2004-08-19 22:48:00.0000000,False,False
+99,1,True,5,5,.\Windows\System32,suspicio
