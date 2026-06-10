@@ -307,9 +307,63 @@ class CmdlineOutput(BaseModel):
     entries: tuple[CmdlineEntry, ...]
 
 
+class DllEntry(BaseModel):
+    """Vol3 ``windows.dlllist`` row — one loaded DLL per process,
+    walked from the PEB's ``InLoadOrderModuleList``.
+
+    Reflectively-loaded DLLs are INVISIBLE here (they bypass the
+    loader list). The caveat layer flags that; the type layer just
+    preserves the typed loader-list view honestly."""
+
+    model_config = _ROW_CONFIG
+
+    pid: int = Field(alias="PID")
+    process: str = Field(alias="Process")
+    base: int = Field(alias="Base")
+    size: int = Field(alias="Size")
+    name: str = Field(alias="Name")
+    path: str | None = Field(default=None, alias="Path")
+    load_time: datetime | None = Field(default=None, alias="LoadTime")
+    file_output: str | None = Field(default=None, alias="File output")
+
+
+class DllListOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[DllEntry, ...]
+
+
+class HandleEntry(BaseModel):
+    """Vol3 ``windows.handles`` row — one open handle per process.
+
+    ``granted_access`` is the raw kernel bitmask (int). NOT decoded
+    here — the entity gate cites the raw integer; downstream consumers
+    decode contextually (PROCESS_VM_WRITE = 0x20, PROCESS_VM_READ =
+    0x10, PROCESS_CREATE_THREAD = 0x2, etc.). The caveat layer flags
+    the injection/credential-theft prerequisite bitmask shapes."""
+
+    model_config = _ROW_CONFIG
+
+    pid: int = Field(alias="PID")
+    process: str = Field(alias="Process")
+    offset: int = Field(alias="Offset")
+    handle_value: int = Field(alias="HandleValue")
+    type: str = Field(alias="Type")
+    granted_access: int = Field(alias="GrantedAccess")
+    name: str | None = Field(default=None, alias="Name")
+
+
+class HandlesOutput(BaseModel):
+    model_config = _OUT_CONFIG
+    entries: tuple[HandleEntry, ...]
+
+
 __all__ = [
     "CmdlineEntry",
     "CmdlineOutput",
+    "DllEntry",
+    "DllListOutput",
+    "HandleEntry",
+    "HandlesOutput",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",

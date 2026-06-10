@@ -17,6 +17,10 @@ from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.tools._memory_models import (
     CmdlineEntry,
     CmdlineOutput,
+    DllEntry,
+    DllListOutput,
+    HandleEntry,
+    HandlesOutput,
     MalfindHit,
     MalfindOutput,
     NetscanEntry,
@@ -40,6 +44,8 @@ _MALFIND_PLUGIN: Final = "windows.malware.malfind.Malfind"
 _NETSCAN_PLUGIN: Final = "windows.netscan.NetScan"
 # Capital-L: class-suffixed form Vol3 ≥2.27 expects.
 _CMDLINE_PLUGIN: Final = "windows.cmdline.CmdLine"
+_DLLLIST_PLUGIN: Final = "windows.dlllist.DllList"
+_HANDLES_PLUGIN: Final = "windows.handles.Handles"
 
 # PID 0 (System Idle) and negative PIDs have no _EPROCESS / PEB —
 # Vol3 returns empty results OR errors with confusing stderr. Reject
@@ -53,6 +59,11 @@ def _validate_pid_filter(tool_name: str, pid: int | None) -> None:
             f"{tool_name}: pid must be >= {_MIN_VALID_PID} or None; got {pid} "
             f"(PID 0 = System Idle has no PEB / VAD)"
         )
+
+
+def _validate_object_types_filter(tool_name: str, object_types: list[str] | None) -> None:
+    if object_types is not None and not object_types:
+        raise ValueError(f"{tool_name}: object_types must be a non-empty list or None")
 
 
 _MALFIND_HEXDUMP_CAP: Final = 256  # = 128 bytes of hex
@@ -192,6 +203,74 @@ async def vol_cmdline(
     )
 
 
+async def vol_dlllist(
+    evidence_path: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    pid: int | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[DllListOutput]:
+    """Loaded DLLs per process via PEB ``InLoadOrderModuleList`` walk.
+    ``pid=None`` scans all processes; an int filters at the Vol3 layer."""
+    _validate_pid_filter("vol_dlllist", pid)
+    return await _run_wrapper(
+        tool_name="vol_dlllist",
+        plugin_name=_DLLLIST_PLUGIN,
+        caveat_key="dlllist",
+        output_cls=DllListOutput,
+        parse_rows=lambda raw: _parse_flat(raw, DllEntry, DllListOutput),
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+        extra_argv=["--pid", str(pid)] if pid is not None else None,
+    )
+
+
+async def vol_handles(
+    evidence_path: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    pid: int | None = None,
+    object_types: list[str] | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[HandlesOutput]:
+    """Open handle table per process. ``object_types`` accepts the
+    Vol3 allowlist (``Process``, ``Thread``, ``File``, ``Key``,
+    ``Section``, ``Event``, ``Mutant``, ``Semaphore``, ``Token``,
+    ``Directory``, ``SymbolicLink``) — passed verbatim as a single
+    comma-joined ``--object-types`` arg."""
+    _validate_pid_filter("vol_handles", pid)
+    _validate_object_types_filter("vol_handles", object_types)
+    extra: list[str] = []
+    if pid is not None:
+        extra += ["--pid", str(pid)]
+    if object_types:
+        extra += ["--object-types", ",".join(object_types)]
+    return await _run_wrapper(
+        tool_name="vol_handles",
+        plugin_name=_HANDLES_PLUGIN,
+        caveat_key="handles",
+        output_cls=HandlesOutput,
+        parse_rows=lambda raw: _parse_flat(raw, HandleEntry, HandlesOutput),
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+        extra_argv=extra or None,
+    )
+
+
 async def vol_netscan(
     evidence_path: Path,
     *,
@@ -277,6 +356,10 @@ def hidden_or_terminated_candidates(pslist_pids: set[int], psscan_pids: set[int]
 __all__ = [
     "CmdlineEntry",
     "CmdlineOutput",
+    "DllEntry",
+    "DllListOutput",
+    "HandleEntry",
+    "HandlesOutput",
     "MalfindHit",
     "MalfindOutput",
     "NetscanEntry",
@@ -289,6 +372,8 @@ __all__ = [
     "PstreeOutput",
     "hidden_or_terminated_candidates",
     "vol_cmdline",
+    "vol_dlllist",
+    "vol_handles",
     "vol_malfind",
     "vol_netscan",
     "vol_pslist",

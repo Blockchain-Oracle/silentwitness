@@ -93,6 +93,54 @@ _VOL_CAVEATS: Final[Mapping[str, tuple[str, ...]]] = {
             "malicious"
         ),
     ),
+    "dlllist": (
+        (
+            "windows.dlllist walks the PEB InLoadOrderModuleList — "
+            "reflectively-loaded DLLs (Cobalt Strike sRDI, Meterpreter, "
+            "custom reflective loaders) are INVISIBLE here; corroborate "
+            "with vol_malfind + ldrmodules"
+        ),
+        (
+            "a system DLL name loaded from a non-standard path (e.g., "
+            "ntdll.dll from C:\\Users\\Public\\) is a side-loading red "
+            "flag"
+        ),
+        (
+            "LoadTime is when the DLL entered the loader list — usable "
+            "for per-process timeline reconstruction"
+        ),
+        (
+            "suspicious-DLL detection requires a baseline of expected "
+            "DLLs per process — without it, false-positive rate is high "
+            "for anything more interesting than the system-DLL-from-"
+            "wrong-path pattern"
+        ),
+    ),
+    "handles": (
+        (
+            "cross-process handles (Process A → Process B) with "
+            "PROCESS_VM_WRITE | PROCESS_CREATE_THREAD | "
+            "PROCESS_ALL_ACCESS access are the injection prerequisites "
+            "— flag these"
+        ),
+        (
+            "a non-system process holding a handle to lsass.exe with "
+            "PROCESS_VM_READ is the classic Mimikatz signature"
+        ),
+        (
+            "mutex (Mutant) names are malware family fingerprints — "
+            "many families use distinctive Global\\<random> names to "
+            "prevent re-infection"
+        ),
+        (
+            "handles to \\Device\\PhysicalMemory or unusual \\Device\\ "
+            "paths are driver-IPC / rootkit candidates"
+        ),
+        (
+            "file handles to deleted files persist while the handle is "
+            "open — vol_dumpfiles can recover the content even after del"
+        ),
+    ),
     "netscan": (
         (
             "windows.netscan pool-tag scan returns both active AND "
