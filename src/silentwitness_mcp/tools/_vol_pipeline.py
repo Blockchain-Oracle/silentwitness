@@ -123,6 +123,12 @@ async def _run_wrapper[TPayload: BaseModel](
     pre_audit_id = audit_logger.next_audit_id()
     start = time.monotonic()
     # dict[str, Any] for the splat; refuse() checks types at the call.
+    # caveats + discipline_reminder propagate on refuse so the agent
+    # interpreting an empty/refused envelope still gets the action-
+    # shaping guidance (e.g. "empty lsadump output does NOT mean
+    # Credential Guard"; "refused vol_pslist is not an empty process
+    # list"). Classification metadata is set by the tool author once
+    # at construction; the pipeline forwards it verbatim.
     refuse_kw: dict[str, Any] = {
         "tool_name": tool_name,
         "plugin_name": plugin_name,
@@ -133,6 +139,8 @@ async def _run_wrapper[TPayload: BaseModel](
         "evidence_path": evidence_path,
         "model_used": model_used,
         "extra_argv": extra_argv,
+        "caveats": caveats,
+        "discipline_reminder": discipline_reminder,
     }
 
     gate = _check_evidence_gates(evidence_path, evidence_registry=evidence_registry)

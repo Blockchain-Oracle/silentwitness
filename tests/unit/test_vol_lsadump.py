@@ -1,6 +1,7 @@
-"""Unit tests for :func:`vol_lsadump`. Credential-material code path
-— the only vol_* wrapper carrying a non-empty ``discipline_reminder``,
-so the discipline-reminder contract is part of the test bar."""
+"""Unit tests for :func:`vol_lsadump`. Credential-material code path —
+discipline_reminder + the 6 lsadump caveats (action-shaping
+Credential-Guard correction at caveats[0]) must propagate on BOTH
+success AND refuse envelopes."""
 
 from __future__ import annotations
 
@@ -19,6 +20,11 @@ from silentwitness_mcp.tools._vol_common import VolFailureReason
 from silentwitness_mcp.tools.memory_extras import LsaDumpOutput, vol_lsadump
 
 MODEL = "claude-sonnet-4-6"
+
+# Non-credential-shaped fixture plaintexts so secret-scanners do not
+# flag them. The invariants under test are about parsing + propagation.
+_FIXTURE_PRINTABLE_A = "fixture-printable-A"  # pragma: allowlist secret
+_FIXTURE_PRINTABLE_B = "fixture-printable-B"  # pragma: allowlist secret
 
 
 class _FakeProc:
@@ -90,15 +96,14 @@ def test_lsadump_canonical_secret_set_parses_with_discipline_reminder(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Canonical LSA secret keys ($MACHINE.ACC + DefaultPassword +
-    _SC_<service> + DPAPI_SYSTEM + NL$KM) round-trip through the typed
-    model, and the discipline_reminder fires for the credential-
-    material code path (the load-bearing distinction across all 9
-    vol_* tools)."""
+    """Canonical LSA secret keys round-trip; discipline_reminder fires;
+    BINARY_KEY_NAMES forces secret=None for $MACHINE.ACC / NL$KM /
+    DPAPI_SYSTEM even when bytes happen to be printable (NL$KM hex
+    decodes to U+1111..U+4444 — L/S categories — and must still veto)."""
     rows = [
-        _row("$MACHINE.ACC", "deadbeefdeadbeef"),
-        _row("DefaultPassword", _utf16le_hex("AutoLogonPass123")),
-        _row("_SC_MSSQLServer", _utf16le_hex("ServiceSecret!")),
+        _row("$MACHINE.ACC", "deadbeefdeadbeef"),  # pragma: allowlist secret
+        _row("DefaultPassword", _utf16le_hex(_FIXTURE_PRINTABLE_A)),
+        _row("_SC_MSSQLServer", _utf16le_hex(_FIXTURE_PRINTABLE_B)),
         _row("DPAPI_SYSTEM", "0102030405060708090a0b0c0d0e0f10"),
         _row("NL$KM", "1111222233334444"),
     ]
@@ -107,9 +112,12 @@ def test_lsadump_canonical_secret_set_parses_with_discipline_reminder(
     assert envelope.success is True
     assert isinstance(envelope.data, LsaDumpOutput)
     assert len(envelope.data.entries) == 5
-    keys = [e.Key for e in envelope.data.entries]
-    assert keys == ["$MACHINE.ACC", "DefaultPassword", "_SC_MSSQLServer", "DPAPI_SYSTEM", "NL$KM"]
-    # Discipline reminder MUST fire — Restricted classification + HMAC.
+    by_key = {e.key: e for e in envelope.data.entries}
+    assert by_key["$MACHINE.ACC"].secret is None
+    assert by_key["NL$KM"].secret is None
+    assert by_key["DPAPI_SYSTEM"].secret is None
+    assert by_key["DefaultPassword"].secret == _FIXTURE_PRINTABLE_A
+    assert by_key["_SC_MSSQLServer"].secret == _FIXTURE_PRINTABLE_B
     assert envelope.discipline_reminder is not None
     assert "Restricted" in envelope.discipline_reminder
     assert "HMAC" in envelope.discipline_reminder
@@ -120,9 +128,9 @@ def test_lsadump_default_password_decodes_utf16le_printable_to_secret(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A DefaultPassword with printable UTF-16LE bytes surfaces a
-    decoded ``Secret`` (operational comfort) AND the verbatim ``Hex``
-    (authoritative — what the entity gate cites)."""
-    plaintext = "AutoLogonPass123"
+    decoded ``secret`` (operational comfort) AND the verbatim
+    ``hex_value`` (authoritative — what the entity gate cites)."""
+    plaintext = _FIXTURE_PRINTABLE_A
     hex_bytes = _utf16le_hex(plaintext)
     _install_mock(
         monkeypatch,
@@ -131,8 +139,8 @@ def test_lsadump_default_password_decodes_utf16le_printable_to_secret(
     envelope = _invoke(env)
     assert envelope.success is True
     entry = envelope.data.entries[0]
-    assert entry.Hex == hex_bytes
-    assert entry.Secret == plaintext
+    assert entry.hex_value == hex_bytes
+    assert entry.secret == plaintext
 
 
 def test_lsadump_non_printable_hex_keeps_secret_none(
@@ -140,22 +148,22 @@ def test_lsadump_non_printable_hex_keeps_secret_none(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A row whose ``Hex`` is binary garbage (e.g. $MACHINE.ACC raw
-    hash) MUST surface ``Secret=None`` — silently mangling non-
+    hash) MUST surface ``secret=None`` — silently mangling non-
     printable bytes into a string would corrupt the audit chain. The
     Vol3 renderer-side ``Secret`` field, if present, is IGNORED."""
-    binary_hex = "deadbeefcafebabe1122334455667788"  # pragma: allowlist secret
+    binary_hex = "cafe0001cafe0002cafe0003cafe0004"  # pragma: allowlist secret
     rows = [
         {
             **_row("$MACHINE.ACC", binary_hex),
-            "Secret": "garbled-vol3-render",  # pragma: allowlist secret
+            "Secret": "vol3-side-rendering",  # pragma: allowlist secret
         }
     ]
     _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
     envelope = _invoke(env)
     assert envelope.success is True
     entry = envelope.data.entries[0]
-    assert entry.Hex == binary_hex
-    assert entry.Secret is None  # we discard Vol3's rendering and decode locally
+    assert entry.hex_value == binary_hex
+    assert entry.secret is None  # we discard Vol3's rendering and decode locally
 
 
 def test_lsadump_empty_output_does_not_imply_credential_guard(
@@ -193,10 +201,9 @@ def test_lsadump_caveats_verbatim_with_credential_guard_first(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """All 6 caveats appear in the prescribed order. Action-shaping
-    FIRST — the Credential-Guard misconception correction — so an
-    agent skimming ``caveats[0]`` reads the "empty output does NOT
-    mean Credential Guard" directive before any other caveat."""
+    """All 6 caveats present; action-shaping Credential-Guard
+    correction at caveats[0] so an agent skimming the head reads
+    "empty output does NOT mean Credential Guard" first."""
     _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env)
     caveats = envelope.caveats
@@ -210,12 +217,55 @@ def test_lsadump_caveats_verbatim_with_credential_guard_first(
     assert "Secret field is best-effort UTF-16LE" in blob
 
 
+def test_lsadump_audit_row_tool_name_is_vol_lsadump(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Audit-trail integrity: success-path JSONL row's ``tool`` field
+    MUST be ``vol_lsadump``. A copy-paste artefact would silently
+    corrupt cross-tool replay while the HMAC ledger still validates."""
+    rows = [_row("DefaultPassword", _utf16le_hex(_FIXTURE_PRINTABLE_A))]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    case_dir = env[0]
+    envelope = _invoke(env)
+    assert envelope.success is True
+    audit_log = case_dir / "audit" / "memory.jsonl"
+    audit_rows = [json.loads(line) for line in audit_log.read_text("utf-8").splitlines() if line]
+    row = audit_rows[-1]
+    assert row["tool"] == "vol_lsadump"
+    assert row["audit_id"] == envelope.audit_id
+    assert row["params"]["exit_code"] == 0
+
+
+def test_lsadump_normalizer_key_is_vol_lsadump_not_default(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: every vol_* tool used to share a default normalizer
+    key, silently breaking citation-gate matching. vol_lsadump's parser
+    path is custom (not _parse_flat) so a regression here would silently
+    break citation gate for credential-material findings specifically."""
+    from silentwitness_mcp.verification import normalizer as _norm
+
+    captured: list[str] = []
+    real = _norm.normalize_output
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._vol_common.normalize_output",
+        lambda raw, tool: (captured.append(tool), real(raw, tool))[1],
+    )
+    _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
+    envelope = _invoke(env)
+    assert envelope.success is True
+    assert captured == ["vol_lsadump"]
+
+
 def test_lsadump_unregistered_evidence_refuses_without_spawning(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """BDD: no Vol3 subprocess is spawned (no credential material is
-    ever touched)."""
+    """No Vol3 subprocess spawned. Refuse envelope still carries
+    discipline_reminder + the 6 lsadump caveats so the agent
+    narrating the refusal knows it was the credential-material path."""
     case_dir = env[0]
     unreg = case_dir.parent / "not-registered.vmem"
     unreg.write_bytes(b"x")
@@ -224,18 +274,25 @@ def test_lsadump_unregistered_evidence_refuses_without_spawning(
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.EVIDENCE_NOT_REGISTERED.value
     assert calls == []
+    assert envelope.discipline_reminder is not None
+    assert len(envelope.caveats) == 6
+    assert "Credential Guard does NOT" in envelope.caveats[0]
 
 
 def test_lsadump_evidence_tampered_returns_evidence_tampered(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Tamper-detection refusal still carries the Restricted
+    classification reminder + caveat block."""
     env[1].write_bytes(b"DIFFERENT bytes after registration")
     calls = _install_mock(monkeypatch, _FakeProc(stdout=b"[]"))
     envelope = _invoke(env)
     assert envelope.success is False
     assert envelope.advisories[-1] == VolFailureReason.EVIDENCE_TAMPERED.value
     assert calls == []
+    assert envelope.discipline_reminder is not None
+    assert len(envelope.caveats) == 6
 
 
 def test_lsadump_tool_failed_surfaces_truncated_stderr(
@@ -250,15 +307,38 @@ def test_lsadump_tool_failed_surfaces_truncated_stderr(
     assert "SECURITY hive not present" in envelope.advisories[0]
     assert len(envelope.advisories[0]) <= 500
     assert len(calls) == 1
+    assert envelope.discipline_reminder is not None
+    assert len(envelope.caveats) == 6
+
+
+def test_lsadump_timeout_refuses_with_discipline_reminder_intact(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Vol3 timeout surfaces as TOOL_TIMEOUT and MUST still carry the
+    classification marker — a partial decrypt may have touched
+    credential material even when the run did not complete."""
+
+    async def _timeout_run(*_argv: str, **_kw: Any) -> _FakeProc:
+        raise TimeoutError("Vol3 lsadump exceeded timeout")
+
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._vol_common.asyncio.create_subprocess_exec",
+        _timeout_run,
+    )
+    envelope = _invoke(env)
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.TOOL_TIMEOUT.value
+    assert envelope.discipline_reminder is not None
+    assert len(envelope.caveats) == 6
 
 
 def test_lsadump_unicode_control_chars_keep_secret_none(
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """UTF-16LE bytes that decode to a string containing a C-class
-    (control) codepoint MUST keep Secret=None — control chars are
-    not "printable Unicode" by the audit contract."""
+    """UTF-16LE bytes containing a C-class control codepoint keep
+    secret=None — control chars are not "printable" by the contract."""
     # "Hi\x01" → contains C0 control U+0001.
     hex_with_control = "4800690001000000"
     _install_mock(
@@ -266,7 +346,7 @@ def test_lsadump_unicode_control_chars_keep_secret_none(
         _FakeProc(stdout=json.dumps([_row("DefaultPassword", hex_with_control)]).encode("utf-8")),
     )
     envelope = _invoke(env)
-    assert envelope.data.entries[0].Secret is None
+    assert envelope.data.entries[0].secret is None
 
 
 def test_lsadump_malformed_hex_field_triggers_output_parse_failed(
@@ -289,7 +369,20 @@ def test_lsadump_unknown_column_triggers_output_parse_failed(
 ) -> None:
     """Vol3 column drift on this surface is a credential-material
     audit-elision risk — fail-closed."""
-    rows = [{"Key": "DefaultPassword", "Hex": "deadbeef", "ExtraField": True}]
+    rows = [{"Key": "DefaultPassword", "Hex": "0123abcd", "UnexpectedColumn": True}]
+    _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
+    envelope = _invoke(env)
+    assert envelope.success is False
+    assert envelope.advisories[-1] == VolFailureReason.OUTPUT_PARSE_FAILED.value
+
+
+def test_lsadump_garbage_hex_triggers_output_parse_failed(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Non-hex Hex would otherwise silently surface as secret=None;
+    Hex regex forces OUTPUT_PARSE_FAILED instead."""
+    rows = [{"Key": "DefaultPassword", "Hex": "ZZ-not-hex-at-all"}]
     _install_mock(monkeypatch, _FakeProc(stdout=json.dumps(rows).encode("utf-8")))
     envelope = _invoke(env)
     assert envelope.success is False

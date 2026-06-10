@@ -248,6 +248,8 @@ def refuse[TPayload: BaseModel](
     elapsed_ms: float,
     model_used: str,
     advisories: tuple[str, ...],
+    caveats: tuple[str, ...] = (),
+    discipline_reminder: str | None = None,
     blob_path: Path | None = None,
     exit_code: int | None = None,
     result_sha256: str | None = None,
@@ -255,7 +257,15 @@ def refuse[TPayload: BaseModel](
 ) -> ToolResponse[TPayload]:
     """Build refusal envelope + audit row. Pre-subprocess refusals get
     an empty-sentinel :class:`DataProvenance`; post-subprocess refusals
-    carry the real blob path + hash so the verifier can re-check."""
+    carry the real blob path + hash so the verifier can re-check.
+
+    ``caveats`` and ``discipline_reminder`` propagate from the wrapper
+    on the refuse path so downstream agents can still tell which tool
+    refused and at what classification — empty/refused output is the
+    case where action-shaping caveats matter most (an agent reading a
+    blank vol_lsadump result must not infer Credential Guard from
+    silence; an agent reading a refused vol_pslist must not assume the
+    process list is empty)."""
     write_audit_row(
         tool_name=tool_name,
         case_dir=case_dir,
@@ -286,6 +296,8 @@ def refuse[TPayload: BaseModel](
         audit_id=pre_audit_id,
         examiner=audit_logger.examiner,
         advisories=(*advisories, reason.value),
+        caveats=caveats,
+        discipline_reminder=discipline_reminder,
         data_provenance=provenance,
     )
 

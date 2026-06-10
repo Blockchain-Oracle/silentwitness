@@ -1,7 +1,12 @@
-"""Volatility 3 LSA-secret tool body — physically isolated from
-:mod:`memory` because credential material is the highest-review-
-priority code path in the memory family (architecture §4.2 + §4.6,
-PRD FR #5).
+"""Volatility 3 LSA-secret tool body.
+
+Credential material — record_observation against this output should be
+reviewed at Restricted classification and HMAC-approved before report
+inclusion (see :data:`_DISCIPLINE_REMINDER`). The wrapper is split out
+of :mod:`tools.memory` because the Restricted-classification surface
+warrants a separate review boundary; consolidating it with the other
+eight wrappers would dilute the per-module review focus on credential
+handling.
 
 A row from Vol3's JSON renderer carries ``Key`` (secret name like
 ``$MACHINE.ACC`` / ``DefaultPassword`` / ``_SC_<service>`` /
@@ -13,14 +18,14 @@ string into the typed model — the entity gate cites the Hex bytes."""
 from __future__ import annotations
 
 import json
-import unicodedata
 from pathlib import Path
-from typing import Final
+from typing import Any, Final
 
 from silentwitness_common.types import ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
-from silentwitness_mcp.tools._memory_models import LsaDumpOutput, LsaSecretEntry
+from silentwitness_mcp.tools._lsa_models import LsaDumpOutput, LsaSecretEntry
+from silentwitness_mcp.tools._lsa_secret_decode import decode_secret
 from silentwitness_mcp.tools._vol_common import DEFAULT_TIMEOUT_S
 from silentwitness_mcp.tools._vol_pipeline import _run_wrapper
 
@@ -33,49 +38,25 @@ _DISCIPLINE_REMINDER: Final = (
     "report inclusion"
 )
 
-# UTF-16LE decode acceptance band: the bytes are printable iff every
-# decoded char is either ASCII printable or a Unicode Letter/Mark/
-# Number/Punctuation/Symbol category char. Refuse C-class (control),
-# surrogates, and unassigned — silently mangling these into a string
-# field would corrupt the audit trail (Hex remains authoritative).
-_ACCEPTED_UNICODE_CATEGORIES: Final = frozenset({"L", "M", "N", "P", "S", "Z"})
-
-
-def _is_printable_unicode(text: str) -> bool:
-    """Acceptance check for the convenience-only Secret field."""
-    if not text:
-        return False
-    return all(unicodedata.category(c)[0] in _ACCEPTED_UNICODE_CATEGORIES for c in text)
-
-
-def _decode_secret(hex_str: str) -> str | None:
-    """Best-effort UTF-16LE decode of the verbatim hex bytes. ``None``
-    when the result is empty or contains any non-printable codepoint —
-    the entity gate cites ``Hex``, so a half-decoded ``Secret`` would
-    be worse than no ``Secret``."""
-    try:
-        raw = bytes.fromhex(hex_str.replace(" ", "").replace("\n", ""))
-    except ValueError:
-        return None
-    # LSA secrets are UTF-16LE Unicode strings; null-terminate trim.
-    try:
-        text = raw.decode("utf-16-le").rstrip("\x00")
-    except UnicodeDecodeError:
-        return None
-    return text if _is_printable_unicode(text) else None
-
-
 # Closed-set of keys Vol3's lsadump renderer is allowed to emit. Any
 # additional key is schema drift on a credential-material surface
-# and MUST fail closed — silently dropping a column we don't recognise
-# would let the audit trail elide a field the entity gate may need.
+# and MUST fail closed. NOTE: this guard is NOT redundant with the
+# model's ``extra="forbid"`` — the parser reconstructs ``cleaned``
+# from a closed key list before calling ``model_validate``, so an
+# extra wire-schema key would be silently discarded if this check
+# were removed. Both layers are load-bearing.
 _LSADUMP_EXPECTED_KEYS: Final = frozenset({"Key", "Hex", "Secret"})
 
 
 def _parse_lsadump(raw: bytes) -> LsaDumpOutput:
-    """Re-derive ``Secret`` from ``Hex`` locally (Vol3's renderer-side
+    """Re-derive ``secret`` from ``Hex`` locally (Vol3's renderer-side
     printable is unverified). Reject any Vol3 row with unknown
-    columns — credential-material audit cannot silently elide drift."""
+    columns OR a missing/non-string ``Hex`` — credential-material
+    audit cannot silently elide drift. Malformed-hex / bad-UTF-16LE
+    bytes raise ``ValueError`` (via :func:`decode_secret`) and
+    surface as ``OUTPUT_PARSE_FAILED`` at the wrapper boundary, NOT
+    as a silent ``secret=None`` indistinguishable from the legitimate
+    binary-non-printable case."""
     rows = json.loads(raw.decode("utf-8"))
     if not isinstance(rows, list):
         raise ValueError(f"lsadump JSON must be a list, got {type(rows).__name__}")
@@ -87,9 +68,21 @@ def _parse_lsadump(raw: bytes) -> LsaDumpOutput:
         if unknown:
             raise ValueError(f"lsadump row has unknown column(s): {sorted(unknown)}")
         hex_value = row.get("Hex")
-        cleaned = {"Key": row.get("Key"), "Hex": hex_value}
-        if isinstance(hex_value, str):
-            cleaned["Secret"] = _decode_secret(hex_value)
+        if not isinstance(hex_value, str):
+            raise ValueError(
+                f"lsadump row missing or non-string Hex (Key={row.get('Key')!r}, "
+                f"Hex type={type(hex_value).__name__})"
+            )
+        key = row.get("Key")
+        # Pass key= so binary-key allowlist short-circuits Secret=None
+        # for host-managed random bytes (NTLM hashes / AES key
+        # material / DPAPI seeds), even when the bytes incidentally
+        # decode to a printable Unicode glyph string.
+        cleaned: dict[str, Any] = {
+            "Key": key,
+            "Hex": hex_value,
+            "Secret": decode_secret(hex_value, key=key if isinstance(key, str) else None),
+        }
         entries.append(LsaSecretEntry.model_validate(cleaned))
     return LsaDumpOutput(entries=tuple(entries))
 
@@ -104,9 +97,10 @@ async def vol_lsadump(
     timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> ToolResponse[LsaDumpOutput]:
     """Decrypted LSA secrets from the in-memory SYSTEM + SECURITY
-    hives. Carries a non-empty ``discipline_reminder`` — the only
-    vol_* tool that does so — to seed Restricted classification on
-    any observation built from this output."""
+    hives. Carries a non-empty ``discipline_reminder`` to seed
+    Restricted classification on any observation built from this
+    output — propagates through both success and refuse envelopes
+    so a refused run is still tagged with its sensitivity class."""
     return await _run_wrapper(
         tool_name="vol_lsadump",
         plugin_name=_LSADUMP_PLUGIN,
