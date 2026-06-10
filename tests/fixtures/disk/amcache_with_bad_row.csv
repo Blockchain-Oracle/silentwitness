@@ -1,0 +1,6 @@
+SHA1,FullPath,FileExtension,Size,ProductName,ProductVersion,Publisher,BinFileVersion,BinProductVersion,FileKeyLastWriteTimestamp
+da39a3ee5e6b4b0d3255bfef95601890afd80709,C:\Windows\System32\notepad.exe,.exe,209408,Windows Notepad,10.0.22621.1,Microsoft Corporation,10.0.22621.1,10.0.22621.1,2023-06-15 14:22:10
+a94a8fe5ccb19ba61c4c0873d391e987982fbbd3,C:\Users\jdoe\Downloads\Ethereal.exe,.exe,1048576,Wireshark,3.6.2,Wireshark Foundation,3.6.2,3.6.2,2024-08-19 22:48:05
+BADHASH_WILL_FAIL,C:\Corrupt\entry.exe,.exe,NOT_A_NUMBER,,,,,, NOT_A_DATE_EITHER
+0a4d55a8d778e5022fab701977c5d840bbc486d0,C:\Temp\suspicious.exe,.exe,32768,,,Unknown Publisher,,,2024-11-01 03:17:42
+da39a3ee5e6b4b0d3255bfef95601890afd80709,C:\Windows\explorer.exe,.exe,4669952,Windows Explorer,10.0.22621.1,Microsoft Corporation,10.0.22621.1,10.0.22621.1,2023-06-15 14:22:10
