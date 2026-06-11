@@ -38,6 +38,12 @@ EVTXECMD_DLL: Final = Path("/opt/zimmermantools/EvtxeCmd/EvtxECmd.dll")
 HAYABUSA_BIN: Final = Path("/opt/hayabusa/hayabusa")
 HAYABUSA_RULES_DIR: Final = Path("/opt/hayabusa-rules")
 
+# Chainsaw v2.16.0 — NOT pre-installed on SIFT 2026; install.sh provisions it.
+# context/.raw-design-research/03 §"Tools our install script MUST add" line 272.
+CHAINSAW_BIN: Final = Path("/opt/chainsaw/chainsaw")
+CHAINSAW_MAPPING_DEFAULT: Final = Path("/opt/chainsaw/mappings/sigma-event-logs-all.yml")
+SIGMA_RULES_DIR: Final = Path("/opt/sigma")
+
 _DEFAULT_LOG_TIMEOUT_S: Final = 600.0
 _TERMINATE_GRACE_S: Final = 5.0
 _SERILOG_ERR_RE: Final = re.compile(r"\[\d{2}:\d{2}:\d{2} (ERR|FTL)\]")
@@ -51,6 +57,9 @@ class LogFailureReason(StrEnum):
     EVTXECMD_NOT_FOUND = "EVTXECMD_NOT_FOUND"
     HAYABUSA_NOT_INSTALLED = "HAYABUSA_NOT_INSTALLED"
     HAYABUSA_RULES_MISSING = "HAYABUSA_RULES_MISSING"
+    CHAINSAW_NOT_INSTALLED = "CHAINSAW_NOT_INSTALLED"
+    CHAINSAW_MAPPING_MISSING = "CHAINSAW_MAPPING_MISSING"
+    SIGMA_RULES_MISSING = "SIGMA_RULES_MISSING"
     TOOL_FAILED = "TOOL_FAILED"
     TOOL_TIMEOUT = "TOOL_TIMEOUT"
     OUTPUT_PARSE_FAILED = "OUTPUT_PARSE_FAILED"
