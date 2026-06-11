@@ -19,8 +19,12 @@ class ToolCallSnapshot:
     """Point-in-time capture of an in-progress tool call."""
 
     tool_name: str
-    args_summary: str
-    started_at: datetime
+    args_summary: str  # pre-truncated to ≤100 chars
+    started_at: datetime  # must be UTC-aware
+
+    def __post_init__(self) -> None:
+        if self.started_at.tzinfo is None:
+            raise ValueError("started_at must be timezone-aware (UTC)")
 
 
 @dataclasses.dataclass(frozen=True)

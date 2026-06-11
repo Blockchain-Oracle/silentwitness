@@ -1,7 +1,7 @@
 """CLI investigate command: orchestrate investigator agent + 4-pane rich.live render.
 
 SIGINT/SIGTERM flow (load-bearing per story):
-  1. loop.add_signal_handler installs _cancel() which calls agent_task.cancel().
+  1. loop.add_signal_handler passes agent_task.cancel as the SIGINT/SIGTERM callback directly.
   2. CancelledError propagates from await agent_task into the outer except block.
   3. We write a sigint_checkpoint entry to audit/agent.jsonl, then return 130.
   4. Rich Live is always stopped in a finally block to prevent raw-mode leakage.
@@ -34,6 +34,7 @@ from silentwitness_agent.cli_commands._live_render import (
     DisplayState,
     build_display_hooks,
     decay_flash,
+    refresh_layout_loop,
     stream_hypothesis_events,
 )
 from silentwitness_agent.config import SilentWitnessConfig
@@ -83,10 +84,9 @@ def _emit_sigint_checkpoint(case_dir: Path, step: int) -> None:
         "step": step,
         "reason": "sigint_checkpoint",
     }
-    try:
+    # Best-effort: ValueError (forbidden chars) or OSError (disk) must not abort SIGINT exit.
+    with contextlib.suppress(Exception):
         append_jsonl_line(case_dir / "audit" / "agent.jsonl", json.dumps(payload))
-    except OSError:
-        pass  # best-effort; audit failure must not suppress exit
 
 
 def _load_checkpoint(case_dir: Path) -> dict[str, Any] | None:
@@ -94,7 +94,11 @@ def _load_checkpoint(case_dir: Path) -> dict[str, Any] | None:
     agent_log = case_dir / "audit" / "agent.jsonl"
     if not agent_log.is_file():
         return None
-    for raw in reversed(agent_log.read_text(encoding="utf-8", errors="replace").splitlines()):
+    try:
+        text = agent_log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None  # unreadable checkpoint treated same as absent
+    for raw in reversed(text.splitlines()):
         line = raw.strip()
         if not line:
             continue
@@ -110,12 +114,18 @@ def _load_checkpoint(case_dir: Path) -> dict[str, Any] | None:
 def _try_start_hud(config: SilentWitnessConfig, err: Console) -> None:
     try:
         from hud_sse_server import start  # type: ignore[import-not-found]
-
-        start(port=config.hud.port, bind=config.hud.bind)
     except ImportError:
         err.print(
             "[yellow]⚠[/yellow] HUD requested but hud-sse-server not installed;"
             " continuing without HUD",
+            highlight=False,
+        )
+        return
+    try:
+        start(port=config.hud.port, bind=config.hud.bind)
+    except Exception as exc:
+        err.print(
+            f"[yellow]⚠[/yellow] HUD server failed to start: {exc}; continuing without HUD",
             highlight=False,
         )
 
@@ -136,10 +146,9 @@ async def _do_agent_run(
     is_tty: bool,
     t_start: float,
 ) -> Any:
-    """Build the investigator agent and run it; monkeypatched in integration tests.
-
-    Encapsulates all model construction so that stubbing this function requires
-    no API key and no MCP server process.
+    """Test seam: monkeypatching this function in integration tests bypasses all model
+    construction (no API key or MCP server required). At runtime, builds the investigator
+    agent, runs it to completion, and returns InvestigatorResult.
     """
     from pydantic_ai.usage import UsageLimits
 
@@ -202,7 +211,7 @@ async def _run_async(
     no_hud: bool,
     config: SilentWitnessConfig,
 ) -> int:
-    """Run the investigation; returns exit code (0 = ok, 130 = SIGINT/SIGTERM)."""
+    """Run the investigation; returns exit code (0 = ok, 1 = error, 130 = SIGINT/SIGTERM)."""
     global _active_agent_task
 
     from pydantic_ai.exceptions import UsageLimitExceeded
@@ -230,7 +239,9 @@ async def _run_async(
     loop.add_signal_handler(signal.SIGTERM, agent_task.cancel)
 
     live: Live | None = None
+    live_started: bool = False
     decay_task: asyncio.Task[None] | None = None
+    refresh_task: asyncio.Task[None] | None = None
     stream_task: asyncio.Task[None] | None = None
 
     try:
@@ -246,8 +257,10 @@ async def _run_async(
                 flash_frame=0,
             )
             decay_task = asyncio.create_task(decay_flash(state))
+            refresh_task = asyncio.create_task(refresh_layout_loop(layout, state))
             live = Live(layout, refresh_per_second=4, console=Console(no_color=no_color))
             live.start()
+            live_started = True
             await agent_task
         else:
             stream_task = asyncio.create_task(stream_hypothesis_events(case_dir))
@@ -258,11 +271,17 @@ async def _run_async(
         return 0
 
     except asyncio.CancelledError:
-        _emit_sigint_checkpoint(case_dir, 0)
+        _emit_sigint_checkpoint(case_dir, state.step_count)
         return 130
 
     except UsageLimitExceeded:
         return 0
+
+    except Exception as exc:
+        Console(stderr=True, no_color=no_color).print(
+            f"[red]✗[/red] Investigation failed: {exc}", highlight=False
+        )
+        return 1
 
     finally:
         _active_agent_task = None
@@ -270,11 +289,15 @@ async def _run_async(
             decay_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await decay_task
+        if refresh_task is not None:
+            refresh_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await refresh_task
         if stream_task is not None:
             stream_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task
-        if live is not None:
+        if live is not None and live_started:
             if is_tty and state.stack_snap is not None:
                 update_layout(
                     live.renderable,  # type: ignore[arg-type]
@@ -286,9 +309,9 @@ async def _run_async(
                     flash_frame=0,
                 )
             live.stop()
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(OSError, RuntimeError):
             loop.remove_signal_handler(signal.SIGINT)
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(OSError, RuntimeError):
             loop.remove_signal_handler(signal.SIGTERM)
 
 
@@ -344,6 +367,11 @@ def run(
                 config=config,
             )
         )
+    except KeyboardInterrupt:
+        exit_code = 130
+    except Exception as exc:
+        err.print(f"[red]✗[/red] Investigation failed: {exc}", highlight=False)
+        exit_code = 1
     finally:
         if _prev_model is None:
             os.environ.pop("SILENTWITNESS_MODEL", None)

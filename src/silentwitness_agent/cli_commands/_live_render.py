@@ -1,16 +1,22 @@
-"""In-process display state + hooks factory + background render tasks (investigate command)."""
+"""In-process display state, hooks factory, and background state-update tasks."""
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import dataclasses
 import json
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from silentwitness_agent.cli_commands._live_layout import ToolCallSnapshot
+from rich.layout import Layout
+
+from silentwitness_agent.cli_commands._live_layout import ToolCallSnapshot, update_layout
+
+if TYPE_CHECKING:
+    pass
 
 _EVT_PREFIX = "EVT "
 
@@ -25,7 +31,7 @@ _HYP_TYPE_TO_EVT: dict[str, str] = {
 
 @dataclasses.dataclass
 class DisplayState:
-    """Mutable display state shared between hooks (writers) and the render loop (reader)."""
+    """Mutable display state written by hooks and read by update_layout on each refresh tick."""
 
     stack_snap: Any = None  # StackSnapshot | None
     active_tool: ToolCallSnapshot | None = None
@@ -33,6 +39,7 @@ class DisplayState:
     budget: Any = None  # BudgetSnapshot | None
     last_event: Any = None  # HypothesisEvent | None
     flash_frame: int = 0
+    step_count: int = 0
     t_start: float = dataclasses.field(default_factory=time.monotonic)
 
 
@@ -57,9 +64,13 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
         tool_def: ToolDefinition,
         args: ValidatedToolArgs,
     ) -> ValidatedToolArgs:
+        try:
+            args_summary = json.dumps(args, default=str)[:100]
+        except (TypeError, ValueError):
+            args_summary = "<unserializable>"
         state.active_tool = ToolCallSnapshot(
             tool_name=call.tool_name,
-            args_summary=json.dumps(args, default=str)[:100],
+            args_summary=args_summary,
             started_at=datetime.now(UTC),
         )
         return args
@@ -75,7 +86,9 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
         result: Any,
     ) -> Any:
         state.active_tool = None
-        state.stack_snap = ctx.deps.stack.snapshot()
+        # display-only; never abort agent run on snapshot failure
+        with contextlib.suppress(Exception):
+            state.stack_snap = ctx.deps.stack.snapshot()
         return result
 
     @hooks.on.after_model_request
@@ -87,16 +100,18 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
         response: ModelResponse,
     ) -> ModelResponse:
         prev_pivots = state.stack_snap.total_pivot_count if state.stack_snap is not None else 0
-        snap = ctx.deps.stack.snapshot()
-        state.stack_snap = snap
-        if snap.total_pivot_count > prev_pivots:
+        snap = state.stack_snap  # fallback to last known state if snapshot() fails
+        with contextlib.suppress(Exception):
+            snap = ctx.deps.stack.snapshot()
+            state.stack_snap = snap
+        if snap is not None and snap.total_pivot_count > prev_pivots:
             state.flash_frame = 4
-        elif state.flash_frame > 0:
-            state.flash_frame = max(0, state.flash_frame - 1)
+        state.step_count += 1
         if not is_tty:
+            hyp_id = snap.active.id if snap is not None and snap.active else None
             evt = {
                 "event": "step",
-                "active_hypothesis_id": snap.active.id if snap.active else None,
+                "active_hypothesis_id": hyp_id,
                 "ts": datetime.now(UTC).isoformat(),
             }
             print(f"{_EVT_PREFIX}{json.dumps(evt)}", flush=True)
@@ -108,8 +123,9 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
 async def stream_hypothesis_events(case_dir: Path) -> None:
     """Tail hypothesis.jsonl and emit each new entry as an EVT JSONL line.
 
-    Transforms the ``type`` field to an ``event`` key per ux-spec §2.3 naming
-    so consumers can ``jq '.event'`` without knowing hypothesis schema internals.
+    Maps hypothesis ``type`` values to SCREAMING_SNAKE_CASE ``event`` names
+    (e.g. ``pivot`` → ``HYPOTHESIS_PIVOTED``) so non-TTY consumers can filter
+    with ``jq '.event'`` without knowing the hypothesis schema internals.
     """
     path = case_dir / "audit" / "hypothesis.jsonl"
     seen = 0
@@ -133,13 +149,35 @@ async def stream_hypothesis_events(case_dir: Path) -> None:
                     obj["event"] = event_name
                     print(f"{_EVT_PREFIX}{json.dumps(obj)}", flush=True)
                 except json.JSONDecodeError:
-                    print(f"{_EVT_PREFIX}{line}", flush=True)
-                seen += 1
+                    print(
+                        f"{_EVT_PREFIX}{json.dumps({'event': 'PARSE_ERROR', 'raw': line[:200]})}",
+                        flush=True,
+                    )
+            seen += 1
 
 
 async def decay_flash(state: DisplayState) -> None:
-    """Decrement flash_frame at 4 Hz so pivot yellow flash lasts ~1 s."""
+    """Decrement flash_frame at 4 Hz so pivot yellow flash lasts ~1 s.
+
+    Note: _after_model_req also resets flash_frame to 4 on each pivot, so actual
+    flash duration may be shorter when LLM responses arrive during the window.
+    """
     while True:
         await asyncio.sleep(0.25)
         if state.flash_frame > 0:
             state.flash_frame -= 1
+
+
+async def refresh_layout_loop(layout: Layout, state: DisplayState) -> None:
+    """Re-render all Rich layout panes from DisplayState at 4 Hz (0.25 s cadence)."""
+    while True:
+        await asyncio.sleep(0.25)
+        update_layout(
+            layout,
+            stack_snap=state.stack_snap,
+            active_tool=state.active_tool,
+            findings=state.findings,
+            budget=state.budget,
+            last_event=state.last_event,
+            flash_frame=state.flash_frame,
+        )
