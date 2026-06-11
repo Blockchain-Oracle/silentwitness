@@ -14,7 +14,11 @@ import pytest
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp._lifecycle import MountCheckResult
 from silentwitness_mcp.audit.logger import AuditLogger
-from silentwitness_mcp.evidence.registry import EvidenceRegistry
+from silentwitness_mcp.evidence.registry import (
+    EvidenceMissingOnDiskError,
+    EvidenceRegistry,
+    EvidenceRegistryError,
+)
 from silentwitness_mcp.tools._log_common import LogFailureReason, _LogResult
 from silentwitness_mcp.tools.log import (
     PARSE_EVTX_CAVEATS,
@@ -133,12 +137,13 @@ def test_parse_evtx_canonical_csv_returns_typed_records(
     assert out.row_count == 10
     assert out.truncated is False
     assert resp.caveats == PARSE_EVTX_CAVEATS
-    # Verify field types on first record
     rec = out.records[0]
     assert rec.EventId == 4624
     assert rec.Channel == "Security"
     assert rec.EventRecordId == "12341"  # string, NOT int
     assert rec.TimeCreated.tzinfo is not None  # timezone-aware
+    assert rec.RecordNumber == 1
+    assert rec.UserName == "SYSTEM"
 
 
 def test_parse_evtx_security_channel_injects_inc_eid_list(
@@ -168,6 +173,7 @@ def test_parse_evtx_security_channel_injects_inc_eid_list(
     assert "4624" in eid_csv
     assert "4688" in eid_csv
     assert "1102" in eid_csv
+    assert len(eid_csv.split(",")) == 30
 
 
 def test_parse_evtx_truncated_csv_succeeds_with_advisory(
@@ -192,7 +198,7 @@ def test_parse_evtx_audit_jsonl_written_on_success(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Success path writes a JSONL audit entry with row_count."""
+    """Success path writes a JSONL audit entry with row_count and channel param."""
     case_dir, *_ = env
     _force_gates_ok(monkeypatch, tmp_path)
     _install_log_mock(monkeypatch, csv_fixture=_EVTX_SAMPLE, csv_out_dir=env[2])
@@ -205,6 +211,7 @@ def test_parse_evtx_audit_jsonl_written_on_success(
     entry = json.loads(log_path.read_text().strip())
     assert entry["tool"] == "parse_evtx"
     assert entry["result_summary"]["row_count"] == 10
+    assert entry["params"]["channel"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -212,10 +219,7 @@ def test_parse_evtx_audit_jsonl_written_on_success(
 # ---------------------------------------------------------------------------
 
 
-def test_parse_evtx_unregistered_evidence_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_unregistered_evidence_refuses(env, tmp_path) -> None:
     """Unregistered evidence path → EVIDENCE_NOT_REGISTERED refuse."""
     resp = _invoke(env, evidence_override=tmp_path / "ghost.evtx")
 
@@ -223,10 +227,7 @@ def test_parse_evtx_unregistered_evidence_refuses(
     assert resp.advisories[1] == LogFailureReason.EVIDENCE_NOT_REGISTERED
 
 
-def test_parse_evtx_hash_mismatch_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_parse_evtx_hash_mismatch_refuses(env, monkeypatch) -> None:
     """SHA256 drift on registered evidence → EVIDENCE_TAMPERED refuse."""
     _case_dir, evidence, *_ = env
     evidence.write_bytes(secrets.token_bytes(256))  # drift content after register
@@ -237,10 +238,31 @@ def test_parse_evtx_hash_mismatch_refuses(
     assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
 
 
-def test_parse_evtx_mount_fail_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_parse_evtx_missing_on_disk_refuses(env, monkeypatch) -> None:
+    """EvidenceMissingOnDiskError from verify_hash → EVIDENCE_TAMPERED."""
+
+    def _raise(*_: Any) -> None:
+        raise EvidenceMissingOnDiskError("gone")
+
+    monkeypatch.setattr(EvidenceRegistry, "verify_hash", _raise)
+    resp = _invoke(env)
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
+
+
+def test_parse_evtx_registry_error_refuses(env, monkeypatch) -> None:
+    """EvidenceRegistryError from verify_hash → EVIDENCE_TAMPERED."""
+
+    def _raise(*_: Any) -> None:
+        raise EvidenceRegistryError("boom")
+
+    monkeypatch.setattr(EvidenceRegistry, "verify_hash", _raise)
+    resp = _invoke(env)
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
+
+
+def test_parse_evtx_mount_fail_refuses(env, monkeypatch) -> None:
     """Bad mount → MOUNT_NOT_RO_NOEXEC_NOSUID refuse; audit JSONL written."""
     case_dir, *_ = env
     monkeypatch.setattr(
@@ -256,11 +278,7 @@ def test_parse_evtx_mount_fail_refuses(
     assert log_path.exists()
 
 
-def test_parse_evtx_dotnet_missing_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_dotnet_missing_refuses(env, monkeypatch, tmp_path) -> None:
     """DOTNET_BIN absent → DOTNET_NOT_FOUND refuse."""
     monkeypatch.setattr(
         "silentwitness_mcp.tools.log.check_mount",
@@ -275,11 +293,7 @@ def test_parse_evtx_dotnet_missing_refuses(
     assert resp.advisories[1] == LogFailureReason.DOTNET_NOT_FOUND
 
 
-def test_parse_evtx_evtxecmd_missing_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_evtxecmd_missing_refuses(env, monkeypatch, tmp_path) -> None:
     """EVTXECMD_DLL absent → EVTXECMD_NOT_FOUND refuse."""
     monkeypatch.setattr(
         "silentwitness_mcp.tools.log.check_mount",
@@ -297,11 +311,7 @@ def test_parse_evtx_evtxecmd_missing_refuses(
     assert resp.advisories[1] == LogFailureReason.EVTXECMD_NOT_FOUND
 
 
-def test_parse_evtx_serilog_error_on_exit0_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_serilog_error_on_exit0_refuses(env, monkeypatch, tmp_path) -> None:
     """Serilog [ERR] in stderr on exit-0 → TOOL_FAILED refuse."""
     _force_gates_ok(monkeypatch, tmp_path)
     serilog_err = b"[12:34:56 ERR] Failed to open EVTX file\n"
@@ -319,11 +329,7 @@ def test_parse_evtx_serilog_error_on_exit0_refuses(
     assert resp.advisories[1] == LogFailureReason.TOOL_FAILED
 
 
-def test_parse_evtx_nonzero_exit_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_nonzero_exit_refuses(env, monkeypatch, tmp_path) -> None:
     """Non-zero exit code → TOOL_FAILED refuse; exit_code in audit params."""
     case_dir, *_ = env
     _force_gates_ok(monkeypatch, tmp_path)
@@ -343,11 +349,7 @@ def test_parse_evtx_nonzero_exit_refuses(
     assert entry["params"]["exit_code"] == 1
 
 
-def test_parse_evtx_no_csv_output_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_no_csv_output_refuses(env, monkeypatch, tmp_path) -> None:
     """Tool succeeds but produces no CSV → OUTPUT_PARSE_FAILED refuse."""
     _force_gates_ok(monkeypatch, tmp_path)
 
@@ -362,11 +364,23 @@ def test_parse_evtx_no_csv_output_refuses(
     assert resp.advisories[1] == LogFailureReason.OUTPUT_PARSE_FAILED
 
 
-def test_parse_evtx_timeout_refuses(
-    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
+def test_parse_evtx_header_only_csv_refuses(env, monkeypatch, tmp_path) -> None:
+    """Header-only CSV (no data rows) → OUTPUT_PARSE_FAILED."""
+    _force_gates_ok(monkeypatch, tmp_path)
+
+    async def _fake(dll: Any, argv: Any, *, timeout_s: Any = 600.0) -> _LogResult:
+        d = env[2]
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "out.csv").write_bytes(b"EventId,Channel,Provider\n")
+        return _LogResult(exit_code=0, stdout=b"", stderr=b"", elapsed_ms=1.0)
+
+    monkeypatch.setattr("silentwitness_mcp.tools.log._run_dotnet_log_tool", _fake)
+    resp = _invoke(env)
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.OUTPUT_PARSE_FAILED
+
+
+def test_parse_evtx_timeout_refuses(env, monkeypatch, tmp_path) -> None:
     """Subprocess timeout → TOOL_TIMEOUT refuse."""
     _force_gates_ok(monkeypatch, tmp_path)
 

@@ -1,14 +1,16 @@
 """Shared dotnet subprocess infrastructure for the log/network tool family
-(parse_evtx, hayabusa_csv_timeline, chainsaw_hunt) — architecture §4.2 rows 15-17,
+(parse_evtx, hayabusa_csv_timeline, chainsaw_hunt) — architecture §4.2 rows 17-19,
 context/.raw-design-research/03-sift-2026-tool-catalog-verified.md §EZ Tools.
 
 :func:`_run_dotnet_log_tool` is the reusable subprocess helper. Callers
-(parse_evtx, hayabusa, chainsaw) build their own cmd argv and pass it here
-so the audit log records exact, deterministic invocation strings.
+(parse_evtx; hayabusa_csv_timeline and chainsaw_hunt when implemented) build
+their own cmd argv and pass it here so the audit log records exact invocations.
 
-Unlike MFTECmd, every log-family tool calls ``Environment.Exit(0)`` on
-errors. :func:`serilog_has_errors` parses stderr for the ``[ERR]``/``[FTL]``
-Serilog markers that are the only reliable failure signal.
+Unlike MFTECmd, EvtxECmd calls ``Environment.Exit(0)`` on errors (PECmd, SBECmd,
+AmcacheParser, AppCompatCacheParser do too — see CLAUDE.md §EZ Tools exit codes).
+:func:`serilog_has_errors` parses stderr for ``[ERR]``/``[FTL]`` Serilog markers,
+the only reliable failure signal. Hayabusa and Chainsaw are Rust binaries and use
+standard exit codes — they do not need this helper.
 """
 
 from __future__ import annotations
@@ -68,11 +70,14 @@ async def _run_dotnet_log_tool(
     :attr:`LogFailureReason.TOOL_TIMEOUT`)."""
     cmd = [str(DOTNET_BIN), str(dll_path), *argv]
     start = time.monotonic()
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as exc:
+        raise OSError(f"failed to spawn dotnet {dll_path.name}: {exc}") from exc
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except TimeoutError:
@@ -97,9 +102,9 @@ async def _run_dotnet_log_tool(
 def serilog_has_errors(stderr: bytes) -> bool:
     """Return ``True`` if stderr contains Serilog ``[ERR]`` or ``[FTL]`` markers.
 
-    EvtxECmd (and most EZ Tools) call ``Environment.Exit(0)`` on errors so the
-    process exit code alone cannot detect failures — this regex is the reliable
-    signal per CLAUDE.md non-negotiable §EZ Tools exit codes."""
+    EvtxECmd, PECmd, SBECmd, AmcacheParser, and AppCompatCacheParser call
+    ``Environment.Exit(0)`` on errors — exit code alone cannot detect failures.
+    This regex is the reliable signal per CLAUDE.md §EZ Tools exit codes."""
     return bool(_SERILOG_ERR_RE.search(stderr.decode("utf-8", errors="replace")))
 
 
