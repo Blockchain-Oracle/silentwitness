@@ -58,7 +58,7 @@ def _parse_evtx_csv(raw_bytes: bytes) -> tuple[tuple[EvtxRecord, ...], bool]:
     records: list[EvtxRecord] = []
     truncated = False
     try:
-        text = raw_bytes.decode("utf-8", errors="replace")
+        text = raw_bytes.decode("utf-8")
         reader = csv.DictReader(io.StringIO(text, newline=""))
         for row in reader:
             if any(v is None for v in row.values()):
@@ -69,7 +69,7 @@ def _parse_evtx_csv(raw_bytes: bytes) -> tuple[tuple[EvtxRecord, ...], bool]:
             except ValidationError:
                 truncated = True
                 break
-    except csv.Error:
+    except (csv.Error, UnicodeDecodeError):
         truncated = True
     return tuple(records), truncated
 
@@ -98,8 +98,9 @@ async def parse_evtx(
         argv: tuple[str, ...] = (),
         extra_params: dict[str, object] | None = None,
     ) -> ToolResponse[EvtxOutput]:
+        _LOG.warning("parse_evtx refused: %s | %s", r.value, advisory[:200])
         ms = (time.monotonic() - t0) * 1000.0
-        _sha = sha or hashlib.sha256(r.value.encode()).hexdigest()
+        _sha = sha or "0" * 64  # pre-run refusals have no output content
         params: dict[str, object] = {"evidence_path": str(evidence_path)}
         if extra_params:
             params.update(extra_params)
@@ -120,19 +121,18 @@ async def parse_evtx(
                     model_token_count={},
                 ).model_dump_json(),
             )
-        except (ValueError, OSError) as _ae:
-            _LOG.error("parse_evtx: audit write failed: %s", _ae)
-        prov = (
-            DataProvenance(
+        except Exception as _ae:
+            _LOG.error("parse_evtx: audit write failed: %s", _ae, exc_info=True)
+        if bp or argv:
+            prov = DataProvenance(
                 tool="parse_evtx",
-                stdout_path=bp,
+                stdout_path=bp or Path("/dev/null"),
                 result_sha256=_sha,
                 elapsed_ms=ms,
                 cmd_argv=argv,
             )
-            if bp
-            else make_empty_provenance("parse_evtx")
-        )
+        else:
+            prov = make_empty_provenance("parse_evtx")
         return ToolResponse[EvtxOutput](
             success=False,
             data=None,
@@ -191,8 +191,8 @@ async def parse_evtx(
         csv_out.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
         return _fail(
-            LogFailureReason.OUTPUT_PARSE_FAILED,
-            f"OUTPUT_PARSE_FAILED: cannot create csv_out {csv_out}: {exc}",
+            LogFailureReason.TOOL_FAILED,
+            f"CSV_OUT_DIR_FAILED: cannot create {csv_out}: {exc}",
         )
     argv_list = ["-f", str(evidence_path), "--csv", str(csv_out)]
     if channel == "Security":
@@ -262,9 +262,19 @@ async def parse_evtx(
         )
     output = EvtxOutput(records=records, truncated=truncated)
     elapsed = (time.monotonic() - t0) * 1000.0
-    advisories: tuple[str, ...] = (
-        (f"partial parse: {len(records)} rows recovered before truncation",) if truncated else ()
-    )
+    advisories: tuple[str, ...] = ()
+    if truncated:
+        advisories = (
+            *advisories,
+            f"partial parse: {len(records)} rows recovered before truncation",
+        )
+    if channel is not None and channel != "Security":
+        advisories = (
+            *advisories,
+            f"unrecognised channel={channel!r}:"
+            " only 'Security' triggers EID translation; running unfiltered",
+        )
+    _audit_advisory: tuple[str, ...] = ()
     try:
         append_jsonl_line(
             _log,
@@ -282,14 +292,15 @@ async def parse_evtx(
                 model_token_count={},
             ).model_dump_json(),
         )
-    except (ValueError, OSError) as _ae:
-        _LOG.error("parse_evtx: success audit write failed: %s", _ae)
+    except Exception as _ae:
+        _LOG.error("parse_evtx: success audit write failed: %s", _ae, exc_info=True)
+        _audit_advisory = ("AUDIT_WRITE_FAILED: audit trail entry missing for this result",)
     return ToolResponse[EvtxOutput](
         success=True,
         data=output,
         audit_id=audit_id,
         examiner=audit_logger.examiner,
-        advisories=advisories,
+        advisories=(*advisories, *_audit_advisory),
         caveats=PARSE_EVTX_CAVEATS,
         corroboration=_PARSE_EVTX_CORROBORATION,
         data_provenance=DataProvenance(

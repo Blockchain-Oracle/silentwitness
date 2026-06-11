@@ -12,36 +12,37 @@ def _parse_dt(v: Any) -> datetime:
     if isinstance(v, datetime):
         return v if v.tzinfo else v.replace(tzinfo=UTC)
     s = str(v).strip()
-    # EvtxECmd emits UTC without a 'Z' suffix: "2024-01-15 08:30:00.0000000"
-    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-        try:
-            return datetime.strptime(s, fmt).replace(tzinfo=UTC)
-        except ValueError:
-            continue
+    # EvtxECmd emits 7-digit fractional-second UTC strings without 'Z' suffix;
+    # fromisoformat (Python 3.11+) handles arbitrary fractional digits.
+    # astimezone() on a naive datetime assumes system timezone — wrong for UTC data;
+    # replace() stamps UTC without re-interpreting the wall-clock value.
     dt = datetime.fromisoformat(s)
-    # astimezone preserves the offset; replace is used only when tzinfo is absent
     return dt.astimezone(UTC) if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
 
 
+def _strip_or_none(v: Any) -> str | None:
+    if not isinstance(v, str):
+        return None
+    stripped = v.strip()
+    return stripped if stripped else None
+
+
 _DT = Annotated[datetime, BeforeValidator(_parse_dt)]
-_OptStr = Annotated[
-    str | None,
-    BeforeValidator(lambda v: v.strip() if isinstance(v, str) and v.strip() else None),
-]
+_OptStr = Annotated[str | None, BeforeValidator(_strip_or_none)]
 
 
 class EvtxRecord(BaseModel):
     # extra="forbid": EvtxECmd emits exactly these 23 columns for all channels.
-    model_config = ConfigDict(frozen=True, extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    EventId: int
+    EventId: Annotated[int, Field(ge=0)]
     Channel: str
     Provider: str
     Computer: str
     TimeCreated: _DT
     EventRecordId: str  # string in EvtxECmd output — NOT an int
     Level: str
-    RecordNumber: int
+    RecordNumber: Annotated[int, Field(ge=0)]
     UserName: _OptStr = Field(default=None)
     RemoteHost: _OptStr = Field(default=None)
     ExecutableInfo: _OptStr = Field(default=None)

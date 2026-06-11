@@ -144,6 +144,7 @@ def test_parse_evtx_canonical_csv_returns_typed_records(
     assert rec.TimeCreated.tzinfo is not None  # timezone-aware
     assert rec.RecordNumber == 1
     assert rec.UserName == "SYSTEM"
+    assert resp.data_provenance.cmd_argv[1].endswith("EvtxECmd.dll")
 
 
 def test_parse_evtx_security_channel_injects_inc_eid_list(
@@ -190,7 +191,7 @@ def test_parse_evtx_truncated_csv_succeeds_with_advisory(
     assert resp.success is True
     assert resp.data is not None
     assert resp.data.truncated is True
-    assert any("partial parse" in a for a in resp.advisories)
+    assert any("partial parse: 1 rows recovered" in a for a in resp.advisories)
 
 
 def test_parse_evtx_audit_jsonl_written_on_success(
@@ -238,23 +239,12 @@ def test_parse_evtx_hash_mismatch_refuses(env, monkeypatch) -> None:
     assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
 
 
-def test_parse_evtx_missing_on_disk_refuses(env, monkeypatch) -> None:
-    """EvidenceMissingOnDiskError from verify_hash → EVIDENCE_TAMPERED."""
+@pytest.mark.parametrize("exc_type", [EvidenceMissingOnDiskError, EvidenceRegistryError])
+def test_parse_evtx_verify_hash_exception_refuses(env, monkeypatch, exc_type) -> None:
+    """EvidenceMissingOnDiskError / EvidenceRegistryError from verify_hash → EVIDENCE_TAMPERED."""
 
     def _raise(*_: Any) -> None:
-        raise EvidenceMissingOnDiskError("gone")
-
-    monkeypatch.setattr(EvidenceRegistry, "verify_hash", _raise)
-    resp = _invoke(env)
-    assert resp.success is False
-    assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
-
-
-def test_parse_evtx_registry_error_refuses(env, monkeypatch) -> None:
-    """EvidenceRegistryError from verify_hash → EVIDENCE_TAMPERED."""
-
-    def _raise(*_: Any) -> None:
-        raise EvidenceRegistryError("boom")
+        raise exc_type("error")
 
     monkeypatch.setattr(EvidenceRegistry, "verify_hash", _raise)
     resp = _invoke(env)
@@ -311,20 +301,24 @@ def test_parse_evtx_evtxecmd_missing_refuses(env, monkeypatch, tmp_path) -> None
     assert resp.advisories[1] == LogFailureReason.EVTXECMD_NOT_FOUND
 
 
-def test_parse_evtx_serilog_error_on_exit0_refuses(env, monkeypatch, tmp_path) -> None:
-    """Serilog [ERR] in stderr on exit-0 → TOOL_FAILED refuse."""
+@pytest.mark.parametrize(
+    "serilog_stderr",
+    [
+        b"[12:34:56 ERR] Failed to open EVTX file\n",
+        b"[08:00:01 FTL] EvtxECmd fatal\n",
+    ],
+)
+def test_parse_evtx_serilog_marker_refuses(env, monkeypatch, tmp_path, serilog_stderr) -> None:
+    """[ERR]/[FTL] in stderr on exit-0 → TOOL_FAILED refuse."""
     _force_gates_ok(monkeypatch, tmp_path)
-    serilog_err = b"[12:34:56 ERR] Failed to open EVTX file\n"
     _install_log_mock(
         monkeypatch,
         csv_fixture=_EVTX_SAMPLE,
         csv_out_dir=env[2],
         exit_code=0,
-        stderr=serilog_err,
+        stderr=serilog_stderr,
     )
-
     resp = _invoke(env)
-
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.TOOL_FAILED
 

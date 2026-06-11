@@ -1,5 +1,5 @@
-"""Shared dotnet subprocess infrastructure for the log/network tool family
-(parse_evtx, hayabusa_csv_timeline, chainsaw_hunt) — architecture §4.2 rows 17-19,
+"""Shared dotnet subprocess infrastructure for the log tool family
+(parse_evtx, hayabusa_csv_timeline, chainsaw_hunt) — architecture §4.2 rows 15-17,
 context/.raw-design-research/03-sift-2026-tool-catalog-verified.md §EZ Tools.
 
 :func:`_run_dotnet_log_tool` is the reusable subprocess helper. Callers
@@ -35,7 +35,7 @@ EVTXECMD_DLL: Final = Path("/opt/zimmermantools/EvtxeCmd/EvtxECmd.dll")
 
 _DEFAULT_LOG_TIMEOUT_S: Final = 600.0
 _TERMINATE_GRACE_S: Final = 5.0
-_SERILOG_ERR_RE: Final = re.compile(r"^\[\d{2}:\d{2}:\d{2} (ERR|FTL)\]", re.MULTILINE)
+_SERILOG_ERR_RE: Final = re.compile(r"\[\d{2}:\d{2}:\d{2} (ERR|FTL)\]")
 
 
 class LogFailureReason(StrEnum):
@@ -81,11 +81,17 @@ async def _run_dotnet_log_tool(
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except TimeoutError:
-        proc.terminate()
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass  # already exited between timeout and signal — proceed to wait
         try:
             await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
         except TimeoutError:
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
             except TimeoutError:
