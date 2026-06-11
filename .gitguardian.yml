@@ -4,9 +4,20 @@
 # paired with synthetic short hex bytes — necessary to exercise the
 # real Vol3 windows.registry.lsadump output shape. No real credential
 # material is committed.
+#
+# install.sh uses SHA256 hex strings for download verification — these
+# trip GG's high-entropy heuristic despite being public release checksums.
 version: 2
+
+# Top-level ignored_paths: honoured by the remote GitGuardian scanner.
+# secret.ignored_paths below is honoured by the local ggshield CLI only.
+ignored_paths:
+  - "tests/unit/test_vol_lsadump.py"
+  - "tests/unit/test_lsa_secret_decode.py"
+  - "install.sh"
 
 secret:
   ignored_paths:
     - "tests/unit/test_vol_lsadump.py"
     - "tests/unit/test_lsa_secret_decode.py"
+    - "install.sh"

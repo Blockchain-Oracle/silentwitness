@@ -1,12 +1,11 @@
 """Log/network tool wrappers — architecture §4.2 rows 15-17.
 
-First wrapper: ``parse_evtx`` (EvtxECmd, §4.2 row 17).
-Domain: context/domain/06 §5.2 — EvtxECmd invocation, CSV column shapes,
-Security-channel EID catalog; context/domain/02 §16-18 (Sysmon catalog).
+Wrappers: ``parse_evtx`` (EvtxECmd, §4.2 row 17),
+``hayabusa_csv_timeline`` (Hayabusa, §4.2 row 16).
+Domain: context/domain/06 §5.2 — EvtxECmd; §7.1 — Hayabusa.
 
-Shared helpers ``_run_dotnet_log_tool`` / ``serilog_has_errors`` in
-:mod:`_log_common` will be imported by the Hayabusa and Chainsaw wrappers
-when implemented.
+Implementations for hayabusa_csv_timeline live in :mod:`_log_hayabusa`
+(LOC budget); this module re-exports the public surface.
 """
 
 from __future__ import annotations
@@ -41,6 +40,7 @@ from silentwitness_mcp.tools._log_common import (
     _run_dotnet_log_tool,
     serilog_has_errors,
 )
+from silentwitness_mcp.tools._log_hayabusa import hayabusa_csv_timeline
 from silentwitness_mcp.tools._log_models_evtx import (
     _PARSE_EVTX_CORROBORATION,
     _SECURITY_CHANNEL_EIDS,
@@ -48,6 +48,7 @@ from silentwitness_mcp.tools._log_models_evtx import (
     EvtxOutput,
     EvtxRecord,
 )
+from silentwitness_mcp.tools._log_models_hayabusa import HayabusaHit, HayabusaOutput
 
 _LOG = logging.getLogger(__name__)
 _AUDIT_LOG: Final = "log.jsonl"
@@ -329,5 +330,8 @@ __all__ = [
     "PARSE_EVTX_CAVEATS",
     "EvtxOutput",
     "EvtxRecord",
+    "HayabusaHit",
+    "HayabusaOutput",
+    "hayabusa_csv_timeline",
     "parse_evtx",
 ]
