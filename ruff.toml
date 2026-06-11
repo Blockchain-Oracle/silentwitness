@@ -32,6 +32,9 @@ ignore = []
 # constructed from our own YAML — S603 is a false positive there. Scripts
 # are not shipped to production; the risk model differs from src/.
 "scripts/**/*.py" = ["S603", "S607"]
+# Typer CLI: typer.Option/Argument in default args is the intended pattern —
+# identical to pydantic Field(). B008 is a false positive for this usage.
+"src/silentwitness_agent/cli.py" = ["B008"]
 
 [lint.isort]
 known-first-party = ["silentwitness_mcp", "silentwitness_agent", "silentwitness_common"]
