@@ -1,7 +1,6 @@
 """Network tool wrappers — architecture §4.2 rows 18-19.
 
-Wrappers: ``zeek_run`` (Zeek offline pcap replay, §4.2 row 18),
-``suricata_run`` (story-suricata-run, §4.2 row 19).
+Wrappers: ``zeek_run`` (Zeek offline pcap replay, §4.2 row 18).
 Domain: context/domain/04 §20 — Zeek architecture + log catalog.
 
 Unlike single-stream tools (Vol3, EvtxECmd), Zeek produces a directory of
@@ -278,12 +277,12 @@ async def zeek_run(
             " (see context/.raw-design-research/03 §'Tools our install script MUST add')",
         )
 
+    cmd_argv = (str(zeek_bin), "-r", str(pcap_path), "-C")
+
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
-        return _fail(NetworkFailureReason.TOOL_FAILED, f"OUT_DIR_FAILED: {exc}")
-
-    cmd_argv = (str(zeek_bin), "-r", str(pcap_path), "-C")
+        return _fail(NetworkFailureReason.TOOL_FAILED, f"OUT_DIR_FAILED: {exc}", argv=cmd_argv)
 
     try:
         result: _NetworkResult = await _run_zeek(zeek_bin, pcap_path, out_dir, timeout_s=timeout_s)
@@ -359,7 +358,7 @@ async def zeek_run(
                 model_token_count={},
             ).model_dump_json(),
         )
-    except Exception as _ae:
+    except (OSError, ValueError) as _ae:
         _LOG.error("zeek_run: success audit write failed: %s", _ae, exc_info=True)
         delete_orphan_blob(blob_path)
         return _fail(

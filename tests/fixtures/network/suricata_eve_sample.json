@@ -1,0 +1,8 @@
+{"timestamp":"2024-01-15T10:00:00.000000+0000","flow_id":1234,"event_type":"alert","alert":{"action":"allowed","gid":1,"signature_id":1000001,"rev":1,"signature":"TEST Cobalt Strike Default Cert","category":"","severity":3}}
+{"timestamp":"2024-01-15T10:00:01.000000+0000","flow_id":1234,"event_type":"tls","tls":{"subject":"CN=Major Cobalt Strike","version":"TLS 1.2"}}
+{"timestamp":"2024-01-15T10:00:02.000000+0000","flow_id":5678,"event_type":"dns","dns":{"type":"query","id":1,"rrname":"evil.example.com","rrtype":"A"}}
+{"timestamp":"2024-01-15T10:00:03.000000+0000","flow_id":5678,"event_type":"http","http":{"hostname":"evil.example.com","url":"/c2","http_method":"POST"}}
+{"timestamp":"2024-01-15T10:00:04.000000+0000","flow_id":1234,"event_type":"flow","flow":{"pkts_toserver":10,"pkts_toclient":20,"alerted":true}}
+{"timestamp":"2024-01-15T10:00:05.000000+0000","flow_id":5678,"event_type":"fileinfo","fileinfo":{"filename":"/c2","size":100}}
+{"timestamp":"2024-01-15T10:00:06.000000+0000","flow_id":9012,"event_type":"anomaly","anomaly":{"type":"applayer","layer":"proto_detect"}}
+{"timestamp":"2024-01-15T10:00:07.000000+0000","event_type":"stats","stats":{"uptime":1,"capture":{"kernel_packets":100}}}

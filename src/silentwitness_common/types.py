@@ -108,6 +108,7 @@ class EvidenceType(StrEnum):
     EVTX = "evtx"
     PCAP = "pcap"
     HIVE = "hive"
+    IDS_RULES = "ids_rules"
     OTHER = "other"
 
 

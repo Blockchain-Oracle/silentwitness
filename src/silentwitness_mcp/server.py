@@ -71,6 +71,7 @@ EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
         "chainsaw_hunt",
         "hayabusa_csv_timeline",
         "zeek_run",
+        "suricata_run",
     }
 )
 

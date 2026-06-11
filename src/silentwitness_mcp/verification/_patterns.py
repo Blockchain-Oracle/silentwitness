@@ -121,6 +121,7 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "chainsaw_hunt": EMPTY_PATTERNS,
     "hayabusa_csv_timeline": EMPTY_PATTERNS,
     "zeek_run": EMPTY_PATTERNS,
+    "suricata_run": EMPTY_PATTERNS,
     # Explicit "universal rules only" sentinel — callers that don't need
     # per-tool transforms use this rather than a typo'd tool name silently
     # producing wrong output.
