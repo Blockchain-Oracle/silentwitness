@@ -1,0 +1,19 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	conn
+#open	2025-01-15-08-23-41
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	service	duration	orig_bytes	resp_bytes	conn_state	local_orig	local_resp	missed_bytes	history	orig_pkts	orig_ip_bytes	resp_pkts	resp_ip_bytes	tunnel_parents
+#types	time	string	addr	port	addr	port	enum	string	interval	count	count	string	bool	bool	count	string	count	count	count	count	set[string]
+1736930621.000000	ClEkJM2Vm5giqnMf4h	192.168.1.10	49152	93.184.216.34	443	tcp	ssl	1.234567	2456	8192	SF	T	F	0	ShADdafF	12	3048	18	9216	(empty)
+1736930622.000000	CnKpL3Wn6hjrkoNg5i	192.168.1.10	49153	8.8.8.8	53	udp	dns	0.001234	62	78	SF	T	F	0	Dd	1	90	1	106	(empty)
+1736930623.000000	CoLqM4Xo7ikslpOh6j	192.168.1.10	49154	10.0.0.1	445	tcp	-	0.000000	0	0	S0	T	T	0	S	1	52	0	0	(empty)
+1736930624.000000	CpMrN5Yp8jltmqPi7k	192.168.1.15	49200	185.220.101.20	4444	tcp	-	45.123456	1024	512	SF	T	F	0	ShADdafF	8	1280	4	768	(empty)
+1736930625.000000	CqNsO6Zq9kmunoQj8l	192.168.1.10	49155	192.168.1.1	80	tcp	http	0.234567	512	4096	SF	T	T	0	ShADdafF	4	704	8	4352	(empty)
+1736930626.000000	CrOtP7Ar0lnvopRk9m	192.168.1.20	50000	104.16.0.1	443	tcp	ssl	2.345678	4096	16384	SF	T	F	0	ShADdafF	16	4672	24	17216	(empty)
+1736930627.000000	CsQuQ8Bs1movpqSl0n	192.168.1.10	49156	8.8.4.4	53	udp	dns	0.000987	56	72	SF	T	F	0	Dd	1	84	1	100	(empty)
+1736930628.000000	CtRvR9Ct2npwqrTm1o	192.168.1.30	51000	185.220.101.21	22	tcp	ssh	120.000000	65536	131072	SF	T	F	0	ShADdafF	128	68096	256	135168	(empty)
+1736930629.000000	CuSwS0Du3oqxrsSn2p	192.168.1.10	49157	172.217.0.1	443	tcp	ssl	0.567890	1024	8192	SF	T	F	0	ShADdafF	6	1240	12	8632	(empty)
+1736930630.000000	CvTxT1Ev4prystTo3q	192.168.1.10	49158	192.168.1.100	3389	tcp	rdp	300.000000	131072	262144	SF	T	T	0	ShADdafF	512	139264	1024	270336	(empty)
+#close	2025-01-15-08-30-30
