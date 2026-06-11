@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 import shutil
@@ -21,16 +22,12 @@ from silentwitness_mcp.audit.logger import AuditLogger
 app = typer.Typer(no_args_is_help=True, add_completion=False, rich_markup_mode="rich")
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
 class _CliCtx:
-    __slots__ = ("config", "debug", "no_color", "quiet")
-
-    def __init__(
-        self, config: SilentWitnessConfig, no_color: bool, quiet: bool, debug: bool
-    ) -> None:
-        self.config = config
-        self.no_color = no_color
-        self.quiet = quiet
-        self.debug = debug
+    config: SilentWitnessConfig
+    no_color: bool
+    quiet: bool
+    debug: bool
 
 
 @app.callback()
@@ -42,12 +39,19 @@ def _root(
     debug: bool = typer.Option(False, "--debug"),
 ) -> None:
     ctx.ensure_object(dict)
-    ctx.obj = _CliCtx(load_config(config_file), no_color, quiet, debug)
+    try:
+        config = load_config(config_file)
+    except ValueError as exc:
+        Console(stderr=True, no_color=no_color).print(
+            f"[red]✗[/red] system error: {exc}", highlight=False
+        )
+        raise typer.Exit(code=2) from exc
+    ctx.obj = _CliCtx(config, no_color, quiet, debug)
 
 
 def _resolve_case_dir(case_id: str, root: Path | None = None) -> Path:
     if root is None:
-        root = Path(os.environ.get("SILENTWITNESS_CASES_DIR", str(Path.cwd())))
+        root = Path(os.environ.get("SILENTWITNESS_CASES_DIR") or str(Path.cwd()))
     return root / "cases" / case_id
 
 
@@ -83,25 +87,25 @@ def init(
         case_dir.mkdir(parents=True, mode=0o755, exist_ok=True)
         for sub in ("audit", "evidence", ".tool-output", ".silentwitness"):
             (case_dir / sub).mkdir(mode=0o755, exist_ok=True)
+        write_json_atomic(case_dir / "evidence.json", {"records": [], "schema_version": 1})
+        now = datetime.now(UTC)
+        fm = Frontmatter(
+            case_id=case_id,
+            examiner=examiner,
+            status=ReportStatus.DRAFT,
+            content_hash="sha256:" + "0" * 64,
+            created_at=now,
+            updated_at=now,
+            silentwitness_version=_sw_version,
+            model_used=model or cli_ctx.config.model.default,
+        )
+        write_text_atomic(case_dir / "report.md", dump_frontmatter(fm))
+        (case_dir / ".silentwitness" / "case.toml").write_text(
+            f'case_id = "{case_id}"\nexaminer = "{examiner}"\n', encoding="utf-8"
+        )
     except (PermissionError, OSError) as exc:
         err.print(f"[red]✗[/red] system error: {exc}", highlight=False)
         raise typer.Exit(code=2) from exc
-    write_json_atomic(case_dir / "evidence.json", {"records": [], "schema_version": 1})
-    now = datetime.now(UTC)
-    fm = Frontmatter(
-        case_id=case_id,
-        examiner=examiner,
-        status=ReportStatus.DRAFT,
-        content_hash="sha256:" + "0" * 64,
-        created_at=now,
-        updated_at=now,
-        silentwitness_version=_sw_version,
-        model_used=model or cli_ctx.config.model.default,
-    )
-    write_text_atomic(case_dir / "report.md", dump_frontmatter(fm))
-    (case_dir / ".silentwitness" / "case.toml").write_text(
-        f'case_id = "{case_id}"\nexaminer = "{examiner}"\n', encoding="utf-8"
-    )
     t0 = time.monotonic()
     audit_log = AuditLogger(case_dir, examiner)
     try:
@@ -115,6 +119,9 @@ def init(
             elapsed_ms=(time.monotonic() - t0) * 1000,
             model_used="cli",
         )
+    except OSError as exc:
+        err.print(f"[red]✗[/red] system error writing audit entry: {exc}", highlight=False)
+        raise typer.Exit(code=2) from exc
     finally:
         audit_log.close()
     tree = (

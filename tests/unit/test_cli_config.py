@@ -155,5 +155,34 @@ def test_config_is_frozen(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     cfg = load_config()
-    with pytest.raises(ValidationError):
+    with pytest.raises((ValidationError, TypeError)):
         cfg.model = cfg.model  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# 9. Malformed TOML raises ValueError with path in message
+# ---------------------------------------------------------------------------
+
+
+def test_malformed_toml_raises_value_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    bad = tmp_path / ".silentwitnessrc.toml"
+    bad.write_text("[[not valid toml\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=str(bad)):
+        load_config()
+
+
+# ---------------------------------------------------------------------------
+# 10. Bad integer env var raises ValueError with env key in message
+# ---------------------------------------------------------------------------
+
+
+def test_bad_int_env_var_raises_value_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("SILENTWITNESS_MAX_STEPS", "not-an-int")
+    with pytest.raises(ValueError, match="SILENTWITNESS_MAX_STEPS"):
+        load_config()

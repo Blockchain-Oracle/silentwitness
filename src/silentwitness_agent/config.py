@@ -69,12 +69,19 @@ class SilentWitnessConfig(BaseModel):
 def _read_toml(path: Path) -> dict[str, object]:
     if not path.is_file():
         return {}
-    with path.open("rb") as fh:
-        return tomllib.load(fh)
+    try:
+        with path.open("rb") as fh:
+            return tomllib.load(fh)
+    except tomllib.TOMLDecodeError as exc:
+        raise ValueError(f"invalid TOML in {path}: {exc}") from exc
 
 
 def _merge(base: dict[str, object], overlay: dict[str, object]) -> dict[str, object]:
-    """One-level deep dict merge — section keys merged, scalar keys overwritten."""
+    """One-level deep dict merge — section keys merged, scalar keys overwritten.
+
+    Depth is intentionally limited to one level because TOML config sections map
+    directly to Pydantic sub-models; deeper merging would require schema introspection.
+    """
     result = dict(base)
     for key, val in overlay.items():
         if isinstance(val, dict) and isinstance(result.get(key), dict):
@@ -104,7 +111,13 @@ def _env_overrides() -> dict[str, object]:
         if raw is None:
             continue
         sec: dict[str, object] = overrides.setdefault(section, {})  # type: ignore[assignment]
-        sec[field] = int(raw) if field in _INT_FIELDS else raw
+        if field in _INT_FIELDS:
+            try:
+                sec[field] = int(raw)
+            except ValueError as exc:
+                raise ValueError(f"invalid value for {env_key}={raw!r} — expected integer") from exc
+        else:
+            sec[field] = raw
     return overrides
 
 

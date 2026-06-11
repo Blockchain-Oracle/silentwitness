@@ -179,3 +179,33 @@ def test_stdout_tree_shape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert "├─ evidence/" in output
     assert "├─ report.md" in output
     assert "└─ .silentwitness/case.toml" in output
+
+
+# ---------------------------------------------------------------------------
+# 12. .silentwitness/case.toml actually exists on disk (tree vs reality)
+# ---------------------------------------------------------------------------
+
+
+def test_case_toml_exists_on_disk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILENTWITNESS_CASES_DIR", str(tmp_path))
+    runner.invoke(app, ["init", "mr-evil-011"], catch_exceptions=False)
+    toml_path = tmp_path / "cases" / "mr-evil-011" / ".silentwitness" / "case.toml"
+    assert toml_path.is_file()
+    content = toml_path.read_text(encoding="utf-8")
+    assert "mr-evil-011" in content
+
+
+# ---------------------------------------------------------------------------
+# 13. Malformed --config-file → exit 2 with system error
+# ---------------------------------------------------------------------------
+
+
+def test_malformed_config_file_exits_2(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILENTWITNESS_CASES_DIR", str(tmp_path))
+    bad_toml = tmp_path / "bad.toml"
+    bad_toml.write_text("[[not valid toml\n", encoding="utf-8")
+    result = runner.invoke(
+        app, ["--config-file", str(bad_toml), "init", "mr-evil-012"], catch_exceptions=False
+    )
+    assert result.exit_code == 2
+    assert "system error" in result.output
