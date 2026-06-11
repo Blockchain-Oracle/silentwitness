@@ -146,6 +146,30 @@ install_zeek() {
 }
 
 # ---------------------------------------------------------------------------
+# Suricata — NOT pre-installed on SIFT 2026.
+# context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 218.
+# Ubuntu Noble universe ships Suricata 7.x at /usr/bin/suricata — no third-party
+# repo needed. After install, run suricata-update to fetch ET Open rules.
+# ---------------------------------------------------------------------------
+install_suricata() {
+    if command -v suricata &>/dev/null; then
+        log "Suricata already installed at $(command -v suricata) — skipping"
+        return
+    fi
+    log "installing Suricata from Ubuntu Noble universe"
+    sudo apt-get update -q
+    sudo apt-get install -y --no-install-recommends suricata
+    /usr/bin/suricata --version || fail "suricata runtime check failed"
+    log "Suricata installed at /usr/bin/suricata"
+    # Fetch ET Open rules to /var/lib/suricata/rules/suricata.rules.
+    # suricata_run uses -S <rules> to load ONLY the caller-specified rules file;
+    # the default rules are NOT consumed by the tool but are useful for ad-hoc checks.
+    if command -v suricata-update &>/dev/null; then
+        sudo suricata-update || log "suricata-update failed (non-fatal — rules can be provided manually)"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 install_hayabusa
@@ -153,5 +177,6 @@ install_hayabusa_rules
 install_chainsaw
 install_sigma_rules
 install_zeek
+install_suricata
 
 log "all tools provisioned successfully"
