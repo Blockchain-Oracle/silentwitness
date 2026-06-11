@@ -23,7 +23,7 @@ from typing import Annotated, Any, Final
 from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from silentwitness_common.atomic_io import append_jsonl_line
-from silentwitness_common.types import AuditEntry, DataProvenance, ToolResponse
+from silentwitness_common.types import AuditEntry, DataProvenance, Sha256Hex, ToolResponse
 from silentwitness_mcp._lifecycle import check_mount
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.envelope import make_empty_provenance
@@ -68,18 +68,18 @@ ZEEK_CORROBORATION: Final[tuple[str, ...]] = (
 
 
 class ZeekLogInfo(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     path: Path
     line_count: Annotated[int, Field(ge=0)]
-    sha256: str
+    sha256: Sha256Hex
 
 
 class ZeekRunResult(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     log_dir: Path
-    conn_log: ZeekLogInfo | None = None
+    conn_log: ZeekLogInfo
     http_log: ZeekLogInfo | None = None
     dns_log: ZeekLogInfo | None = None
     ssl_log: ZeekLogInfo | None = None
@@ -119,7 +119,7 @@ _CANONICAL_LOGS: Final[frozenset[str]] = frozenset(
 )
 
 
-def _inventory_zeek_logs(log_dir: Path) -> dict[str, ZeekLogInfo]:
+def _inventory_zeek_logs(log_dir: Path) -> dict[str, ZeekLogInfo] | None:
     result: dict[str, ZeekLogInfo] = {}
     try:
         for p in sorted(log_dir.glob("*.log")):
@@ -129,6 +129,7 @@ def _inventory_zeek_logs(log_dir: Path) -> dict[str, ZeekLogInfo]:
             result[p.stem] = ZeekLogInfo(path=p, line_count=line_count, sha256=sha)
     except OSError as exc:
         _LOG.warning("zeek_run: log inventory error: %s", exc)
+        return None
     return result
 
 
@@ -138,20 +139,18 @@ def _build_manifest(logs: dict[str, ZeekLogInfo]) -> bytes:
 
 
 def _to_result(log_dir: Path, logs: dict[str, ZeekLogInfo]) -> ZeekRunResult:
-    def _get(name: str) -> ZeekLogInfo | None:
-        return logs.get(name)
-
+    get = logs.get
     other = {k: v for k, v in logs.items() if k not in _CANONICAL_LOGS}
     return ZeekRunResult(
         log_dir=log_dir,
-        conn_log=_get("conn"),
-        http_log=_get("http"),
-        dns_log=_get("dns"),
-        ssl_log=_get("ssl"),
-        files_log=_get("files"),
-        x509_log=_get("x509"),
-        notice_log=_get("notice"),
-        weird_log=_get("weird"),
+        conn_log=logs["conn"],
+        http_log=get("http"),
+        dns_log=get("dns"),
+        ssl_log=get("ssl"),
+        files_log=get("files"),
+        x509_log=get("x509"),
+        notice_log=get("notice"),
+        weird_log=get("weird"),
         other_logs=other,
     )
 
@@ -202,7 +201,7 @@ async def zeek_run(
                     model_token_count={},
                 ).model_dump_json(),
             )
-        except Exception as _ae:
+        except (OSError, ValueError) as _ae:
             _LOG.error("zeek_run: audit write failed: %s", _ae, exc_info=True)
         prov = (
             DataProvenance(
@@ -311,10 +310,16 @@ async def zeek_run(
         )
 
     logs = _inventory_zeek_logs(out_dir)
-    if not logs:
+    if logs is None:
+        return _fail(
+            NetworkFailureReason.OUTPUT_PARSE_FAILED,
+            "OUTPUT_PARSE_FAILED: I/O error reading Zeek log directory",
+            argv=cmd_argv,
+        )
+    if not logs or "conn" not in logs:
         return _fail(
             NetworkFailureReason.NO_LOGS_PRODUCED,
-            "NO_LOGS_PRODUCED: no protocol activity detected in pcap"
+            "NO_LOGS_PRODUCED: conn.log absent or no *.log produced"
             " — verify the pcap is non-empty with `tcpdump -r <pcap> -c 5`",
             argv=cmd_argv,
         )

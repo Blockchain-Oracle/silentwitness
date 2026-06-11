@@ -123,7 +123,8 @@ def test_zeek_run_happy_path_returns_log_info(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Valid pcap → ZeekRunResult with typed log entries and SHA256."""
+    """Valid pcap → ZeekRunResult with typed log entries, SHA256, and audit trail."""
+    case_dir, *_ = env
     _force_gates_ok(monkeypatch, tmp_path)
     _install_zeek_mock(monkeypatch, env)
 
@@ -132,7 +133,6 @@ def test_zeek_run_happy_path_returns_log_info(
     assert resp.success is True
     assert resp.data is not None
     out: ZeekRunResult = resp.data
-    assert out.conn_log is not None
     assert isinstance(out.conn_log, ZeekLogInfo)
     assert out.conn_log.line_count > 0
     assert len(out.conn_log.sha256) == 64
@@ -142,28 +142,32 @@ def test_zeek_run_happy_path_returns_log_info(
     assert out.total_lines > 0
     assert resp.data_provenance.cmd_argv[0].endswith("zeek")
     assert "-r" in resp.data_provenance.cmd_argv
-
-
-def test_zeek_run_audit_jsonl_written(
-    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
-    pcap_file: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    """Success path writes audit JSONL with correct total_logs count."""
-    case_dir, *_ = env
-    _force_gates_ok(monkeypatch, tmp_path)
-    _install_zeek_mock(monkeypatch, env)
-
-    resp = _invoke(env, pcap_file)
-
-    assert resp.success is True
+    assert "-C" in resp.data_provenance.cmd_argv
+    assert resp.caveats
     log_path = case_dir / "audit" / "network.jsonl"
     assert log_path.exists()
     entry = json.loads(log_path.read_text().strip())
     assert entry["tool"] == "zeek_run"
     assert entry["result_summary"]["total_logs"] == 2
     assert "pcap_path" in entry["params"]
+
+
+def test_inventory_oserror_output_parse_failed(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    pcap_file: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """_inventory_zeek_logs returning None → OUTPUT_PARSE_FAILED."""
+    _force_gates_ok(monkeypatch, tmp_path)
+    _install_zeek_mock(monkeypatch, env)
+    monkeypatch.setattr("silentwitness_mcp.tools.network._inventory_zeek_logs", lambda _: None)
+
+    resp = _invoke(env, pcap_file)
+
+    assert resp.success is False
+    assert any("OUTPUT_PARSE_FAILED" in a for a in resp.advisories)
+    assert resp.advisories[1] == NetworkFailureReason.OUTPUT_PARSE_FAILED.value
 
 
 # ---------------------------------------------------------------------------
@@ -332,23 +336,26 @@ def test_spawn_oserror_refuses(
 
 
 @pytest.mark.parametrize(
-    "exc",
+    "method, exc",
     [
-        EvidenceMissingOnDiskError("vanished"),
-        EvidenceRegistryError("internal"),
+        ("assert_registered", EvidenceMissingOnDiskError("vanished")),
+        ("assert_registered", EvidenceRegistryError("internal")),
+        ("verify_hash", EvidenceMissingOnDiskError("vanished")),
+        ("verify_hash", EvidenceRegistryError("internal")),
     ],
 )
-def test_verify_hash_exception_refuses(
+def test_registry_exception_refuses(
+    method: str,
     exc: Exception,
     env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
     pcap_file: Path,
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """verify_hash raising registry errors → EVIDENCE_TAMPERED."""
+    """assert_registered / verify_hash raising registry errors → EVIDENCE_TAMPERED."""
     _force_gates_ok(monkeypatch, tmp_path)
     _case_dir, _out_dir, _logger, registry = env
-    monkeypatch.setattr(registry, "verify_hash", lambda _path: (_ for _ in ()).throw(exc))
+    monkeypatch.setattr(registry, method, lambda _path: (_ for _ in ()).throw(exc))
 
     resp = _invoke(env, pcap_file)
 

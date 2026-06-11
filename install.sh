@@ -107,27 +107,33 @@ install_sigma_rules() {
 
 # ---------------------------------------------------------------------------
 # Zeek — NOT pre-installed on SIFT 2026.
-# context/.raw-design-research/03 §"Tools our install script MUST add" line 217.
-# Canonical install on Ubuntu 24.04 (Noble) via OpenSUSE security:zeek repo.
-# Binary lands at /usr/local/bin/zeek (package default) or /opt/zeek/bin/zeek
-# (source-built). _network_common.py::get_zeek_bin() checks both paths.
+# context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 217.
+# Install via OpenSUSE security:zeek repo (Ubuntu Noble). The package installs
+# to /opt/zeek/bin/zeek; we symlink to /usr/local/bin/zeek for get_zeek_bin().
+# Use zeek-lts (LTS series) rather than zeek (always-latest) for reproducibility.
 # ---------------------------------------------------------------------------
 install_zeek() {
-    if command -v zeek &>/dev/null; then
-        log "Zeek already installed at $(command -v zeek) — skipping"
+    if command -v zeek &>/dev/null || [[ -x /opt/zeek/bin/zeek ]]; then
+        log "Zeek already installed — skipping"
         return
     fi
-    log "installing Zeek via OpenSUSE security:zeek repo (Ubuntu Noble)"
-    echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_24.04/ /' \
-        | sudo tee /etc/apt/sources.list.d/security:zeek.list
+    log "installing Zeek (LTS) via OpenSUSE security:zeek repo (Ubuntu Noble)"
+    sudo mkdir -p /etc/apt/keyrings
     curl -sSL \
         "https://download.opensuse.org/repositories/security:/zeek/xUbuntu_24.04/Release.key" \
         | gpg --dearmor \
-        | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg > /dev/null
+        | sudo tee /etc/apt/keyrings/security_zeek.gpg > /dev/null
+    echo "deb [signed-by=/etc/apt/keyrings/security_zeek.gpg] http://download.opensuse.org/repositories/security:/zeek/xUbuntu_24.04/ /" \
+        | sudo tee /etc/apt/sources.list.d/security:zeek.list
     sudo apt-get update -q
-    # Pin to a specific zeek package; zeek meta-package selects the latest series.
-    sudo apt-get install -y zeek
-    # Verify: package installs to /usr/local/bin/zeek or /opt/zeek/bin/zeek.
+    # zeek-lts pins to the current LTS minor series (6.0.x) rather than always-latest.
+    sudo apt-get install -y --no-install-recommends zeek-lts
+    # Package installs to /opt/zeek/bin/zeek — symlink to the expected get_zeek_bin() path.
+    if [[ ! -x /usr/local/bin/zeek ]] && [[ -x /opt/zeek/bin/zeek ]]; then
+        sudo ln -sf /opt/zeek/bin/zeek /usr/local/bin/zeek
+        log "created /usr/local/bin/zeek → /opt/zeek/bin/zeek"
+    fi
+    # Verify.
     if command -v zeek &>/dev/null; then
         zeek --version || fail "zeek runtime check failed"
         log "Zeek installed at $(command -v zeek)"

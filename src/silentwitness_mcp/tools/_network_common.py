@@ -1,5 +1,5 @@
 """Shared subprocess infrastructure for the network tool family
-(zeek_run, suricata_run) — architecture §4.2 rows 18-19,
+(zeek_run, suricata_run) — architecture §4.2,
 context/.raw-design-research/03 §Network forensics line 160.
 
 :func:`_run_zeek` wraps Zeek offline pcap replay.
@@ -19,9 +19,9 @@ from typing import Final
 _LOG = logging.getLogger(__name__)
 
 # Zeek is NOT pre-installed on SIFT 2026.
-# context/.raw-design-research/03 §"Tools our install script MUST add" line 217.
-# Canonical install via OpenSUSE security:zeek repo lands at /usr/local/bin/zeek;
-# source-built installs go to /opt/zeek/bin/zeek — check both.
+# context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 217.
+# OpenSUSE security:zeek package installs to /opt/zeek/bin/zeek; install.sh
+# creates a /usr/local/bin/zeek symlink. Source-built installs also use /opt/zeek/.
 ZEEK_BIN: Final = Path("/usr/local/bin/zeek")
 ZEEK_BIN_FALLBACK: Final = Path("/opt/zeek/bin/zeek")
 
@@ -72,16 +72,22 @@ async def _run_zeek(
         *argv,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=str(out_dir),
+        cwd=str(out_dir),  # Zeek writes log files to cwd, not a --log-path flag
     )
     try:
         stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
     except TimeoutError:
-        proc.terminate()
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            pass  # process exited between timeout and SIGTERM — proceed to wait
         try:
             await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
         except TimeoutError:
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
             try:
                 await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
             except TimeoutError:
