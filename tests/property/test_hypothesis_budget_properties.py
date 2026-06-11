@@ -16,7 +16,7 @@ from silentwitness_agent.hypothesis.types import (
 _TS = datetime(2026, 6, 11, tzinfo=UTC)
 
 
-def _h(tokens_budgeted: int = 5000, steps_budgeted: int = 10) -> Hypothesis:
+def _h(tokens_budgeted: int | None = None, steps_budgeted: int | None = None) -> Hypothesis:
     return Hypothesis(
         id="H-001",
         statement="property test hypothesis",
@@ -30,7 +30,10 @@ def _h(tokens_budgeted: int = 5000, steps_budgeted: int = 10) -> Hypothesis:
 @settings(max_examples=50, deadline=None)
 @given(
     calls=st.lists(
-        st.tuples(st.integers(min_value=0, max_value=500), st.integers(min_value=0, max_value=500)),
+        st.tuples(
+            st.integers(min_value=0, max_value=500),
+            st.integers(min_value=0, max_value=500),
+        ),
         min_size=1,
         max_size=20,
     )
@@ -40,11 +43,16 @@ def test_total_consumed_equals_sum_of_inputs(
 ) -> None:
     """For any sequence of record_tokens calls, consumed = sum(prompt + completion)."""
     e = BudgetEnforcer()
+    h = _h()
     expected = sum(p + c for p, c in calls)
     for prompt, completion in calls:
         e.record_tokens("H-001", prompt_tokens=prompt, completion_tokens=completion)
-    remaining = e.remaining("H-001")
-    assert remaining.tokens_remaining == 5000 - expected
+    remaining = e.remaining(h)
+    # remaining is clamped to zero so only assert equality when under-budget
+    if expected <= 5000:
+        assert remaining.tokens_remaining == 5000 - expected
+    else:
+        assert remaining.tokens_remaining == 0
 
 
 @settings(max_examples=50, deadline=None)

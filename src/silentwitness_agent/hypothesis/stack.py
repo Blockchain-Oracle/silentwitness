@@ -37,9 +37,13 @@ class InvalidTransition(WorkflowError):  # noqa: N818 — name matches domain la
 
 
 class BudgetEnforcer(Protocol):
-    """Injected policy that gates dispatch; implemented by story-hypothesis-budget."""
+    """Injected policy that gates dispatch; implemented by story-hypothesis-budget.
 
-    def check_dispatch(self, hypothesis: Hypothesis) -> bool: ...
+    ``check_dispatch`` raises ``BudgetExceeded`` if dispatch is denied and returns
+    ``None`` otherwise — callers must NOT rely on the return value.
+    """
+
+    def check_dispatch(self, hypothesis: Hypothesis) -> None: ...
 
 
 class StackSnapshot(BaseModel):
