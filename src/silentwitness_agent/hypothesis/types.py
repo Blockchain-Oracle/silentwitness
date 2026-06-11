@@ -57,15 +57,16 @@ class Hypothesis(BaseModel):
     formed_at: datetime
     formed_from: str | None = Field(
         default=None,
+        min_length=1,
         description="Parent hypothesis ID if this is a pivot child.",
     )
     evidence_expected: list[str] = Field(
         default_factory=list,
-        description="Predicted confirmations; populated at FORM time.",
+        description="Predicted confirmations for this hypothesis.",
     )
     evidence_observed: list[str] = Field(
         default_factory=list,
-        description="audit_ids of confirming evidence; populated at CONFIRM time.",
+        description="Audit IDs of confirming evidence.",
     )
     assigned_specialist: SpecialistName | None = Field(default=None)
     tokens_budgeted: int = Field(default=5000, ge=0)
@@ -81,13 +82,13 @@ class HypothesisEvent(BaseModel):
     is the JSONL line; ``model_validate_json`` reads it back losslessly.
     """
 
-    model_config = ConfigDict(extra="forbid", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
 
     ts: datetime
     type: HypothesisEventType
     hypothesis_id: str = Field(min_length=1)
     reason: str = Field(default="")
-    related_audit_ids: list[str] = Field(default_factory=list)
+    related_audit_ids: tuple[str, ...] = Field(default_factory=tuple)
     tokens_spent: int = Field(default=0, ge=0)
     steps_spent: int = Field(default=0, ge=0)
 

@@ -1,1 +1,1 @@
-"""Hypothesis state machine — types, stack, and budget enforcer."""
+"""Hypothesis state machine — types."""

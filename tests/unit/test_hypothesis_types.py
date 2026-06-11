@@ -67,7 +67,7 @@ def test_hypothesis_assigned_specialist_stored() -> None:
 def test_hypothesis_event_constructs_with_defaults() -> None:
     e = _e()
     assert e.reason == ""
-    assert e.related_audit_ids == []
+    assert e.related_audit_ids == ()
     assert e.tokens_spent == 0
     assert e.steps_spent == 0
 
@@ -181,9 +181,7 @@ def test_hypothesis_round_trip() -> None:
     )
     raw = h.model_dump_json()
     restored = Hypothesis.model_validate_json(raw)
-    assert restored.id == h.id
-    assert restored.status == h.status
-    assert restored.tokens_consumed == h.tokens_consumed
+    assert restored == h
 
 
 # ---------------------------------------------------------------------------
@@ -211,3 +209,55 @@ def test_specialist_name_values() -> None:
     assert SpecialistName.DISK.value == "DISK"
     assert SpecialistName.NETWORK.value == "NETWORK"
     assert SpecialistName.LOG.value == "LOG"
+
+
+# ---------------------------------------------------------------------------
+# Constraint rejection tests (min_length, ge=0, validate_assignment)
+# ---------------------------------------------------------------------------
+
+
+def test_hypothesis_rejects_empty_id() -> None:
+    with pytest.raises(ValidationError):
+        _h(id="")
+
+
+def test_hypothesis_rejects_empty_statement() -> None:
+    with pytest.raises(ValidationError):
+        _h(statement="")
+
+
+def test_hypothesis_event_rejects_empty_hypothesis_id() -> None:
+    with pytest.raises(ValidationError):
+        _e(hypothesis_id="")
+
+
+def test_hypothesis_rejects_negative_tokens_budgeted() -> None:
+    with pytest.raises(ValidationError):
+        _h(tokens_budgeted=-1)
+
+
+def test_hypothesis_rejects_negative_tokens_on_assignment() -> None:
+    h = _h()
+    with pytest.raises(ValidationError):
+        h.tokens_consumed = -1
+
+
+def test_hypothesis_validate_assignment_rejects_invalid_status() -> None:
+    h = _h()
+    with pytest.raises(ValidationError):
+        h.status = "NOT_A_STATUS"  # type: ignore[assignment]
+
+
+def test_hypothesis_formed_from_rejects_empty_string() -> None:
+    with pytest.raises(ValidationError):
+        _h(formed_from="")
+
+
+# ---------------------------------------------------------------------------
+# Liskov: BudgetExceeded caught as WorkflowError
+# ---------------------------------------------------------------------------
+
+
+def test_budget_exceeded_caught_as_workflow_error() -> None:
+    with pytest.raises(WorkflowError):
+        raise BudgetExceeded("token budget exhausted")
