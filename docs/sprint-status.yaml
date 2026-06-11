@@ -286,11 +286,11 @@ stories:
 
   - id: story-parse-prefetch
     epic: "Epic 6 — Disk + Registry tool wrappers"
-    status: PENDING
+    status: COMPLETE
     depends_on: [parse-mft]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/32"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/155"
+    merged_at: "2026-06-11"
 
   - id: story-parse-shellbags
     epic: "Epic 6 — Disk + Registry tool wrappers"
