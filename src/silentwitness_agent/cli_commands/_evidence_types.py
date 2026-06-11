@@ -29,7 +29,7 @@ _HIVE_NAMES: frozenset[str] = frozenset(
 
 
 def detect_evidence_type(path: Path) -> EvidenceType:
-    """Map a file path to its EvidenceType via suffix, then known hive filenames."""
+    """Map path to EvidenceType via suffix lookup, then _HIVE_NAMES; OTHER if neither matches."""
     t = _SUFFIX_TYPE.get(path.suffix.lower())
     if t is not None:
         return t
@@ -52,8 +52,9 @@ def sha256_hex(path: Path) -> tuple[str, int]:
 def human_size(size: int) -> str:
     """Return a 1024-based human-readable size string (e.g. '4.2 GiB')."""
     f = float(size)
-    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
-        if f < 1024.0 or unit == "TiB":
+    units = ("B", "KiB", "MiB", "GiB", "TiB")
+    for unit in units[:-1]:
+        if f < 1024.0:
             return f"{f:.1f} {unit}"
         f /= 1024.0
-    return f"{size} B"
+    return f"{f:.1f} {units[-1]}"
