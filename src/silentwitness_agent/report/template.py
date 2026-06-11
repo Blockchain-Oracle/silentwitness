@@ -12,11 +12,12 @@ unchanged.
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC
 from enum import StrEnum
 from typing import Any
 
 import yaml
-from pydantic import AwareDatetime, BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 from silentwitness_common.types import ReportSection
 
@@ -30,14 +31,16 @@ class ReportStatus(StrEnum):
 
 
 class Frontmatter(BaseModel):
-    case_id: str
-    examiner: str
+    model_config = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
+
+    case_id: str = Field(min_length=1)
+    examiner: str = Field(min_length=1)
     status: ReportStatus
     content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
     created_at: AwareDatetime
     updated_at: AwareDatetime
-    silentwitness_version: str
-    model_used: str
+    silentwitness_version: str = Field(min_length=1)
+    model_used: str = Field(min_length=1)
 
 
 SECTION_ORDER: tuple[ReportSection, ...] = (
@@ -76,20 +79,32 @@ SECTION_ANCHORS: dict[ReportSection, str] = {
     ReportSection.APPENDIX_AUDIT: "appendix-audit",
 }
 
+# Fail loudly at import time if any ReportSection member is missing from the
+# lookup dicts — catches the "added enum member, forgot to update dict" class of bug.
+assert set(SECTION_ORDER) == set(ReportSection), (  # noqa: S101
+    f"SECTION_ORDER missing members: {set(ReportSection) - set(SECTION_ORDER)}"
+)
+assert set(SECTION_HEADINGS) == set(ReportSection), (  # noqa: S101
+    f"SECTION_HEADINGS missing members: {set(ReportSection) - set(SECTION_HEADINGS)}"
+)
+assert set(SECTION_ANCHORS) == set(ReportSection), (  # noqa: S101
+    f"SECTION_ANCHORS missing members: {set(ReportSection) - set(SECTION_ANCHORS)}"
+)
+
 
 def dump_frontmatter(fm: Frontmatter) -> str:
     """Serialise Frontmatter to a YAML block wrapped in --- fences.
 
     Field order matches architecture §5.4 exactly (sort_keys=False).
-    Datetime fields are emitted as ISO-8601 strings with Z suffix.
+    Datetime fields are normalised to UTC and emitted as ISO-8601 with Z suffix.
     """
     data: dict[str, Any] = {
         "case_id": fm.case_id,
         "examiner": fm.examiner,
         "status": fm.status.value,
         "content_hash": fm.content_hash,
-        "created_at": fm.created_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "updated_at": fm.updated_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "created_at": fm.created_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "updated_at": fm.updated_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "silentwitness_version": fm.silentwitness_version,
         "model_used": fm.model_used,
     }
@@ -102,7 +117,8 @@ def parse_frontmatter(md_text: str) -> tuple[Frontmatter, str]:
 
     Returns (Frontmatter, body) where body is the text after the closing ---.
     Raises pydantic.ValidationError on invalid field values.
-    Raises ValueError if --- fences are missing or malformed.
+    Raises ValueError if --- fences are missing, the YAML block is empty or
+    not a mapping, or the YAML itself is malformed.
     """
     if not md_text.startswith("---\n"):
         raise ValueError("document does not begin with ---")
@@ -112,7 +128,15 @@ def parse_frontmatter(md_text: str) -> tuple[Frontmatter, str]:
         raise ValueError("no closing --- found in document")
     yaml_block = rest[:close]
     body = rest[close + 5 :]
-    data = yaml.safe_load(yaml_block)
+    try:
+        data = yaml.safe_load(yaml_block)
+    except yaml.YAMLError as exc:
+        raise ValueError(f"YAML frontmatter is not valid YAML: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"YAML frontmatter did not parse to a mapping "
+            f"(got {type(data).__name__}); document may be empty or malformed"
+        )
     return Frontmatter.model_validate(data), body
 
 
@@ -124,7 +148,11 @@ class ReportTemplate:
         *,
         gaps_placeholder: str = "(no gaps identified)",
     ) -> str:
-        """Render a full report skeleton: frontmatter + title + 9 section headings."""
+        """Render a full report skeleton: frontmatter + title + 9 section headings.
+
+        The GAPS section includes gaps_placeholder as its body (required by
+        architecture §5.4 — the section must never be empty).
+        """
         parts: list[str] = [f"# Incident Report — Case {fm.case_id}"]
         for section in SECTION_ORDER:
             heading = f"## {SECTION_HEADINGS[section]}"
@@ -136,7 +164,11 @@ class ReportTemplate:
 
     @classmethod
     def render_section(cls, section: ReportSection, body: str) -> str:
-        """Render a section heading with its body text."""
+        """Render a section heading with its body text.
+
+        Trailing whitespace is stripped from body to avoid double-blank-line
+        artifacts when sections are concatenated.
+        """
         return f"## {SECTION_HEADINGS[section]}\n\n{body.rstrip()}\n"
 
     @classmethod

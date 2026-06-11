@@ -132,6 +132,33 @@ def test_parse_frontmatter_rejects_naive_created_at() -> None:
     assert "timezone" in str(exc_info.value).lower()
 
 
+def test_parse_frontmatter_raises_value_error_on_missing_opening_fence() -> None:
+    with pytest.raises(ValueError, match="does not begin with"):
+        parse_frontmatter("case_id: test\n")
+
+
+def test_parse_frontmatter_raises_value_error_on_missing_closing_fence() -> None:
+    with pytest.raises(ValueError, match="no closing"):
+        parse_frontmatter("---\ncase_id: test\n")
+
+
+def test_parse_frontmatter_raises_value_error_on_malformed_yaml() -> None:
+    md = "---\n{{{not valid yaml\n---\n"
+    with pytest.raises(ValueError, match="not valid YAML"):
+        parse_frontmatter(md)
+
+
+def test_dump_frontmatter_non_utc_datetime_normalised_to_utc() -> None:
+    """Non-UTC AwareDatetime must be normalised to UTC before Z-suffix serialisation."""
+    from datetime import timedelta, timezone
+
+    tz_plus5 = timezone(timedelta(hours=5))
+    fm = _make_fm(created_at=datetime(2026, 6, 13, 19, 27, 3, tzinfo=tz_plus5))
+    out = dump_frontmatter(fm)
+    fm2, _ = parse_frontmatter(out)
+    assert fm2.created_at == datetime(2026, 6, 13, 14, 27, 3, tzinfo=_UTC)
+
+
 # ---------------------------------------------------------------------------
 # render_skeleton
 # ---------------------------------------------------------------------------
