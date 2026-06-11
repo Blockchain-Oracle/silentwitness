@@ -12,7 +12,11 @@ import pytest
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.audit.logger import AuditLogger
-from silentwitness_mcp.evidence.registry import EvidenceRegistry
+from silentwitness_mcp.evidence.registry import (
+    EvidenceMissingOnDiskError,
+    EvidenceRegistry,
+    EvidenceRegistryError,
+)
 from silentwitness_mcp.tools.registry import (
     REGRIPPER_CAVEATS,
     RegripperOutput,
@@ -45,6 +49,12 @@ class FakeProc:
 
     async def wait(self) -> int:
         return self.returncode if self.returncode is not None else -1
+
+
+@pytest.fixture(autouse=True)
+def _reset_plugin_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reset process-lifetime plugin cache between tests to prevent cross-test pollution."""
+    monkeypatch.setattr("silentwitness_mcp.tools.registry._KNOWN_PLUGINS", None)
 
 
 @pytest.fixture
@@ -153,7 +163,6 @@ def test_regripper_run_canonical_success(
     assert envelope.data.plugin_name == "compname"
     assert envelope.data.line_count > 0
     assert envelope.caveats == REGRIPPER_CAVEATS
-    # cmd_argv must be [rip.pl, -r, hive_path, -p, compname]
     assert calls[0][1] == "-r"
     assert calls[0][3] == "-p"
     assert calls[0][4] == "compname"
@@ -213,6 +222,7 @@ def test_regripper_run_unknown_plugin_refuses(
     assert envelope.success is False
     assert "PLUGIN_NOT_FOUND: totally_made_up_plugin" in envelope.advisories[0]
     assert "rip.pl" in envelope.advisories[0]
+    assert envelope.advisories[1] == "PLUGIN_NOT_FOUND"
     assert calls == []
 
 
@@ -231,6 +241,7 @@ def test_regripper_run_unregistered_hive_refuses(
     envelope = _invoke(env, hive_override=ghost)
     assert envelope.success is False
     assert "EVIDENCE_NOT_REGISTERED" in envelope.advisories[0]
+    assert envelope.advisories[1] == "EVIDENCE_NOT_REGISTERED"
     assert calls == []
 
 
@@ -249,6 +260,37 @@ def test_regripper_run_tampered_evidence_refuses(
     envelope = _invoke(env)
     assert envelope.success is False
     assert "EVIDENCE_HASH_MISMATCH" in envelope.advisories[0]
+    assert envelope.advisories[1] == "EVIDENCE_HASH_MISMATCH"
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "exc_factory,expected_text",
+    [
+        (lambda hive: EvidenceMissingOnDiskError(hive), "EVIDENCE_MISSING_ON_DISK"),
+        (lambda _: EvidenceRegistryError("manifest corrupt"), "manifest corrupt"),
+    ],
+    ids=["missing_on_disk", "registry_error"],
+)
+def test_regripper_run_verify_hash_exception_refuses(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    exc_factory: Any,
+    expected_text: str,
+) -> None:
+    """verify_hash exceptions → EVIDENCE_HASH_MISMATCH reason; no subprocess spawn."""
+    force_rip_bin(monkeypatch, tmp_path)
+    force_plugins(monkeypatch)
+    force_mount_ok(monkeypatch)
+    calls = install_rip_mock(monkeypatch)
+    _, hive, _, registry = env
+    exc = exc_factory(hive)
+    monkeypatch.setattr(registry, "verify_hash", lambda _p: (_ for _ in ()).throw(exc))
+    envelope = _invoke(env)
+    assert envelope.success is False
+    assert expected_text in envelope.advisories[0]
+    assert envelope.advisories[1] == "EVIDENCE_HASH_MISMATCH"
     assert calls == []
 
 
@@ -257,15 +299,24 @@ def test_regripper_run_mount_fail_refuses(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Bad mount → MOUNT_NOT_RO_NOEXEC_NOSUID; no subprocess spawn."""
+    """Bad mount → MOUNT_NOT_RO_NOEXEC_NOSUID; no subprocess spawn; JSONL row written."""
     force_rip_bin(monkeypatch, tmp_path)
     force_plugins(monkeypatch)
     force_mount_fail(monkeypatch)
     calls = install_rip_mock(monkeypatch)
+    case_dir = env[0]
     envelope = _invoke(env)
     assert envelope.success is False
     assert "MOUNT_NOT_RO_NOEXEC_NOSUID" in envelope.advisories[0]
+    assert envelope.advisories[1] == "MOUNT_NOT_RO_NOEXEC_NOSUID"
     assert calls == []
+    rows = [
+        json.loads(line)
+        for line in (case_dir / "audit" / "registry.jsonl").read_text().splitlines()
+        if line
+    ]
+    assert rows[-1]["result_summary"]["reason"] == "MOUNT_NOT_RO_NOEXEC_NOSUID"
+    assert rows[-1]["stdout_path"] == "/dev/null"
 
 
 def test_regripper_run_parse_failed_on_nonzero_exit(
@@ -273,20 +324,48 @@ def test_regripper_run_parse_failed_on_nonzero_exit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """rip.pl exit 1 with stderr → PARSE_FAILED with stderr snippet."""
+    """rip.pl exit 1 with stderr → PARSE_FAILED; exit_code in audit params."""
     force_rip_bin(monkeypatch, tmp_path)
     force_plugins(monkeypatch)
     force_mount_ok(monkeypatch)
-    install_rip_mock(
-        monkeypatch,
-        returncode=1,
-        stderr=b"ERROR: unable to open hive: bad magic\n",
-    )
+    install_rip_mock(monkeypatch, returncode=1, stderr=b"ERROR: unable to open hive: bad magic\n")
+    case_dir = env[0]
     envelope = _invoke(env)
     assert envelope.success is False
     assert "PARSE_FAILED" in envelope.advisories[0]
     assert "exit 1" in envelope.advisories[0]
     assert "bad magic" in envelope.advisories[0]
+    assert envelope.advisories[1] == "PARSE_FAILED"
+    rows = [
+        json.loads(line)
+        for line in (case_dir / "audit" / "registry.jsonl").read_text().splitlines()
+        if line
+    ]
+    assert rows[-1]["params"]["exit_code"] == 1
+
+
+def test_regripper_run_timeout_refuses(
+    env: tuple[Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """rip.pl timeout → PARSE_FAILED 'timed out'; no success data returned."""
+    force_rip_bin(monkeypatch, tmp_path)
+    force_plugins(monkeypatch)
+    force_mount_ok(monkeypatch)
+    install_rip_mock(monkeypatch)
+
+    async def _timeout(coro: Any, **_kw: Any) -> Any:
+        coro.close()
+        raise TimeoutError
+
+    monkeypatch.setattr("silentwitness_mcp.tools.registry.asyncio.wait_for", _timeout)
+    envelope = _invoke(env)
+    assert envelope.success is False
+    assert "PARSE_FAILED" in envelope.advisories[0]
+    assert "timed out" in envelope.advisories[0]
+    assert envelope.advisories[1] == "PARSE_FAILED"
+    assert envelope.data is None
 
 
 def test_regripper_run_rip_not_installed_refuses(
@@ -303,4 +382,5 @@ def test_regripper_run_rip_not_installed_refuses(
     assert envelope.success is False
     assert "REGRIPPER_NOT_INSTALLED" in envelope.advisories[0]
     assert "SIFT 2026 saltstack" in envelope.advisories[0]
+    assert envelope.advisories[1] == "REGRIPPER_NOT_INSTALLED"
     assert calls == []
