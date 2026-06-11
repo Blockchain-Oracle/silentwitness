@@ -1,7 +1,8 @@
-"""Suricata pcap replay wrapper — architecture §4.2, story-suricata-run.
+"""Suricata pcap replay wrapper — architecture §4.2.
 
 Zeek answers "what protocols ran in this pcap"; Suricata answers "which rules
-fired". Both run against the same pcap for complementary coverage (§21 domain).
+fired". Both run against the same pcap for complementary coverage
+(context/domain/04 §21).
 
 Rules file IS evidence: the rules drive which alerts fire, so a SHA256 mismatch
 on the rules file means the detection set is unknowable. Both pcap AND rules must
@@ -17,7 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, DataProvenance, Sha256Hex, ToolResponse
@@ -74,8 +75,12 @@ class SuricataRunResult(BaseModel):
     fileinfo_count: Annotated[int, Field(ge=0)]
     anomaly_count: Annotated[int, Field(ge=0)]
     stats_count: Annotated[int, Field(ge=0)]
-    total_events: Annotated[int, Field(ge=0)]
     event_type_breakdown: dict[str, int] = Field(default_factory=dict)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def total_events(self) -> int:
+        return sum(self.event_type_breakdown.values())
 
 
 def _build_suricata_manifest(eve_sha256: str, total_events: int, counts: dict[str, int]) -> bytes:
@@ -87,7 +92,6 @@ def _build_suricata_manifest(eve_sha256: str, total_events: int, counts: dict[st
 def _to_suricata_result(
     eve_json_path: Path, eve_sha: str, counts: dict[str, int]
 ) -> SuricataRunResult:
-    total = sum(counts.values())
     return SuricataRunResult(
         eve_json_path=eve_json_path,
         eve_json_sha256=eve_sha,
@@ -99,7 +103,6 @@ def _to_suricata_result(
         fileinfo_count=counts.get("fileinfo", 0),
         anomaly_count=counts.get("anomaly", 0),
         stats_count=counts.get("stats", 0),
-        total_events=total,
         event_type_breakdown=counts,
     )
 
@@ -179,7 +182,6 @@ async def suricata_run(
             data_provenance=prov,
         )
 
-    # §4.10: assert_registered first, then verify_hash, for each evidence input
     try:
         evidence_registry.assert_registered(pcap_path)
     except EvidenceNotRegisteredError:
@@ -252,11 +254,6 @@ async def suricata_run(
             " (see context/.raw-design-research/03 §'Tools our install script MUST add')",
         )
 
-    try:
-        out_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        return _fail(NetworkFailureReason.TOOL_FAILED, f"OUT_DIR_FAILED: {exc}")
-
     cmd_argv = (
         str(suricata_bin),
         "-r",
@@ -270,6 +267,11 @@ async def suricata_run(
         "-k",
         "none",
     )
+
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        return _fail(NetworkFailureReason.TOOL_FAILED, f"OUT_DIR_FAILED: {exc}", argv=cmd_argv)
 
     try:
         result: _NetworkResult = await _run_suricata(
@@ -306,16 +308,17 @@ async def suricata_run(
             argv=cmd_argv,
         )
 
-    counts = _tally_eve_events(eve_json_path)
-    if counts is None:
+    try:
+        eve_raw = eve_json_path.read_bytes()
+    except OSError as exc:
         return _fail(
             NetworkFailureReason.OUTPUT_PARSE_FAILED,
-            f"OUTPUT_PARSE_FAILED: I/O error reading {eve_json_path}",
+            f"OUTPUT_PARSE_FAILED: eve.json unreadable for SHA256 computation: {exc}",
             argv=cmd_argv,
         )
 
-    eve_raw = eve_json_path.read_bytes()
     eve_sha = hashlib.sha256(eve_raw).hexdigest()
+    counts, malformed = _tally_eve_events(eve_raw)
     manifest = _build_suricata_manifest(eve_sha, sum(counts.values()), counts)
     sha = hashlib.sha256(manifest).hexdigest()
 
@@ -323,6 +326,13 @@ async def suricata_run(
         blob_path = persist_blob(case_dir, audit_id, manifest)
     except OSError as exc:
         return _fail(NetworkFailureReason.TOOL_FAILED, f"BLOB_PERSIST_FAILED: {exc}", argv=cmd_argv)
+
+    partial_advisory: tuple[str, ...] = ()
+    if malformed > 0:
+        partial_advisory = (
+            f"OUTPUT_PARTIAL: {malformed} malformed JSON line(s) skipped in eve.json"
+            " — event counts may be incomplete; verify eve.json integrity",
+        )
 
     output = _to_suricata_result(eve_json_path, eve_sha, counts)
     elapsed = (time.monotonic() - t0) * 1000.0
@@ -351,7 +361,7 @@ async def suricata_run(
                 model_token_count={},
             ).model_dump_json(),
         )
-    except Exception as _ae:
+    except (OSError, ValueError) as _ae:
         _LOG.error("suricata_run: success audit write failed: %s", _ae, exc_info=True)
         delete_orphan_blob(blob_path)
         return _fail(
@@ -365,7 +375,7 @@ async def suricata_run(
         data=output,
         audit_id=audit_id,
         examiner=audit_logger.examiner,
-        advisories=(),
+        advisories=partial_advisory,
         caveats=SURICATA_CAVEATS,
         corroboration=SURICATA_CORROBORATION,
         data_provenance=DataProvenance(

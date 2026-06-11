@@ -1,9 +1,6 @@
 """Shared subprocess infrastructure for the network tool family
 (zeek_run, suricata_run) — architecture §4.2,
 context/.raw-design-research/03 §Network forensics line 160.
-
-:func:`_run_zeek` wraps Zeek offline pcap replay.
-:func:`_run_suricata` (story-suricata-run) will share :class:`_NetworkResult`.
 """
 
 from __future__ import annotations
@@ -26,7 +23,7 @@ _LOG = logging.getLogger(__name__)
 ZEEK_BIN: Final = Path("/usr/local/bin/zeek")
 ZEEK_BIN_FALLBACK: Final = Path("/opt/zeek/bin/zeek")
 
-# Suricata IS in Ubuntu Noble universe — `apt install suricata` lands at /usr/bin/suricata.
+# Suricata is NOT pre-installed on SIFT 2026; install.sh adds it via apt (Noble universe).
 # context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 218.
 SURICATA_BIN: Final = Path("/usr/bin/suricata")
 SURICATA_BIN_FALLBACK: Final = Path("/usr/local/bin/suricata")
@@ -65,8 +62,6 @@ class NetworkFailureReason(StrEnum):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class _NetworkResult:
-    """Subprocess result bundle shared by zeek_run and suricata_run."""
-
     exit_code: int
     stdout: bytes
     stderr: bytes
@@ -149,14 +144,14 @@ async def _run_suricata(
         try:
             proc.terminate()
         except ProcessLookupError:
-            pass
+            pass  # process exited between timeout and SIGTERM — proceed to wait
         try:
             await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
         except TimeoutError:
             try:
                 proc.kill()
             except ProcessLookupError:
-                pass
+                pass  # process exited between SIGTERM and SIGKILL — proceed to wait
             try:
                 await asyncio.wait_for(proc.wait(), timeout=_TERMINATE_GRACE_S)
             except TimeoutError:
@@ -171,27 +166,31 @@ async def _run_suricata(
     )
 
 
-def _tally_eve_events(eve_json_path: Path) -> dict[str, int] | None:
-    """Stream-parse EVE JSONL line-by-line; return event_type → count or None on OSError."""
+def _tally_eve_events(eve_bytes: bytes) -> tuple[dict[str, int], int]:
+    """Parse EVE JSONL bytes; returns (event_type_counts, malformed_line_count).
+
+    Caller reads the file once and passes the bytes — avoids TOCTOU between
+    the SHA256 computation and the parse step.
+    """
     counts: dict[str, int] = {}
-    try:
-        with eve_json_path.open() as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    et = json.loads(line).get("event_type", "unknown")
-                    counts[et] = counts.get(et, 0) + 1
-                except json.JSONDecodeError:
-                    _LOG.warning(
-                        "_tally_eve_events: skipping malformed JSON line in %s",
-                        eve_json_path,
-                    )
-    except OSError as exc:
-        _LOG.warning("_tally_eve_events: cannot read %s: %s", eve_json_path, exc)
-        return None
-    return counts
+    malformed = 0
+    for raw_line in eve_bytes.decode("utf-8", errors="replace").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        try:
+            parsed = json.loads(line)
+        except json.JSONDecodeError:
+            malformed += 1
+            _LOG.error("_tally_eve_events: malformed JSON line (first 100 chars: %r)", line[:100])
+            continue
+        if isinstance(parsed, dict):
+            et = parsed.get("event_type", "unknown")
+            counts[et] = counts.get(et, 0) + 1
+        else:
+            malformed += 1
+            _LOG.error("_tally_eve_events: non-object JSON line skipped: %r", line[:100])
+    return counts, malformed
 
 
 __all__ = [
