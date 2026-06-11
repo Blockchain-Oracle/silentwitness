@@ -4,8 +4,8 @@ Domain: context/domain/06 §7.1 — Hayabusa invocation, CSV column shapes,
 super-verbose profile, MITRE ATT&CK column extraction.
 
 Hayabusa is NOT pre-installed on SIFT 2026; install.sh provisions it.
-context/.raw-design-research/03 §Network forensics line 167 + §"Tools our
-install script MUST add" lines 271, 279.
+context/.raw-design-research/03 §"Threat hunting (Sigma/EDR)" line 167
++ §"Tools our install script MUST add" lines 271, 279.
 """
 
 from __future__ import annotations
@@ -44,14 +44,13 @@ from silentwitness_mcp.tools._log_models_hayabusa import (
     _HAYABUSA_CORROBORATION,
     HAYABUSA_CAVEATS,
     HayabusaHit,
+    HayabusaLevel,
     HayabusaOutput,
 )
 
 _LOG = logging.getLogger(__name__)
 _AUDIT_LOG: Final = "log.jsonl"
 _STDERR_CAP: Final = 500
-
-HayabusaLevel = Literal["informational", "low", "medium", "high", "critical"]
 
 
 def _parse_hayabusa_csv(raw_bytes: bytes) -> tuple[tuple[HayabusaHit, ...], bool]:
@@ -315,7 +314,6 @@ async def hayabusa_csv_timeline(
             *advisories,
             f"partial parse: {len(hits)} rows recovered before truncation",
         )
-    _audit_advisory: tuple[str, ...] = ()
     try:
         append_jsonl_line(
             _log,
@@ -340,14 +338,18 @@ async def hayabusa_csv_timeline(
         )
     except Exception as _ae:
         _LOG.error("hayabusa_csv_timeline: success audit write failed: %s", _ae, exc_info=True)
-        _audit_advisory = ("AUDIT_WRITE_FAILED: audit trail entry missing for this result",)
         delete_orphan_blob(blob_path)
+        return _fail(
+            LogFailureReason.TOOL_FAILED,
+            f"AUDIT_WRITE_FAILED: result produced but audit trail could not be written; {_ae}",
+            argv=cmd_argv,
+        )
     return ToolResponse[HayabusaOutput](
         success=True,
         data=output,
         audit_id=audit_id,
         examiner=audit_logger.examiner,
-        advisories=(*advisories, *_audit_advisory),
+        advisories=advisories,
         caveats=HAYABUSA_CAVEATS,
         corroboration=_HAYABUSA_CORROBORATION,
         data_provenance=DataProvenance(

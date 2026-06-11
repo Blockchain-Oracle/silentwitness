@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any, Final
+from typing import Annotated, Any, Final, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, computed_field
+
+HayabusaLevel = Literal["informational", "low", "medium", "high", "critical"]
 
 
 def _parse_dt(v: Any) -> datetime:
@@ -17,7 +19,7 @@ def _parse_dt(v: Any) -> datetime:
 
 
 def _split_csv_tags(v: Any) -> list[str]:
-    """Split a comma-joined Hayabusa tag string into a list; empty string → []."""
+    """Split a whitespace-separated Hayabusa tag string into a list; empty string → []."""
     if not isinstance(v, str):
         return []
     stripped = v.strip()
@@ -43,14 +45,16 @@ class HayabusaHit(BaseModel):
 
     `Details` column (rule match explanation) is aliased to `Detection`
     so callers use idiomatic Python. MitreTags/MitreTactics are split
-    from space-separated strings into lists.
+    from whitespace-separated strings into lists. Extra columns emitted
+    by the super-verbose profile (RuleModifiedDate, Status, etc.) are
+    intentionally ignored — only investigation-relevant fields are captured.
     """
 
     model_config = ConfigDict(frozen=True, populate_by_name=True)
 
     Timestamp: _DT
     RuleTitle: str
-    Level: str
+    Level: HayabusaLevel
     Computer: str
     Channel: str
     EventID: Annotated[int, Field(ge=0, le=65535)]
@@ -60,19 +64,26 @@ class HayabusaHit(BaseModel):
     MitreTags: _Tags = Field(default_factory=list)
     OtherTags: _OptStr = Field(default=None)
     RuleAuthor: _OptStr = Field(default=None)
-    RuleFile: str
-    EvtxFile: str
+    RuleFile: Annotated[str, Field(min_length=1)]
+    EvtxFile: Annotated[str, Field(min_length=1)]
 
 
 class HayabusaOutput(BaseModel):
     """Parsed output from a Hayabusa csv-timeline run."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     hits: tuple[HayabusaHit, ...]
     truncated: bool = Field(
         default=False,
-        description="True if parse halted before EOF — hits is an incomplete prefix.",
+        description=(
+            "True if at least one row failed validation or parsing was interrupted."
+            " hits may contain non-contiguous rows when individual bad rows were skipped."
+        ),
+    )
+    rules_loaded: int | None = Field(
+        default=None,
+        description="Number of Sigma rules loaded, parsed from Hayabusa stderr if available.",
     )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -101,5 +112,6 @@ __all__ = [
     "HAYABUSA_CAVEATS",
     "_HAYABUSA_CORROBORATION",
     "HayabusaHit",
+    "HayabusaLevel",
     "HayabusaOutput",
 ]

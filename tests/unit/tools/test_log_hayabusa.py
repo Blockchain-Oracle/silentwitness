@@ -150,6 +150,7 @@ def test_hayabusa_canonical_csv_returns_typed_hits(
     assert hit.Detection is not None
     assert resp.data_provenance.cmd_argv[0].endswith("hayabusa")
     assert "csv-timeline" in resp.data_provenance.cmd_argv
+    assert "-r" in resp.data_provenance.cmd_argv
 
 
 def test_hayabusa_audit_jsonl_written_on_success(
@@ -354,3 +355,26 @@ def test_hayabusa_rules_missing_refuses(
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.HAYABUSA_RULES_MISSING
     assert "install.sh" in resp.advisories[0]
+
+
+def test_hayabusa_rules_dir_empty_refuses(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Rules dir exists but contains no .yml files → HAYABUSA_RULES_MISSING."""
+    monkeypatch.setattr(
+        "silentwitness_mcp.tools._log_hayabusa.check_mount",
+        lambda: MountCheckResult(ok=True, advisories=[]),
+    )
+    fake_bin = tmp_path / "hayabusa"
+    fake_bin.touch()
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa.HAYABUSA_BIN", fake_bin)
+    empty_rules = tmp_path / "empty_rules"
+    empty_rules.mkdir()
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa.HAYABUSA_RULES_DIR", empty_rules)
+
+    resp = _invoke(env)
+
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.HAYABUSA_RULES_MISSING

@@ -182,3 +182,82 @@ def test_hayabusa_assert_registered_exception_refuses(
     resp = _invoke(env)
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
+
+
+# ---------------------------------------------------------------------------
+# verify_hash exception branches
+# ---------------------------------------------------------------------------
+
+_PARTIAL_CSV = (
+    "Timestamp,RuleTitle,Level,Computer,Channel,EventID,RecordID,Details,"
+    "MitreTactics,MitreTags,OtherTags,RuleFile,EvtxFile\n"
+    "2025-01-01T00:00:00Z,Good Rule,high,PC1,Security,4624,1,,,,,rules/t.yml,Security.evtx\n"
+    "BADINPUT,Bad Rule,high,PC1,Security,4624,2,,,,,rules/t.yml,Security.evtx\n"
+)
+
+
+@pytest.mark.parametrize("exc_type", [EvidenceMissingOnDiskError, EvidenceRegistryError])
+def test_hayabusa_verify_hash_exception_refuses(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    exc_type: type,
+) -> None:
+    """EvidenceMissingOnDiskError/EvidenceRegistryError from verify_hash → TAMPERED."""
+
+    def _raise(*_: Any) -> None:
+        raise exc_type("hash check failed")
+
+    monkeypatch.setattr(EvidenceRegistry, "verify_hash", _raise)
+    resp = _invoke(env)
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.EVIDENCE_TAMPERED
+
+
+def test_hayabusa_partial_parse_succeeds_with_advisory(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Some valid rows + one bad row → success=True, truncated=True, advisory present."""
+    _force_gates_ok(monkeypatch, tmp_path)
+    _case_dir, _evtx_dir, csv_out, *_ = env
+
+    async def _fake(bin_path: Any, argv: Any, *, timeout_s: Any = 600.0) -> _LogResult:
+        csv_out.parent.mkdir(parents=True, exist_ok=True)
+        csv_out.write_text(_PARTIAL_CSV)
+        return _LogResult(exit_code=0, stdout=b"", stderr=b"", elapsed_ms=1.0)
+
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa._run_native_log_tool", _fake)
+    resp = _invoke(env)
+
+    assert resp.success is True
+    assert resp.data is not None
+    assert resp.data.truncated is True
+    assert resp.data.row_count == 1
+    assert any("partial parse" in a for a in resp.advisories)
+
+
+def test_hayabusa_audit_write_failure_refuses(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Audit JSONL write failure after success → TOOL_FAILED, blob cleaned up."""
+    _force_gates_ok(monkeypatch, tmp_path)
+    _case_dir, _evtx_dir, csv_out, *_ = env
+
+    async def _fake(bin_path: Any, argv: Any, *, timeout_s: Any = 600.0) -> _LogResult:
+        csv_out.parent.mkdir(parents=True, exist_ok=True)
+        csv_out.write_text(_PARTIAL_CSV)
+        return _LogResult(exit_code=0, stdout=b"", stderr=b"", elapsed_ms=1.0)
+
+    def _always_raise(*_: Any, **__: Any) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa._run_native_log_tool", _fake)
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa.append_jsonl_line", _always_raise)
+    resp = _invoke(env)
+
+    assert resp.success is False
+    assert resp.advisories[1] == LogFailureReason.TOOL_FAILED
+    assert any("AUDIT_WRITE_FAILED" in a for a in resp.advisories)
