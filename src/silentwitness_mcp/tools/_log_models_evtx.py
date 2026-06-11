@@ -32,10 +32,15 @@ _OptStr = Annotated[str | None, BeforeValidator(_strip_or_none)]
 
 
 class EvtxRecord(BaseModel):
-    # extra="forbid": EvtxECmd emits exactly these 23 columns for all channels.
+    """One row from EvtxECmd CSV output.
+
+    EvtxECmd emits exactly 23 columns for all channels (extra="forbid" asserts
+    this). TimeCreated is always UTC-normalised; blank optional fields become None.
+    """
+
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    EventId: Annotated[int, Field(ge=0)]
+    EventId: Annotated[int, Field(ge=0, le=65535)]
     Channel: str
     Provider: str
     Computer: str
@@ -64,7 +69,10 @@ class EvtxOutput(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     records: tuple[EvtxRecord, ...]
-    truncated: bool = False
+    truncated: bool = Field(
+        default=False,
+        description="True if parse halted before EOF — records is an incomplete prefix.",
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -51,6 +51,8 @@ class LogFailureReason(StrEnum):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class _LogResult:
+    """Subprocess result bundle. exit_code=-1 means returncode was None post-communicate."""
+
     exit_code: int
     stdout: bytes
     stderr: bytes
@@ -115,7 +117,6 @@ def serilog_has_errors(stderr: bytes) -> bool:
 
 
 __all__ = [
-    "DOTNET_BIN",
     "EVTXECMD_DLL",
     "LogFailureReason",
     "_LogResult",

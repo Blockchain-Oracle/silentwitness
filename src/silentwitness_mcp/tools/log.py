@@ -1,4 +1,4 @@
-"""Log/network tool wrappers — architecture §4.2 rows 17-19.
+"""Log/network tool wrappers — architecture §4.2 rows 15-17.
 
 First wrapper: ``parse_evtx`` (EvtxECmd, §4.2 row 17).
 Domain: context/domain/06 §5.2 — EvtxECmd invocation, CSV column shapes,
@@ -33,7 +33,7 @@ from silentwitness_mcp.evidence.registry import (
     EvidenceRegistry,
     EvidenceRegistryError,
 )
-from silentwitness_mcp.tools._disk_common import DOTNET_BIN, persist_blob
+from silentwitness_mcp.tools._disk_common import DOTNET_BIN, delete_orphan_blob, persist_blob
 from silentwitness_mcp.tools._log_common import (
     EVTXECMD_DLL,
     LogFailureReason,
@@ -68,7 +68,7 @@ def _parse_evtx_csv(raw_bytes: bytes) -> tuple[tuple[EvtxRecord, ...], bool]:
                 records.append(EvtxRecord.model_validate(row))
             except ValidationError:
                 truncated = True
-                break
+                continue  # skip bad row; recover remaining valid rows
     except (csv.Error, UnicodeDecodeError):
         truncated = True
     return tuple(records), truncated
@@ -101,7 +101,7 @@ async def parse_evtx(
         _LOG.warning("parse_evtx refused: %s | %s", r.value, advisory[:200])
         ms = (time.monotonic() - t0) * 1000.0
         _sha = sha or "0" * 64  # pre-run refusals have no output content
-        params: dict[str, object] = {"evidence_path": str(evidence_path)}
+        params: dict[str, object] = {"evidence_path": str(evidence_path), "channel": channel}
         if extra_params:
             params.update(extra_params)
         try:
@@ -151,6 +151,16 @@ async def parse_evtx(
         return _fail(
             LogFailureReason.EVIDENCE_NOT_REGISTERED,
             f"EVIDENCE_NOT_REGISTERED: {evidence_path}",
+        )
+    except EvidenceMissingOnDiskError:
+        return _fail(
+            LogFailureReason.EVIDENCE_TAMPERED,
+            f"EVIDENCE_MISSING_ON_DISK: {evidence_path} absent at assert_registered",
+        )
+    except EvidenceRegistryError as exc:
+        return _fail(
+            LogFailureReason.EVIDENCE_TAMPERED,
+            f"EVIDENCE_REGISTRY_ERROR at assert_registered: {type(exc).__name__}: {exc}",
         )
     try:
         verify = evidence_registry.verify_hash(evidence_path)
@@ -246,10 +256,11 @@ async def parse_evtx(
         )
     sha = hashlib.sha256(raw_csv).hexdigest()
     records, truncated = _parse_evtx_csv(raw_csv)
-    if not records and not truncated:
+    if not records:
         return _fail(
             LogFailureReason.OUTPUT_PARSE_FAILED,
-            f"OUTPUT_PARSE_FAILED: CSV unparseable; first 200 bytes: {raw_csv[:200]!r}",
+            f"OUTPUT_PARSE_FAILED: CSV produced 0 usable records"
+            f" (truncated={truncated}); first 200 bytes: {raw_csv[:200]!r}",
             argv=cmd_argv,
         )
     try:
@@ -295,6 +306,7 @@ async def parse_evtx(
     except Exception as _ae:
         _LOG.error("parse_evtx: success audit write failed: %s", _ae, exc_info=True)
         _audit_advisory = ("AUDIT_WRITE_FAILED: audit trail entry missing for this result",)
+        delete_orphan_blob(blob_path)
     return ToolResponse[EvtxOutput](
         success=True,
         data=output,

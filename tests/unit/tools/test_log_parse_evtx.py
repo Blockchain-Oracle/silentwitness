@@ -41,7 +41,7 @@ def env(tmp_path: Path) -> tuple[Path, Path, Path, AuditLogger, EvidenceRegistry
     evidence.write_bytes(secrets.token_bytes(256))
     csv_out = case_dir / "tmp" / "evtx_csv_out"
     registry = EvidenceRegistry(case_dir=case_dir)
-    registry.register(evidence, EvidenceType.OTHER, audit_id="sift-aj-20260611-020")
+    registry.register(evidence, EvidenceType.EVTX, audit_id="sift-aj-20260611-020")
     return (
         case_dir,
         evidence,
@@ -338,6 +338,7 @@ def test_parse_evtx_nonzero_exit_refuses(env, monkeypatch, tmp_path) -> None:
 
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.TOOL_FAILED
+    assert len(resp.data_provenance.cmd_argv) > 0
     log_path = case_dir / "audit" / "log.jsonl"
     entry = json.loads(log_path.read_text().strip())
     assert entry["params"]["exit_code"] == 1
@@ -387,3 +388,4 @@ def test_parse_evtx_timeout_refuses(env, monkeypatch, tmp_path) -> None:
 
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.TOOL_TIMEOUT
+    assert len(resp.data_provenance.cmd_argv) > 0
