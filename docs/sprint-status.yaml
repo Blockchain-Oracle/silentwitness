@@ -512,11 +512,11 @@ stories:
 
   - id: story-cli-investigate
     epic: "Epic 12 — CLI + Claude Code drop-in"
-    status: PENDING
+    status: COMPLETE
     depends_on: [cli-init, investigator-agent, memory-specialist, disk-specialist, network-specialist, log-specialist, critic-agent, report-writer]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/58"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/185"
+    merged_at: "2026-06-12"
 
   - id: story-cli-status
     epic: "Epic 12 — CLI + Claude Code drop-in"
