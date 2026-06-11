@@ -32,7 +32,32 @@ class HypothesisEventType(StrEnum):
 
 
 class BudgetExceeded(WorkflowError):  # noqa: N818 — name mandated by BDD spec
-    """Raised when a hypothesis exhausts its token or step budget."""
+    """Raised when a hypothesis exhausts its token or step budget.
+
+    Carries structured context so callers can log a useful ABANDON reason
+    without re-querying enforcer state.
+    """
+
+    def __init__(
+        self,
+        hypothesis_id: str,
+        reason: str,
+        tokens_consumed: int,
+        steps_consumed: int,
+        tokens_budgeted: int,
+        steps_budgeted: int,
+    ) -> None:
+        super().__init__(
+            f"{reason}: hypothesis={hypothesis_id} "
+            f"tokens={tokens_consumed}/{tokens_budgeted} "
+            f"steps={steps_consumed}/{steps_budgeted}"
+        )
+        self.hypothesis_id = hypothesis_id
+        self.reason = reason
+        self.tokens_consumed = tokens_consumed
+        self.steps_consumed = steps_consumed
+        self.tokens_budgeted = tokens_budgeted
+        self.steps_budgeted = steps_budgeted
 
 
 class Hypothesis(BaseModel):

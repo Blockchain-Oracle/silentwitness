@@ -20,7 +20,6 @@ from pydantic import BaseModel, ConfigDict
 
 from silentwitness_agent.hypothesis._jsonl import emit_hypothesis_event
 from silentwitness_agent.hypothesis.types import (
-    BudgetExceeded,
     Hypothesis,
     HypothesisEvent,
     HypothesisEventType,
@@ -125,8 +124,8 @@ class HypothesisStack:
         """
         with self._lock:
             active = self._assert_active(hypothesis_id, "dispatch")
-            if self._budget is not None and not self._budget.check_dispatch(active):
-                raise BudgetExceeded(f"Budget enforcer denied dispatch for {hypothesis_id}")
+            if self._budget is not None:
+                self._budget.check_dispatch(active)  # raises BudgetExceeded if denied
             self._emit(
                 HypothesisEvent(
                     ts=datetime.now(UTC),

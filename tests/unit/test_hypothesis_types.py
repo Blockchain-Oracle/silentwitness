@@ -194,7 +194,7 @@ def test_budget_exceeded_subclasses_workflow_error() -> None:
 
 
 def test_budget_exceeded_is_exception() -> None:
-    exc = BudgetExceeded("token budget exhausted")
+    exc = BudgetExceeded("H-001", "TOKEN_BUDGET_EXHAUSTED", 5000, 3, 5000, 10)
     with pytest.raises(BudgetExceeded):
         raise exc
 
@@ -260,4 +260,4 @@ def test_hypothesis_formed_from_rejects_empty_string() -> None:
 
 def test_budget_exceeded_caught_as_workflow_error() -> None:
     with pytest.raises(WorkflowError):
-        raise BudgetExceeded("token budget exhausted")
+        raise BudgetExceeded("H-001", "TOKEN_BUDGET_EXHAUSTED", 5000, 3, 5000, 10)
