@@ -1,6 +1,6 @@
 """Log/network tool wrappers — architecture §4.2 rows 15-17.
 
-Wrappers: ``parse_evtx`` (EvtxECmd, §4.2 row 17),
+Wrappers: ``parse_evtx`` (EvtxECmd, §4.2 row 15),
 ``hayabusa_csv_timeline`` (Hayabusa, §4.2 row 16),
 ``chainsaw_hunt`` (Chainsaw, §4.2 row 17).
 Domain: context/domain/06 §5.2 — EvtxECmd; §7.1 — Hayabusa; §7.2 — Chainsaw.

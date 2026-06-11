@@ -44,15 +44,16 @@ class ChainsawHit(BaseModel):
     """One detection row from Chainsaw hunt JSON output.
 
     Chainsaw v2 JSON output is a flat array; each entry is a single
-    matched event. ``source`` field ("sigma"/"chainsaw") distinguishes
-    rule origin. ``MitreAttack`` is parsed from T-code tokens in ``Tags``
-    (e.g., "attack.t1059.001" → "T1059.001"). ``FoundInLine`` is the raw
-    event payload from ``document.data``.
+    matched event. ``RuleSource`` ("sigma"/"chainsaw") distinguishes
+    rule origin; mapped from the raw JSON ``source`` key. ``MitreAttack``
+    is parsed from T-code tokens in ``Tags`` (e.g., "attack.t1059.001" →
+    "T1059.001"). ``FoundInLine`` is the raw event payload from
+    ``document.data``.
     """
 
-    model_config = ConfigDict(frozen=True, populate_by_name=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    Name: str
+    Name: Annotated[str, Field(min_length=1)]
     Authors: _StrList = Field(default_factory=list)
     Tags: _StrList = Field(default_factory=list)
     MitreAttack: _MitreList = Field(default_factory=list)
@@ -78,9 +79,9 @@ class ChainsawOutput(BaseModel):
             " hits may contain non-contiguous rows when individual bad entries were skipped."
         ),
     )
-    rules_loaded: int | None = Field(
+    rules_loaded: Annotated[int, Field(ge=0)] | None = Field(
         default=None,
-        description="Number of rules loaded, parsed from Chainsaw stderr if available.",
+        description="Number of rules loaded; always None — stderr parsing not yet implemented.",
     )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -99,7 +100,7 @@ CHAINSAW_CAVEATS: Final[tuple[str, ...]] = (
     " XML structure; absent or wrong mapping → silent zero-detection result",
 )
 
-_CHAINSAW_CORROBORATION: Final[tuple[str, ...]] = (
+CHAINSAW_CORROBORATION: Final[tuple[str, ...]] = (
     "if hayabusa_csv_timeline fired no detections, also run chainsaw_hunt for"
     " cross-engine corroboration",
     "if hayabusa_csv_timeline fired a critical, run chainsaw_hunt as second opinion"
@@ -108,7 +109,7 @@ _CHAINSAW_CORROBORATION: Final[tuple[str, ...]] = (
 
 __all__ = [
     "CHAINSAW_CAVEATS",
-    "_CHAINSAW_CORROBORATION",
+    "CHAINSAW_CORROBORATION",
     "ChainsawHit",
     "ChainsawLevel",
     "ChainsawOutput",

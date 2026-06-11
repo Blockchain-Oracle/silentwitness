@@ -252,3 +252,52 @@ def test_chainsaw_zero_hits_not_truncated_is_success(
     assert resp.data is not None
     assert resp.data.row_count == 0
     assert resp.data.truncated is False
+
+
+def test_chainsaw_metadata_flag_in_cmd_argv(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """--metadata must be in cmd_argv (load-bearing for Authors/Tags in output)."""
+    _force_gates_ok(monkeypatch, tmp_path)
+    captured: list[str] = []
+
+    async def _fake(bin_path: Any, argv: Any, *, timeout_s: Any = 600.0) -> _LogResult:
+        captured.extend(argv)
+        _, _, json_out, *_ = env
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_bytes(_CHAINSAW_SAMPLE.read_bytes())
+        return _LogResult(exit_code=0, stdout=b"", stderr=b"", elapsed_ms=1.0)
+
+    monkeypatch.setattr("silentwitness_mcp.tools._log_chainsaw._run_native_log_tool", _fake)
+    resp = _invoke(env)
+
+    assert resp.success is True
+    assert "--metadata" in captured
+    assert "hunt" in captured
+    assert "-j" in captured
+    assert resp.data_provenance.cmd_argv[0].endswith("chainsaw")
+
+
+def test_chainsaw_level_none_omits_level_flag(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """level=None (default) must NOT inject --level into argv."""
+    _force_gates_ok(monkeypatch, tmp_path)
+    captured: list[str] = []
+
+    async def _fake(bin_path: Any, argv: Any, *, timeout_s: Any = 600.0) -> _LogResult:
+        captured.extend(argv)
+        _, _, json_out, *_ = env
+        json_out.parent.mkdir(parents=True, exist_ok=True)
+        json_out.write_bytes(b"[]")
+        return _LogResult(exit_code=0, stdout=b"", stderr=b"", elapsed_ms=1.0)
+
+    monkeypatch.setattr("silentwitness_mcp.tools._log_chainsaw._run_native_log_tool", _fake)
+    resp = _invoke(env)
+
+    assert resp.success is True
+    assert "--level" not in captured

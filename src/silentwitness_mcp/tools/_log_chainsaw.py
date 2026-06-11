@@ -2,9 +2,6 @@
 
 Domain: context/domain/06 §7.2 — Chainsaw invocation, JSON output shape,
 MITRE ATT&CK extraction, cross-engine corroboration pattern.
-
-Chainsaw is NOT pre-installed on SIFT 2026; install.sh provisions it.
-context/.raw-design-research/03 §"Tools our install script MUST add" line 272.
 """
 
 from __future__ import annotations
@@ -40,8 +37,8 @@ from silentwitness_mcp.tools._log_common import (
     _run_native_log_tool,
 )
 from silentwitness_mcp.tools._log_models_chainsaw import (
-    _CHAINSAW_CORROBORATION,
     CHAINSAW_CAVEATS,
+    CHAINSAW_CORROBORATION,
     ChainsawHit,
     ChainsawLevel,
     ChainsawOutput,
@@ -60,16 +57,27 @@ def _parse_chainsaw_json(raw_bytes: bytes) -> tuple[tuple[ChainsawHit, ...], boo
     hits: list[ChainsawHit] = []
     truncated = False
     try:
-        entries: list[Any] = json.loads(raw_bytes.decode("utf-8"))
-        for entry in entries:
+        parsed: Any = json.loads(raw_bytes.decode("utf-8"))
+        if not isinstance(parsed, list):
+            # Chainsaw output is always a top-level array; a dict signals version drift.
+            _LOG.warning(
+                "chainsaw_hunt: expected JSON array, got %s; treating as parse failure",
+                type(parsed).__name__,
+            )
+            return (), True
+        for entry in parsed:
             if not isinstance(entry, dict):
                 truncated = True
                 continue
-            if entry.get("kind", "individual") != "individual":
-                truncated = True
+            kind = entry.get("kind", "individual")
+            if kind != "individual":
+                # group/summary entries from native Chainsaw correlation rules are
+                # expected and valid — skip without marking truncated.
                 continue
             try:
                 found_in = entry.get("document", {}).get("data", {})
+                eid = _extract_system_field(entry, "EventID")
+                rid = _extract_system_field(entry, "EventRecordID")
                 hits.append(
                     ChainsawHit.model_validate(
                         {
@@ -80,17 +88,17 @@ def _parse_chainsaw_json(raw_bytes: bytes) -> tuple[tuple[ChainsawHit, ...], boo
                             "RuleLevel": entry.get("level", ""),
                             "RuleSource": entry.get("source", "sigma"),
                             "Channel": _extract_system_field(entry, "Channel") or "",
-                            "EventID": _extract_system_field(entry, "EventID") or 0,
-                            "RecordID": _extract_system_field(entry, "EventRecordID") or 0,
+                            "EventID": 0 if eid is None else eid,
+                            "RecordID": 0 if rid is None else rid,
                             "Timestamp": entry.get("timestamp", ""),
                             "FoundInLine": found_in,
                         }
                     )
                 )
-            except (ValidationError, TypeError, KeyError):
+            except (ValidationError, TypeError, KeyError, AttributeError):
                 truncated = True
                 continue
-    except (json.JSONDecodeError, UnicodeDecodeError, TypeError):
+    except (json.JSONDecodeError, UnicodeDecodeError, TypeError, AttributeError):
         truncated = True
     return tuple(hits), truncated
 
@@ -169,7 +177,7 @@ async def chainsaw_hunt(
             examiner=audit_logger.examiner,
             advisories=(advisory, r.value),
             caveats=CHAINSAW_CAVEATS,
-            corroboration=_CHAINSAW_CORROBORATION,
+            corroboration=CHAINSAW_CORROBORATION,
             data_provenance=prov,
         )
 
@@ -241,7 +249,14 @@ async def chainsaw_hunt(
             f"CHAINSAW_MAPPING_MISSING: {mapping_file} absent — run install.sh"
             " (install_chainsaw extracts mappings to /opt/chainsaw/mappings/)",
         )
-    if not sigma_rules_dir.exists() or not any(sigma_rules_dir.glob("**/*.yml")):
+    try:
+        _sigma_ok = sigma_rules_dir.exists() and any(sigma_rules_dir.glob("**/*.yml"))
+    except OSError as exc:
+        return _fail(
+            LogFailureReason.SIGMA_RULES_MISSING,
+            f"SIGMA_RULES_MISSING: cannot enumerate {sigma_rules_dir}: {exc}",
+        )
+    if not _sigma_ok:
         return _fail(
             LogFailureReason.SIGMA_RULES_MISSING,
             f"SIGMA_RULES_MISSING: {sigma_rules_dir} missing or empty — run install.sh"
@@ -262,10 +277,13 @@ async def chainsaw_hunt(
         str(mapping_file),
         "-j",
         str(json_out),
+        "--metadata",
         "--quiet",
         "--no-color",
     ]
     if level is not None:
+        # Chainsaw --level high matches only "high"; expand to include critical
+        # so investigators don't miss critical findings when requesting high+ hits.
         level_arg = "high,critical" if level == "high" else level
         argv_list += ["--level", level_arg]
     cmd_argv = (str(CHAINSAW_BIN), *argv_list)
@@ -367,7 +385,7 @@ async def chainsaw_hunt(
         examiner=audit_logger.examiner,
         advisories=advisories,
         caveats=CHAINSAW_CAVEATS,
-        corroboration=_CHAINSAW_CORROBORATION,
+        corroboration=CHAINSAW_CORROBORATION,
         data_provenance=DataProvenance(
             tool="chainsaw_hunt",
             stdout_path=blob_path,
