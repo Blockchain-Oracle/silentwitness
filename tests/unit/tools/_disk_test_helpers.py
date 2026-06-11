@@ -103,11 +103,27 @@ def force_pecmd(
     monkeypatch.setattr("silentwitness_mcp.tools.disk._PECMD_DLL", fake)
 
 
+def force_sbecmd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    exists: bool = True,
+) -> None:
+    """Patch ``disk._SBECMD_DLL`` to a temp path. When ``exists=True``,
+    the fake DLL is created so the EZ_TOOL_NOT_FOUND gate passes.
+    Use ``exists=False`` to test the SBECmd-absent refuse path."""
+    fake = tmp_path / "fake_SBECmd.dll"
+    if exists:
+        fake.touch()
+    monkeypatch.setattr("silentwitness_mcp.tools.disk._SBECMD_DLL", fake)
+
+
 __all__ = [
     "FakeProc",
     "force_dotnet",
     "force_mount_fail",
     "force_mount_ok",
     "force_pecmd",
+    "force_sbecmd",
     "install_dotnet_mock",
 ]

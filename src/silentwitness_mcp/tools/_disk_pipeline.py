@@ -202,7 +202,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
             elapsed_ms=result.elapsed_ms,
             advisories=(
                 f"CSV {csv_path.name} mtime predates spawn — stale residue, "
-                "refusing to surface as parse_mft output",
+                f"refusing to surface as {tool_name} output",
             ),
             exit_code=result.exit_code,
             **refuse_kw,
