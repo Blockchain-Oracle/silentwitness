@@ -2,7 +2,8 @@
 
 Subscribes to FindingEvent (observation_staged / interpretation_staged /
 pivot_staged / finding_approved / finding_archived) via on_finding_event
-and debounces concurrent events within a 50ms window into a single render.
+and debounces concurrent events using a trailing-debounce (50ms idle timeout)
+into a single render.
 
 Atomicity invariant: report.md is written via write_text_atomic (atomic
 rename from a sibling .tmp file). A killed process never leaves a partial
@@ -18,7 +19,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from silentwitness_agent.report.compose import (
     compose_appendix_audit,
@@ -31,7 +32,9 @@ from silentwitness_agent.report.compose import (
     compose_recommendations,
     compose_timeline,
 )
+from silentwitness_agent.report.events import FindingEvent
 from silentwitness_agent.report.template import (
+    SECTION_ORDER,
     Frontmatter,
     ReportStatus,
     ReportTemplate,
@@ -47,29 +50,17 @@ _DEBOUNCE_SECS = 0.05
 _REPORT_FILENAME = "report.md"
 _FINDINGS_FILENAME = "findings.json"
 
-# Section composers in SECTION_ORDER, mapping ReportSection → callable
-_SECTION_ORDER = (
-    ReportSection.EXECUTIVE_SUMMARY,
-    ReportSection.ENGAGEMENT_OVERVIEW,
-    ReportSection.METHODOLOGY,
-    ReportSection.FINDINGS,
-    ReportSection.TIMELINE,
-    ReportSection.IOCS,
-    ReportSection.RECOMMENDATIONS,
-    ReportSection.GAPS,
-    ReportSection.APPENDIX_AUDIT,
-)
-
 
 class ReportRenderResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    content_hash: str
-    bytes_written: int
-    sections_rendered: int
-    findings_approved_count: int
-    findings_draft_count: int
-    gaps_count: int
+    # content_hash must match ReportTemplate.compute_content_hash output format
+    content_hash: str = Field(pattern=r"^sha256:[a-f0-9]{64}$")
+    bytes_written: int = Field(gt=0)
+    sections_rendered: int = Field(gt=0)
+    findings_approved_count: int = Field(ge=0)
+    findings_draft_count: int = Field(ge=0)
+    gaps_count: int = Field(ge=0)
 
 
 class ReportWriter:
@@ -91,7 +82,8 @@ class ReportWriter:
         self._examiner = examiner
         self._model_used = model_used
         self._silentwitness_version = silentwitness_version
-        self._lock = threading.Lock()
+        self._lock = threading.Lock()  # guards _timer slot
+        self._render_lock = threading.Lock()  # serialises concurrent render() calls
         self._timer: threading.Timer | None = None
         self._render_count = 0  # for test introspection
 
@@ -109,9 +101,8 @@ class ReportWriter:
 
         # Partition into approved finding records vs observation records
         approved: list[dict[str, Any]] = []
-        non_approved: list[dict[str, Any]] = []
+        draft: list[dict[str, Any]] = []
         obs_map: dict[str, dict[str, Any]] = {}
-
         for item in findings:
             if not isinstance(item, dict):
                 continue
@@ -120,10 +111,11 @@ class ReportWriter:
                 if isinstance(oid, str):
                     obs_map[oid] = item
             elif "finding_id" in item:
-                if item.get("status") == "APPROVED":
+                status = item.get("status")
+                if status == "APPROVED":
                     approved.append(item)
-                else:
-                    non_approved.append(item)
+                elif status == "DRAFT":
+                    draft.append(item)
 
         # Compose all 9 sections
         section_bodies: dict[ReportSection, str] = {
@@ -143,7 +135,7 @@ class ReportWriter:
         # Build the body (everything after frontmatter)
         title_line = f"# Incident Report — Case {case_id}"
         section_parts = [title_line]
-        for section in _SECTION_ORDER:
+        for section in SECTION_ORDER:
             section_parts.append(ReportTemplate.render_section(section, section_bodies[section]))
 
         body = "\n\n".join(section_parts) + "\n"
@@ -159,8 +151,8 @@ class ReportWriter:
                 existing_text = report_path.read_text(encoding="utf-8")
                 prior_fm, _ = parse_frontmatter(existing_text)
                 created_at = prior_fm.created_at
-            except Exception:
-                _LOG.debug("Could not read prior report.md created_at; using now", exc_info=True)
+            except (OSError, ValueError):
+                _LOG.warning("Could not read prior report.md created_at; using now", exc_info=True)
 
         fm = Frontmatter(
             case_id=case_id,
@@ -187,14 +179,14 @@ class ReportWriter:
         return ReportRenderResult(
             content_hash=content_hash,
             bytes_written=len(encoded),
-            sections_rendered=len(_SECTION_ORDER),
+            sections_rendered=len(SECTION_ORDER),
             findings_approved_count=len(approved),
-            findings_draft_count=len(non_approved),
+            findings_draft_count=len(draft),
             gaps_count=gaps_count,
         )
 
-    def on_finding_event(self, event: object) -> None:
-        """Debounced subscriber callback — resets the 50ms render timer."""
+    def on_finding_event(self, event: FindingEvent) -> None:
+        """Debounced subscriber callback — resets the 50ms idle timer."""
         _ = event  # event details are not needed; findings.json is the source of truth
         with self._lock:
             if self._timer is not None:
@@ -208,10 +200,14 @@ class ReportWriter:
     # ------------------------------------------------------------------
 
     def _do_render(self) -> None:
-        """Timer callback — runs render() and resets the timer slot."""
+        """Timer callback — serialised render with error logging so failures surface."""
         with self._lock:
             self._timer = None
-        self.render()
+        with self._render_lock:
+            try:
+                self.render()
+            except Exception:
+                _LOG.error("render() failed in timer thread", exc_info=True)
 
     def _load_findings(self) -> list[Any]:
         """Load and parse findings.json; returns empty list if absent/empty."""

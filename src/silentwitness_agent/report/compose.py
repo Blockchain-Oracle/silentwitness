@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+_LOG = logging.getLogger(__name__)
 
 _RECOMMENDATIONS_PLACEHOLDER = "_To be populated by examiner._\n"
 _NO_GAPS_PLACEHOLDER = "(no gaps identified)"
@@ -128,7 +131,11 @@ def compose_engagement_overview(case_dir: Path, case_id: str, examiner: str) -> 
             if isinstance(loaded, dict):
                 case_meta = loaded
         except yaml.YAMLError:
-            pass
+            _LOG.warning("Malformed CASE.yaml at %s; using defaults", case_yaml_path, exc_info=True)
+        except OSError:
+            _LOG.warning(
+                "Could not read CASE.yaml at %s; using defaults", case_yaml_path, exc_info=True
+            )
 
     start_date = case_meta.get("start_date", "_not recorded_")
     scope = case_meta.get("scope", "_not recorded_")
@@ -156,6 +163,7 @@ def compose_methodology(case_dir: Path) -> str:
                     try:
                         record = json.loads(line)
                     except json.JSONDecodeError:
+                        _LOG.debug("Skipping malformed JSON line in %s", jsonl_path)
                         continue
                     if not isinstance(record, dict):
                         continue
@@ -163,6 +171,7 @@ def compose_methodology(case_dir: Path) -> str:
                     if isinstance(tool, str) and tool:
                         tools_seen[tool] = None
             except OSError:
+                _LOG.warning("Could not read audit file %s", jsonl_path, exc_info=True)
                 continue
 
     if not tools_seen:
@@ -234,8 +243,7 @@ def compose_timeline(
         audit_ref = audit_ids[0] if audit_ids else "—"
         obs_text = obs.get("text", "—")
         summary = obs_text[:80] + "…" if len(obs_text) > 80 else obs_text
-        source = audit_ref.split("-")[1] if "-" in audit_ref else "—"
-        rows.append((ts or "—", source, summary, audit_ref, fid))
+        rows.append((ts or "—", audit_ref, summary, audit_ref, fid))
 
     rows.sort(key=lambda r: r[0])
 
@@ -300,7 +308,11 @@ def compose_gaps(case_dir: Path) -> str:
 
     try:
         state: Any = json.loads(state_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError:
+        _LOG.error("case_state.json at %s contains invalid JSON", state_path, exc_info=True)
+        return _NO_GAPS_PLACEHOLDER
+    except OSError:
+        _LOG.error("Could not read case_state.json at %s", state_path, exc_info=True)
         return _NO_GAPS_PLACEHOLDER
 
     if not isinstance(state, dict):
@@ -338,6 +350,7 @@ def compose_appendix_audit(case_dir: Path) -> str:
             rel = path.relative_to(case_dir)
             lines.append(f"- `{rel}` — `sha256:{digest}`")
         except OSError:
+            _LOG.warning("Could not read audit file %s for digest", path, exc_info=True)
             lines.append(f"- `{path.name}` — _unreadable_")
 
     return "\n".join(lines) + "\n"
