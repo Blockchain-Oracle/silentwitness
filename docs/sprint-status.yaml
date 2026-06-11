@@ -380,11 +380,11 @@ stories:
 
   - id: story-investigator-agent
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
-    status: PENDING
+    status: COMPLETE
     depends_on: [hypothesis-stack, record-observation-tool, record-interpretation-tool, record-pivot-tool, record-narrative-tool]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/43"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/174"
+    merged_at: "2026-06-11T19:45:00Z"
 
   - id: story-investigator-hooks
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
