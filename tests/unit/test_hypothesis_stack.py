@@ -89,6 +89,13 @@ def test_dispatch_emits_dispatch_event(tmp_path: Path) -> None:
     assert lines[-1]["hypothesis_id"] == h.id
 
 
+def test_dispatch_inactive_hypothesis_raises(tmp_path: Path) -> None:
+    s = _stack(tmp_path)
+    s.form(_STMT, SpecialistName.MEMORY)
+    with pytest.raises(InvalidTransition):
+        s.dispatch("H-999", SpecialistName.MEMORY)
+
+
 def test_dispatch_budget_enforcer_denied_raises_budget_exceeded(tmp_path: Path) -> None:
     class _DenyAll:
         def check_dispatch(self, _h: Hypothesis) -> bool:
@@ -137,6 +144,14 @@ def test_confirm_inactive_hypothesis_raises(tmp_path: Path) -> None:
         s.confirm("H-999", [])
 
 
+def test_confirm_empty_queue_leaves_active_none(tmp_path: Path) -> None:
+    s = _stack(tmp_path)
+    h = s.form(_STMT, SpecialistName.MEMORY)
+    s.confirm(h.id, [])
+    assert s.active is None
+    assert s.queued == ()
+
+
 # ---------------------------------------------------------------------------
 # pivot
 # ---------------------------------------------------------------------------
@@ -182,6 +197,18 @@ def test_pivot_child_bypasses_queue(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# pivot — negative path
+# ---------------------------------------------------------------------------
+
+
+def test_pivot_inactive_hypothesis_raises(tmp_path: Path) -> None:
+    s = _stack(tmp_path)
+    s.form(_STMT, SpecialistName.MEMORY)
+    with pytest.raises(InvalidTransition):
+        s.pivot("H-999", _STMT3, "reason")
+
+
+# ---------------------------------------------------------------------------
 # abandon
 # ---------------------------------------------------------------------------
 
@@ -206,6 +233,20 @@ def test_abandon_emits_abandon_event_with_reason(tmp_path: Path) -> None:
     assert abandon["reason"] == "BUDGET_EXHAUSTED"
 
 
+def test_abandon_inactive_hypothesis_raises(tmp_path: Path) -> None:
+    s = _stack(tmp_path)
+    s.form(_STMT, SpecialistName.MEMORY)
+    with pytest.raises(InvalidTransition):
+        s.abandon("H-999", "reason")
+
+
+def test_abandon_empty_queue_leaves_active_none(tmp_path: Path) -> None:
+    s = _stack(tmp_path)
+    h = s.form(_STMT, SpecialistName.MEMORY)
+    s.abandon(h.id, "BUDGET_EXHAUSTED")
+    assert s.active is None
+
+
 # ---------------------------------------------------------------------------
 # snapshot — immutability
 # ---------------------------------------------------------------------------
@@ -227,6 +268,32 @@ def test_snapshot_total_pivot_count(tmp_path: Path) -> None:
     s.pivot(h1.id, _STMT3, "reason")
     snap = s.snapshot()
     assert snap.total_pivot_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Emit failure — state must not mutate on JSONL write error
+# ---------------------------------------------------------------------------
+
+
+def test_emit_oserror_propagates_and_leaves_state_unchanged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import silentwitness_agent.hypothesis._jsonl as _jmod
+
+    s = _stack(tmp_path)
+    h = s.form(_STMT, SpecialistName.MEMORY)
+
+    def _raise(*_a: object, **_kw: object) -> None:
+        raise OSError("disk full")
+
+    monkeypatch.setattr(_jmod, "append_jsonl_line", _raise)
+
+    with pytest.raises(OSError, match="disk full"):
+        s.confirm(h.id, ["sift-aj-001"])
+
+    # State must NOT have mutated — hypothesis is still active and ACTIVE.
+    assert s.active is h
+    assert h.status == HypothesisStatus.ACTIVE
 
 
 # ---------------------------------------------------------------------------

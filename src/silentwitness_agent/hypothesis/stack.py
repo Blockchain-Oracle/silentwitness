@@ -127,7 +127,6 @@ class HypothesisStack:
             active = self._assert_active(hypothesis_id, "dispatch")
             if self._budget is not None and not self._budget.check_dispatch(active):
                 raise BudgetExceeded(f"Budget enforcer denied dispatch for {hypothesis_id}")
-            active.assigned_specialist = specialist
             self._emit(
                 HypothesisEvent(
                     ts=datetime.now(UTC),
@@ -135,15 +134,12 @@ class HypothesisStack:
                     hypothesis_id=hypothesis_id,
                 )
             )
+            active.assigned_specialist = specialist
 
     def confirm(self, hypothesis_id: str, evidence_audit_ids: list[str]) -> None:
         """Mark active hypothesis CONFIRMED; promote next queued hypothesis."""
         with self._lock:
             active = self._assert_active(hypothesis_id, "confirm")
-            active.status = HypothesisStatus.CONFIRMED
-            active.evidence_observed = [*active.evidence_observed, *evidence_audit_ids]
-            self._history.append(active)
-            self._active = self._queued.popleft() if self._queued else None
             self._emit(
                 HypothesisEvent(
                     ts=datetime.now(UTC),
@@ -152,6 +148,10 @@ class HypothesisStack:
                     related_audit_ids=tuple(evidence_audit_ids),
                 )
             )
+            active.status = HypothesisStatus.CONFIRMED
+            active.evidence_observed = [*active.evidence_observed, *evidence_audit_ids]
+            self._history.append(active)
+            self._active = self._queued.popleft() if self._queued else None
 
     def pivot(
         self,
@@ -168,9 +168,7 @@ class HypothesisStack:
         """
         with self._lock:
             parent = self._assert_active(from_id, "pivot")
-            parent.status = HypothesisStatus.PIVOTED
-            self._history.append(parent)
-            self._active = None
+            # Emit PIVOT before any state mutation — if emit fails, parent stays ACTIVE.
             self._emit(
                 HypothesisEvent(
                     ts=datetime.now(UTC),
@@ -180,6 +178,9 @@ class HypothesisStack:
                     related_audit_ids=tuple(parent.evidence_observed),
                 )
             )
+            parent.status = HypothesisStatus.PIVOTED
+            self._history.append(parent)
+            self._active = None
             # Child bypasses queue — pivot is urgent.
             child = self._form_locked(
                 to_statement,
@@ -194,9 +195,6 @@ class HypothesisStack:
         """Mark active hypothesis ABANDONED; promote next queued hypothesis."""
         with self._lock:
             active = self._assert_active(hypothesis_id, "abandon")
-            active.status = HypothesisStatus.ABANDONED
-            self._history.append(active)
-            self._active = self._queued.popleft() if self._queued else None
             self._emit(
                 HypothesisEvent(
                     ts=datetime.now(UTC),
@@ -205,6 +203,9 @@ class HypothesisStack:
                     reason=reason[:240],
                 )
             )
+            active.status = HypothesisStatus.ABANDONED
+            self._history.append(active)
+            self._active = self._queued.popleft() if self._queued else None
 
     def snapshot(self) -> StackSnapshot:
         """Return an immutable point-in-time view of the stack."""
@@ -267,8 +268,10 @@ class HypothesisStack:
     def _emit(self, event: HypothesisEvent) -> None:
         try:
             emit_hypothesis_event(self._case_dir, event)
-        except OSError as exc:
-            _LOG.error("HypothesisStack: JSONL emit failed for %s: %s", event.type, exc)
+        except (OSError, ValueError) as exc:
+            _LOG.error(
+                "HypothesisStack: JSONL emit failed for %s: %s", event.type, exc, exc_info=True
+            )
             raise
 
     def _resume_seq(self) -> int:
