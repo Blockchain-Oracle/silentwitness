@@ -372,11 +372,11 @@ stories:
 
   - id: story-hypothesis-budget
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
-    status: PENDING
+    status: COMPLETE
     depends_on: [hypothesis-stack]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/42"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/173"
+    merged_at: "2026-06-11T18:30:00Z"
 
   - id: story-investigator-agent
     epic: "Epic 8 — Hypothesis state machine + investigator agent"
