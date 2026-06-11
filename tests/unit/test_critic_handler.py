@@ -268,3 +268,82 @@ def test_reject_preserves_existing_archived_entries(tmp_path: Path) -> None:
     assert len(archived) == 2
     ids = {r.get("id") for r in archived}
     assert ids == {"OLD-001", "F-003"}
+
+
+# ---------------------------------------------------------------------------
+# Additional coverage: encoding safety, examiner field, no-op, corrupt reads
+# ---------------------------------------------------------------------------
+
+
+def test_unicode_line_separator_in_reason_does_not_raise(tmp_path: Path) -> None:
+    """U+2028 / U+2029 in LLM-supplied reason must not crash the handler."""
+    case = _make_case(tmp_path)
+    _write_findings(case, [_f(1)])
+    reason_with_separators = "step" + chr(0x2028) + "evidence" + chr(0x2029) + "detail"
+    handle_critic_verdicts(
+        case, "aj", [_verdict("F-001", "AGREE", reason=reason_with_separators)], []
+    )
+    lines = _read_jsonl(case / "audit" / "critic.jsonl")
+    assert len(lines) == 1
+    assert lines[0]["type"] == "agree"
+
+
+def test_examiner_field_present_in_all_audit_line_types(tmp_path: Path) -> None:
+    case = _make_case(tmp_path)
+    _write_findings(case, [_f(1), _f(2), _f(3)])
+    handle_critic_verdicts(
+        case,
+        "analyst-x",
+        [_verdict("F-001", "AGREE"), _verdict("F-002", "CHALLENGE"), _verdict("F-003", "REJECT")],
+        [],
+    )
+    lines = _read_jsonl(case / "audit" / "critic.jsonl")
+    for line in lines:
+        assert line["examiner"] == "analyst-x"
+
+
+def test_empty_verdicts_list_does_not_write_findings_json(tmp_path: Path) -> None:
+    """Empty verdict batch must not overwrite findings.json (no-op write guard)."""
+    case = _make_case(tmp_path)
+    _write_findings(case, [_f(1)])
+    original_mtime = (case / "findings.json").stat().st_mtime
+    handle_critic_verdicts(case, "aj", [], [])
+    assert (case / "findings.json").stat().st_mtime == original_mtime
+
+
+def test_audit_dir_auto_created_when_missing(tmp_path: Path) -> None:
+    """handle_critic_verdicts must create audit/ if it does not exist."""
+    case = tmp_path  # no _make_case — audit/ not pre-created
+    _write_findings(case, [_f(1)])
+    handle_critic_verdicts(case, "aj", [_verdict("F-001", "AGREE")], [])
+    assert (case / "audit" / "critic.jsonl").exists()
+
+
+def test_corrupt_findings_archived_raises(tmp_path: Path) -> None:
+    """Corrupt findings.archived.json must raise ValueError, not silently return []."""
+    import pytest
+
+    case = _make_case(tmp_path)
+    _write_findings(case, [_f(3)])
+    (case / "findings.archived.json").write_text("not json", encoding="utf-8")
+    with pytest.raises(ValueError, match="corrupt"):
+        handle_critic_verdicts(case, "aj", [_verdict("F-003", "REJECT")], [])
+
+
+def test_multiple_rejects_in_one_batch(tmp_path: Path) -> None:
+    """Multiple REJECTs in one call must all appear in findings.archived.json."""
+    case = _make_case(tmp_path)
+    _write_findings(case, [_f(1), _f(2), _f(3)])
+    result = handle_critic_verdicts(
+        case,
+        "aj",
+        [_verdict("F-001", "REJECT"), _verdict("F-002", "REJECT"), _verdict("F-003", "AGREE")],
+        [],
+    )
+    assert result.reject_count == 2
+    assert result.agree_count == 1
+    archived = json.loads((case / "findings.archived.json").read_text(encoding="utf-8"))
+    assert len(archived) == 2
+    remaining = json.loads((case / "findings.json").read_text(encoding="utf-8"))
+    assert len(remaining) == 1
+    assert remaining[0]["id"] == "F-003"

@@ -7,10 +7,9 @@ Verdict routing:
   REJECT    → remove from findings.json; append to findings.archived.json;
               audit {type:"reject", finding_id, reason, ts}
 
-Thread safety: a single module-level lock serialises all mutations to
-findings.json, findings.archived.json, and audit/critic.jsonl.
-``pending_critiques`` is shared with the investigator's InvestigatorDeps;
-callers performing read-then-clear on the list must use the same lock.
+``_LOCK`` serialises all file I/O within this module. ``pending_critiques`` is
+shared with the investigator's InvestigatorDeps; callers performing
+read-then-clear on that list must also hold ``_LOCK``.
 """
 
 from __future__ import annotations
@@ -36,8 +35,6 @@ _CRITIC_JSONL = "audit/critic.jsonl"
 
 
 class CriticHandlerResult(BaseModel):
-    """Summary counts returned by handle_critic_verdicts."""
-
     agree_count: int = Field(default=0, ge=0)
     challenge_count: int = Field(default=0, ge=0)
     reject_count: int = Field(default=0, ge=0)
@@ -54,8 +51,14 @@ def handle_critic_verdicts(
     """Route critic verdicts per architecture §5.5 routing table.
 
     Reads findings.json once, applies all verdict mutations in memory, then
-    writes findings.json and findings.archived.json atomically at the end.
-    audit/critic.jsonl receives one line per verdict (including skips).
+    writes to disk. findings.archived.json is written BEFORE findings.json so
+    that if the archived write fails, the rejected finding is still present in
+    findings.json (recoverable) rather than absent from both files (not
+    recoverable). findings.json is only written when at least one verdict was
+    routed (not on empty-verdicts calls).
+
+    Note: callers reading or clearing ``pending_critiques`` concurrently must
+    acquire ``_LOCK`` from this module to avoid a read-during-append race.
     """
     audit_path = case_dir / _CRITIC_JSONL
     audit_path.parent.mkdir(parents=True, exist_ok=True)
@@ -70,7 +73,6 @@ def handle_critic_verdicts(
         raw_findings = _read_json_list(case_dir / _FINDINGS_JSON)
         archived = _read_json_list(case_dir / _ARCHIVED_JSON)
 
-        # Build a mutable dict keyed by finding id, preserving insertion order.
         findings_map: dict[str, dict[str, Any]] = {}
         for item in raw_findings:
             if isinstance(item, dict):
@@ -118,10 +120,37 @@ def handle_critic_verdicts(
                 archived_ids.append(fid)
                 audit_lines += 1
 
-        remaining = [findings_map[k] for k in findings_map if k not in rejected_ids]
-        write_json_atomic(case_dir / _FINDINGS_JSON, remaining)
+        # archived written FIRST: if this fails, findings.json still holds the rejected entry.
         if rejected_ids:
-            write_json_atomic(case_dir / _ARCHIVED_JSON, archived)
+            try:
+                write_json_atomic(case_dir / _ARCHIVED_JSON, archived)
+            except OSError:
+                _LOG.error(
+                    "critic_handler: failed to persist %s; %d finding(s) NOT archived "
+                    "case_dir=%s rejected_ids=%s",
+                    _ARCHIVED_JSON,
+                    len(rejected_ids),
+                    case_dir,
+                    sorted(rejected_ids),
+                    exc_info=True,
+                )
+                raise
+
+        if agree_count or challenge_count or rejected_ids:
+            remaining = [findings_map[k] for k in findings_map if k not in rejected_ids]
+            try:
+                write_json_atomic(case_dir / _FINDINGS_JSON, remaining)
+            except OSError:
+                _LOG.error(
+                    "critic_handler: failed to persist %s after routing %d verdict(s); "
+                    "audit log has %d line(s) ahead of disk case_dir=%s",
+                    _FINDINGS_JSON,
+                    len(verdicts),
+                    audit_lines,
+                    case_dir,
+                    exc_info=True,
+                )
+                raise
 
     return CriticHandlerResult(
         agree_count=agree_count,
@@ -130,11 +159,6 @@ def handle_critic_verdicts(
         archived_finding_ids=archived_ids,
         audit_lines_written=audit_lines,
     )
-
-
-# ---------------------------------------------------------------------------
-# Routing helpers — called inside the module-level _LOCK
-# ---------------------------------------------------------------------------
 
 
 def _handle_agree(
@@ -167,7 +191,7 @@ def _handle_challenge(
 ) -> None:
     finding["critic_status"] = "CHALLENGED"
     finding["critic_challenge_reason"] = verdict.reason
-    pending_critiques.append(verdict)
+    # Emit audit line before mutating caller's list — if emit raises, no side-effect leaks out.
     _emit_line(
         audit_path,
         {
@@ -180,6 +204,7 @@ def _handle_challenge(
             "ts": ts,
         },
     )
+    pending_critiques.append(verdict)
 
 
 def _handle_reject(
@@ -211,13 +236,10 @@ def _handle_reject(
     )
 
 
-# ---------------------------------------------------------------------------
-# I/O primitives
-# ---------------------------------------------------------------------------
-
-
 def _emit_line(path: Path, record: dict[str, Any]) -> None:
-    append_jsonl_line(path, json.dumps(record, ensure_ascii=False, sort_keys=True))
+    # ensure_ascii=True prevents U+2028/U+2029/NEL slipping through to append_jsonl_line's
+    # forbidden-character validator (json.dumps with ensure_ascii=False preserves them).
+    append_jsonl_line(path, json.dumps(record, ensure_ascii=True, sort_keys=True))
 
 
 def _read_json_list(path: Path) -> list[Any]:
@@ -225,10 +247,15 @@ def _read_json_list(path: Path) -> list[Any]:
         return []
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
-        _LOG.warning("critic_handler: cannot read %s err=%s", path, exc)
-        return []
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"critic_handler: {path.name} is corrupt: {exc}") from exc
+    except OSError as exc:
+        raise OSError(f"critic_handler: cannot read {path.name}: {exc}") from exc
+    if not isinstance(data, list):
+        raise ValueError(
+            f"critic_handler: {path.name} is not a JSON list (got {type(data).__name__})"
+        )
+    return data
 
 
 def _now_iso() -> str:
