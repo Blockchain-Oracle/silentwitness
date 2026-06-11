@@ -8,9 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from pydantic import BaseModel, ConfigDict
-
-_EPOCH: datetime = datetime.fromtimestamp(0, tz=UTC)
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class _TriggerState(BaseModel):
@@ -18,8 +16,9 @@ class _TriggerState(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    last_critic_at: datetime = _EPOCH
-    last_critic_finding_count: int = 0
+    # Default to now() so bare construction never triggers the time threshold.
+    last_critic_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_critic_finding_count: int = Field(default=0, ge=0)
 
 
-__all__ = ["_EPOCH", "_TriggerState"]
+__all__ = ["_TriggerState"]
