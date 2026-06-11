@@ -1,0 +1,14 @@
+#separator \x09
+#set_separator	,
+#empty_field	(empty)
+#unset_field	-
+#path	dns
+#open	2025-01-15-08-23-41
+#fields	ts	uid	id.orig_h	id.orig_p	id.resp_h	id.resp_p	proto	trans_id	rtt	query	qclass	qclass_name	qtype	qtype_name	rcode	rcode_name	AA	TC	RD	RA	Z	answers	TTLs	rejected
+#types	time	string	addr	port	addr	port	enum	count	interval	string	count	string	count	string	count	string	bool	bool	bool	bool	count	vector[string]	vector[interval]	bool
+1736930622.000000	CnKpL3Wn6hjrkoNg5i	192.168.1.10	49153	8.8.8.8	53	udp	12345	0.001234	evil-c2.example.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	185.220.101.20	300.000000	F
+1736930627.000000	CsQuQ8Bs1movpqSl0n	192.168.1.10	49156	8.8.4.4	53	udp	23456	0.000987	windowsupdate.microsoft.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	20.81.111.85,20.81.111.86	3600.000000,3600.000000	F
+1736930631.000000	CwUyU2Fw5qsztuUp4r	192.168.1.15	49200	8.8.8.8	53	udp	34567	0.002345	pastebin.com	1	C_INTERNET	1	A	0	NOERROR	F	F	T	T	0	104.20.208.54	60.000000	F
+1736930632.000000	CxVzV3Gx6rtauvVq5s	192.168.1.10	49160	8.8.8.8	53	udp	45678	0.001111	nonexistent.invalid	1	C_INTERNET	1	A	3	NXDOMAIN	F	F	T	T	0	(empty)	(empty)	F
+1736930633.000000	CyWaW4Hy7subbwWr6t	192.168.1.30	51001	8.8.4.4	53	udp	56789	0.003456	github.com	1	C_INTERNET	28	AAAA	0	NOERROR	F	F	T	T	0	2606:50c0:8000::153	300.000000	F
+#close	2025-01-15-08-30-30

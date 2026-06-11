@@ -106,11 +106,46 @@ install_sigma_rules() {
 }
 
 # ---------------------------------------------------------------------------
+# Zeek — NOT pre-installed on SIFT 2026.
+# context/.raw-design-research/03 §"Tools our install script MUST add" line 217.
+# Canonical install on Ubuntu 24.04 (Noble) via OpenSUSE security:zeek repo.
+# Binary lands at /usr/local/bin/zeek (package default) or /opt/zeek/bin/zeek
+# (source-built). _network_common.py::get_zeek_bin() checks both paths.
+# ---------------------------------------------------------------------------
+install_zeek() {
+    if command -v zeek &>/dev/null; then
+        log "Zeek already installed at $(command -v zeek) — skipping"
+        return
+    fi
+    log "installing Zeek via OpenSUSE security:zeek repo (Ubuntu Noble)"
+    echo 'deb http://download.opensuse.org/repositories/security:/zeek/xUbuntu_24.04/ /' \
+        | sudo tee /etc/apt/sources.list.d/security:zeek.list
+    curl -sSL \
+        "https://download.opensuse.org/repositories/security:/zeek/xUbuntu_24.04/Release.key" \
+        | gpg --dearmor \
+        | sudo tee /etc/apt/trusted.gpg.d/security_zeek.gpg > /dev/null
+    sudo apt-get update -q
+    # Pin to a specific zeek package; zeek meta-package selects the latest series.
+    sudo apt-get install -y zeek
+    # Verify: package installs to /usr/local/bin/zeek or /opt/zeek/bin/zeek.
+    if command -v zeek &>/dev/null; then
+        zeek --version || fail "zeek runtime check failed"
+        log "Zeek installed at $(command -v zeek)"
+    elif [[ -x /opt/zeek/bin/zeek ]]; then
+        /opt/zeek/bin/zeek --version || fail "zeek runtime check failed"
+        log "Zeek installed at /opt/zeek/bin/zeek"
+    else
+        fail "zeek not found after installation — check apt output above"
+    fi
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 install_hayabusa
 install_hayabusa_rules
 install_chainsaw
 install_sigma_rules
+install_zeek
 
 log "all tools provisioned successfully"

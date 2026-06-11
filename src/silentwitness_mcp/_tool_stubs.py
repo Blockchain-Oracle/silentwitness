@@ -140,5 +140,11 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         guard_mount("hayabusa_csv_timeline", ctx)
         raise NotImplementedError("hayabusa_csv_timeline is registered but not yet implemented")
 
+    @mcp.tool()
+    def zeek_run(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Zeek offline pcap replay — decomposes pcap into structured logs. Stub."""
+        guard_mount("zeek_run", ctx)
+        raise NotImplementedError("zeek_run is registered but not yet implemented")
+
 
 __all__ = ["register_finding_tool_stubs"]
