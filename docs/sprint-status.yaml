@@ -345,11 +345,11 @@ stories:
 
   - id: story-suricata-run
     epic: "Epic 7 — Log + Network tool wrappers"
-    status: PENDING
+    status: COMPLETE
     depends_on: [zeek-run]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/39"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/167"
+    merged_at: "2026-06-11T14:49:00Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 8 — Hypothesis state machine + investigator agent

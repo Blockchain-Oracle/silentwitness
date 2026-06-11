@@ -1,13 +1,9 @@
 """Shared Pydantic v2 contracts — single source of truth across MCP + agent.
 
-Centralising every tool-wrapper, hypothesis-pivot, report-renderer, audit-
-logger, and HMAC-ledger type here prevents two parallel definitions of
-``Observation`` from drifting — the forcing function that keeps the wedge
-mechanical (architecture.md §4.3 ToolResponse; §4.4 AuditEntry; §5.4
-report-as-state; PRD §FR5).
-
-All models use ``frozen=True`` + ``extra="forbid"`` except ``Finding``,
-which has a mutable ``status`` (DRAFT → REVIEWED → FINAL → ARCHIVED).
+Centralises shared types to prevent drift across tool-wrappers,
+report-renderer, and audit-logger (architecture.md §4.3 ToolResponse;
+§4.4 AuditEntry; §5.4 report-as-state; PRD §FR5).
+All models use ``frozen=True`` + ``extra="forbid"`` except ``Finding``.
 """
 
 from __future__ import annotations
@@ -396,5 +392,8 @@ class ToolResponse(BaseModel, Generic[TPayload]):  # noqa: UP046
         return self
 
 
-# Architecture-doc alias.
+class WorkflowError(Exception):
+    """Base class for agent workflow lifecycle errors (budget, state violations)."""
+
+
 ResponseEnvelope = ToolResponse
