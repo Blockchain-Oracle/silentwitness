@@ -78,6 +78,7 @@ class DiskFailureReason(StrEnum):
     EVIDENCE_TAMPERED = "EVIDENCE_TAMPERED"
     MOUNT_NOT_RO_NOEXEC_NOSUID = "MOUNT_NOT_RO_NOEXEC_NOSUID"
     DOTNET_NOT_FOUND = "DOTNET_NOT_FOUND"
+    EZ_TOOL_NOT_FOUND = "EZ_TOOL_NOT_FOUND"
     TOOL_FAILED = "TOOL_FAILED"
     TOOL_TIMEOUT = "TOOL_TIMEOUT"
     OUTPUT_PARSE_FAILED = "OUTPUT_PARSE_FAILED"
@@ -324,6 +325,7 @@ def refuse[TPayload: BaseModel](
     model_used: str,
     advisories: tuple[str, ...],
     caveats: tuple[str, ...],
+    corroboration: tuple[str, ...] = (),
     cmd_argv: tuple[str, ...],
     blob_path: Path | None = None,
     exit_code: int | None = None,
@@ -365,6 +367,7 @@ def refuse[TPayload: BaseModel](
         examiner=audit_logger.examiner,
         advisories=(*advisories, reason.value),
         caveats=caveats,
+        corroboration=corroboration,
         data_provenance=provenance,
     )
 

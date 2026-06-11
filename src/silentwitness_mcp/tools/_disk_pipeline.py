@@ -74,6 +74,7 @@ async def run_disk_wrapper[TPayload: BaseModel](
     timeout_s: float = DEFAULT_TIMEOUT_S,
     check_serilog_stderr: bool = False,
     corroboration: tuple[str, ...] = (),
+    dll_check_override: Path | None = None,
 ) -> ToolResponse[TPayload]:
     """Drive one EZ-Tools wrapper end-to-end. Errors at any stage fall
     through to :func:`refuse` with the appropriate
@@ -95,8 +96,25 @@ async def run_disk_wrapper[TPayload: BaseModel](
         "evidence_path": evidence_path,
         "model_used": model_used,
         "caveats": caveats,
+        "corroboration": corroboration,
         "cmd_argv": cmd_argv,
     }
+
+    # Optional per-tool DLL check (for EZ Tools not pre-installed on SIFT,
+    # e.g. PECmd). Runs before evidence gates so a missing install surfaces
+    # before any I/O.  Pass dll_check_override=_PECMD_DLL from the caller;
+    # default None skips the check for pre-installed tools.
+    if dll_check_override is not None and not dll_check_override.exists():
+        return refuse(
+            DiskFailureReason.EZ_TOOL_NOT_FOUND,
+            elapsed_ms=(time.monotonic() - start) * 1000.0,
+            advisories=(
+                f"{ez_tool.upper()}_NOT_INSTALLED — run install.sh per "
+                "context/.raw-design-research/03 to add "
+                f"{ez_tool} to the EZ Tools tree",
+            ),
+            **refuse_kw,
+        )
 
     gate = check_evidence_and_mount_gates(evidence_path, evidence_registry=evidence_registry)
     if gate is not None:
@@ -249,7 +267,11 @@ async def run_disk_wrapper[TPayload: BaseModel](
         # input rows; output.row_count reflects only entries that passed validation.
         # getattr bridges until TPayload gains a typed Protocol (tracked tech debt).
         row_count: int = getattr(output, "row_count", len(rows))
-        success_advisories = (f"partial parse: {row_count} rows recovered ({trunc_reason})",)
+        dropped = len(rows) - row_count
+        drop_note = f", {dropped} dropped" if dropped > 0 else ""
+        success_advisories = (
+            f"partial parse: {row_count} rows recovered{drop_note} ({trunc_reason})",
+        )
 
     try:
         write_audit_row(

@@ -88,10 +88,26 @@ def force_mount_fail(
     )
 
 
+def force_pecmd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    exists: bool = True,
+) -> None:
+    """Patch ``disk._PECMD_DLL`` to a temp path. When ``exists=True``,
+    the fake DLL file is created so the EZ_TOOL_NOT_FOUND gate passes.
+    Use ``exists=False`` to test the PECMD_NOT_INSTALLED path."""
+    fake = tmp_path / "fake_PECmd.dll"
+    if exists:
+        fake.touch()
+    monkeypatch.setattr("silentwitness_mcp.tools.disk._PECMD_DLL", fake)
+
+
 __all__ = [
     "FakeProc",
     "force_dotnet",
     "force_mount_fail",
     "force_mount_ok",
+    "force_pecmd",
     "install_dotnet_mock",
 ]
