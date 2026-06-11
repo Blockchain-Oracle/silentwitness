@@ -1,11 +1,13 @@
 """Log/network tool wrappers — architecture §4.2 rows 15-17.
 
-Wrappers: ``parse_evtx`` (EvtxECmd, §4.2 row 17),
-``hayabusa_csv_timeline`` (Hayabusa, §4.2 row 16).
-Domain: context/domain/06 §5.2 — EvtxECmd; §7.1 — Hayabusa.
+Wrappers: ``parse_evtx`` (EvtxECmd, §4.2 row 15),
+``hayabusa_csv_timeline`` (Hayabusa, §4.2 row 16),
+``chainsaw_hunt`` (Chainsaw, §4.2 row 17).
+Domain: context/domain/06 §5.2 — EvtxECmd; §7.1 — Hayabusa; §7.2 — Chainsaw.
 
-Implementations for hayabusa_csv_timeline live in :mod:`_log_hayabusa`
-(LOC budget); this module re-exports the public surface.
+Implementations for hayabusa_csv_timeline and chainsaw_hunt live in their
+own modules (_log_hayabusa, _log_chainsaw) for the LOC budget; this module
+re-exports the public surface.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from silentwitness_mcp.evidence.registry import (
     EvidenceRegistryError,
 )
 from silentwitness_mcp.tools._disk_common import DOTNET_BIN, delete_orphan_blob, persist_blob
+from silentwitness_mcp.tools._log_chainsaw import chainsaw_hunt
 from silentwitness_mcp.tools._log_common import (
     EVTXECMD_DLL,
     LogFailureReason,
@@ -41,6 +44,7 @@ from silentwitness_mcp.tools._log_common import (
     serilog_has_errors,
 )
 from silentwitness_mcp.tools._log_hayabusa import hayabusa_csv_timeline
+from silentwitness_mcp.tools._log_models_chainsaw import ChainsawHit, ChainsawOutput
 from silentwitness_mcp.tools._log_models_evtx import (
     _PARSE_EVTX_CORROBORATION,
     _SECURITY_CHANNEL_EIDS,
@@ -328,10 +332,13 @@ async def parse_evtx(
 
 __all__ = [
     "PARSE_EVTX_CAVEATS",
+    "ChainsawHit",
+    "ChainsawOutput",
     "EvtxOutput",
     "EvtxRecord",
     "HayabusaHit",
     "HayabusaOutput",
+    "chainsaw_hunt",
     "hayabusa_csv_timeline",
     "parse_evtx",
 ]

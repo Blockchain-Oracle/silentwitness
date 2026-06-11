@@ -129,6 +129,12 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         raise NotImplementedError("vol_lsadump is registered but not yet implemented")
 
     @mcp.tool()
+    def chainsaw_hunt(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
+        """Chainsaw Sigma-rule hunt over an EVTX directory. Stub."""
+        guard_mount("chainsaw_hunt", ctx)
+        raise NotImplementedError("chainsaw_hunt is registered but not yet implemented")
+
+    @mcp.tool()
     def hayabusa_csv_timeline(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Hayabusa Sigma-rule csv-timeline over an EVTX directory. Stub."""
         guard_mount("hayabusa_csv_timeline", ctx)
