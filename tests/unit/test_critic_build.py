@@ -34,7 +34,7 @@ def test_system_prompt_contains_fresh_context_phrase() -> None:
 def test_system_prompt_contains_evaluate_against_evidence_phrase() -> None:
     from silentwitness_agent.critic import _SYSTEM_PROMPT
 
-    assert "evaluate" in _SYSTEM_PROMPT and "cited" in _SYSTEM_PROMPT
+    assert "evaluate it against ONLY the tool output" in _SYSTEM_PROMPT
 
 
 def test_system_prompt_excludes_forbidden_phrases() -> None:
@@ -81,6 +81,14 @@ def test_factory_direct_model_arg_overrides_all_envs(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("SILENTWITNESS_CRITIC_FAST", "1")
     agent = build_critic(model="test")
     assert isinstance(agent.model, TestModel)
+
+
+def test_factory_critic_fast_takes_priority_over_critic_model_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SILENTWITNESS_CRITIC_FAST", "1")
+    monkeypatch.setenv("SILENTWITNESS_CRITIC_MODEL", "anthropic:claude-opus-4-7")
+    assert "haiku" in _select_model_str(None)
 
 
 # ---------------------------------------------------------------------------

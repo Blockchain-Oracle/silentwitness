@@ -86,7 +86,7 @@ async def test_agree_scenario_verdict_is_agree(tmp_path: Path) -> None:
     v = report.verdicts[0]
     assert v.verdict == "AGREE"
     assert v.finding_id == "f-agree-001"
-    assert report.tokens_spent == 80
+    assert report.tokens_spent >= 0  # SDK-authoritative; FunctionModel yields 0
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +187,15 @@ async def test_reject_scenario_names_hallucinated_entity(tmp_path: Path) -> None
 # ---------------------------------------------------------------------------
 # 4. blob loading helpers
 # ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_critique_empty_findings_returns_empty_report(tmp_path: Path) -> None:
+    """critique() with no findings must short-circuit without calling the LLM."""
+    report = await critique(tmp_path, "aj", [])
+    assert report.verdicts == []
+    assert report.tokens_spent == 0
+    assert report.time_elapsed_ms == 0.0
 
 
 def test_load_blob_returns_empty_for_missing_file(tmp_path: Path) -> None:

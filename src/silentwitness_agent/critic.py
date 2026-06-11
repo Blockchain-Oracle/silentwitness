@@ -11,6 +11,7 @@ Entry point: ``critique()``.  Factory: ``build_critic()``.
 
 from __future__ import annotations
 
+import hashlib
 import importlib.resources
 import logging
 import os
@@ -66,7 +67,7 @@ class StagedFinding(BaseModel):
     cited_blob_paths: list[Path] = Field(default_factory=list)
 
 
-class CriticVerdict(BaseModel):
+class CriticVerdictRecord(BaseModel):
     """Per-finding verdict from the critic agent."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -78,12 +79,16 @@ class CriticVerdict(BaseModel):
     missing_corroboration: list[str] = Field(default_factory=list)
 
 
+# Backwards-compatible alias: avoids shadowing silentwitness_common.types.CriticVerdict (StrEnum).
+CriticVerdict = CriticVerdictRecord
+
+
 class CriticReport(BaseModel):
     """Structured output returned by the critic agent after reviewing all findings."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    verdicts: list[CriticVerdict]
+    verdicts: list[CriticVerdictRecord]
     tokens_spent: int = Field(ge=0)
     time_elapsed_ms: float = Field(ge=0.0)
 
@@ -159,12 +164,18 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
 
 
 def _load_blob(path: Path) -> str:
-    """Read a blob file; return empty string if missing."""
+    """Read a blob file; return empty string if missing.
+
+    Files over _BLOB_TRUNCATION_BYTES are cut with a ``[TRUNCATED]`` marker.
+    Non-UTF-8 files (binary) get a one-line descriptor with a SHA-256 prefix
+    rather than silently replacing bytes, which would corrupt evidence text.
+    """
     if not path.exists():
         _LOG.warning("critic: blob not found path=%s", path)
         return ""
     content = path.read_bytes()
-    if len(content) > _BLOB_TRUNCATION_BYTES:
+    truncated = len(content) > _BLOB_TRUNCATION_BYTES
+    if truncated:
         _LOG.info(
             "critic: blob truncated path=%s original_bytes=%d limit=%d",
             path,
@@ -172,8 +183,11 @@ def _load_blob(path: Path) -> str:
             _BLOB_TRUNCATION_BYTES,
         )
         content = content[:_BLOB_TRUNCATION_BYTES]
-        return content.decode("utf-8", errors="replace") + "\n[TRUNCATED]"
-    return content.decode("utf-8", errors="replace")
+    try:
+        return content.decode("utf-8") + ("\n[TRUNCATED]" if truncated else "")
+    except UnicodeDecodeError:
+        digest = hashlib.sha256(content).hexdigest()[:16]
+        return f"[BINARY BLOB — {len(content)} bytes, sha256={digest}...]"
 
 
 def _build_critique_prompt(findings: list[StagedFinding], blob_contents: dict[str, str]) -> str:
@@ -196,6 +210,8 @@ def _build_critique_prompt(findings: list[StagedFinding], blob_contents: dict[st
             blob_text = blob_contents.get(str(bp), "")
             if blob_text:
                 parts.append(f"\nBlob [{bp.name}]:\n{blob_text}")
+            else:
+                parts.append(f"\nBlob [{bp.name}]: (not found)")
         parts.append("")
     return "\n".join(parts)
 
@@ -218,6 +234,9 @@ async def critique(
     and from each ``cited_blob_paths`` entry.  Blobs over 50 KB are truncated
     with a ``[TRUNCATED]`` marker so the critic's context remains manageable.
     """
+    if not findings:
+        return CriticReport(verdicts=[], tokens_spent=0, time_elapsed_ms=0.0)
+
     t0 = time.monotonic()
 
     blob_contents: dict[str, str] = {}
@@ -238,21 +257,19 @@ async def critique(
     run_result = await agent.run(prompt, deps=deps)
 
     elapsed_ms = (time.monotonic() - t0) * 1000.0
-    report = run_result.output
-    # Patch in wall-clock elapsed since TestModel returns 0.0.
-    if report.time_elapsed_ms == 0.0:
-        report = CriticReport(
-            verdicts=report.verdicts,
-            tokens_spent=report.tokens_spent,
-            time_elapsed_ms=elapsed_ms,
-        )
-    return report
+    # SDK-authoritative token count; wall-clock elapsed replaces any model-reported value.
+    return CriticReport(
+        verdicts=run_result.output.verdicts,
+        tokens_spent=run_result.usage.total_tokens or 0,
+        time_elapsed_ms=elapsed_ms,
+    )
 
 
 __all__ = [
     "CriticDeps",
     "CriticReport",
     "CriticVerdict",
+    "CriticVerdictRecord",
     "StagedFinding",
     "build_critic",
     "critique",
