@@ -477,11 +477,11 @@ stories:
 
   - id: story-report-verify-links
     epic: "Epic 11 — Report-as-state"
-    status: PENDING
+    status: COMPLETE
     depends_on: [report-writer, audit-logger]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/54"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/181"
+    merged_at: "2026-06-11T20:19:31Z"
 
   - id: story-report-pdf-export
     epic: "Epic 11 — Report-as-state"
