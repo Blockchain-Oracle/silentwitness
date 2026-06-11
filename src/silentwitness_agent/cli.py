@@ -159,6 +159,36 @@ def _read_case_examiner(case_dir: Path, fallback: str) -> str:
         return fallback
 
 
+@app.command("investigate")
+def investigate(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    model: str | None = typer.Option(None, "--model"),
+    max_iterations: int = typer.Option(50, "--max-iterations"),
+    max_tokens: int = typer.Option(800_000, "--max-tokens"),
+    specialist: list[str] | None = typer.Option(None, "--specialist"),
+    resume: bool = typer.Option(False, "--resume"),
+    no_hud: bool = typer.Option(False, "--no-hud"),
+    hud: bool = typer.Option(False, "--hud"),
+) -> None:
+    from silentwitness_agent.cli_commands.investigate import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    _run(
+        case_id,
+        cli_ctx.config,
+        cli_ctx.no_color,
+        cli_ctx.quiet,
+        cli_ctx.debug,
+        model=model,
+        max_iterations=max_iterations,
+        max_tokens=max_tokens,
+        no_hud=no_hud,
+        hud=hud,
+        resume=resume,
+    )
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
