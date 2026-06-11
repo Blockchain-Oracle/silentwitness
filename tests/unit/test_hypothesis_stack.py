@@ -15,6 +15,7 @@ from silentwitness_agent.hypothesis.stack import (
 )
 from silentwitness_agent.hypothesis.types import (
     BudgetExceeded,
+    BudgetExhaustedReason,
     Hypothesis,
     HypothesisEvent,
     HypothesisStatus,
@@ -98,8 +99,10 @@ def test_dispatch_inactive_hypothesis_raises(tmp_path: Path) -> None:
 
 def test_dispatch_budget_enforcer_denied_raises_budget_exceeded(tmp_path: Path) -> None:
     class _DenyAll:
-        def check_dispatch(self, _h: Hypothesis) -> bool:
-            return False
+        def check_dispatch(self, h: Hypothesis) -> None:
+            raise BudgetExceeded(
+                h.id, BudgetExhaustedReason.TOKEN_BUDGET_EXHAUSTED, 5000, 0, 5000, 10
+            )
 
     s = _stack(tmp_path, budget=_DenyAll())
     h = s.form(_STMT, SpecialistName.MEMORY)

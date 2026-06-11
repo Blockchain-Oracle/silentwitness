@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from silentwitness_agent.hypothesis.types import (
     BudgetExceeded,
+    BudgetExhaustedReason,
     Hypothesis,
     HypothesisEvent,
     HypothesisEventType,
@@ -49,8 +50,8 @@ def _e(**kwargs: object) -> HypothesisEvent:
 def test_hypothesis_constructs_with_defaults() -> None:
     h = _h()
     assert h.status == HypothesisStatus.ACTIVE
-    assert h.tokens_budgeted == 5000
-    assert h.steps_budgeted == 10
+    assert h.tokens_budgeted is None
+    assert h.steps_budgeted is None
     assert h.tokens_consumed == 0
     assert h.steps_consumed == 0
     assert h.formed_from is None
@@ -194,7 +195,7 @@ def test_budget_exceeded_subclasses_workflow_error() -> None:
 
 
 def test_budget_exceeded_is_exception() -> None:
-    exc = BudgetExceeded("token budget exhausted")
+    exc = BudgetExceeded("H-001", BudgetExhaustedReason.TOKEN_BUDGET_EXHAUSTED, 5000, 3, 5000, 10)
     with pytest.raises(BudgetExceeded):
         raise exc
 
@@ -260,4 +261,6 @@ def test_hypothesis_formed_from_rejects_empty_string() -> None:
 
 def test_budget_exceeded_caught_as_workflow_error() -> None:
     with pytest.raises(WorkflowError):
-        raise BudgetExceeded("token budget exhausted")
+        raise BudgetExceeded(
+            "H-001", BudgetExhaustedReason.TOKEN_BUDGET_EXHAUSTED, 5000, 3, 5000, 10
+        )

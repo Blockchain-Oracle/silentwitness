@@ -31,8 +31,47 @@ class HypothesisEventType(StrEnum):
     ABANDON = "abandon"
 
 
+class BudgetExhaustedReason(StrEnum):
+    """Exhaustion reason codes carried by ``BudgetExceeded``.
+
+    Using a StrEnum makes ``if exc.reason == BudgetExhaustedReason.TOKEN_BUDGET_EXHAUSTED``
+    exhaustively checkable by mypy — a misspelled string literal would be a type error.
+    """
+
+    TOKEN_BUDGET_EXHAUSTED = "TOKEN_BUDGET_EXHAUSTED"  # noqa: S105
+    STEP_BUDGET_EXHAUSTED = "STEP_BUDGET_EXHAUSTED"
+
+
 class BudgetExceeded(WorkflowError):  # noqa: N818 — name mandated by BDD spec
-    """Raised when a hypothesis exhausts its token or step budget."""
+    """Raised when a hypothesis exhausts its token or step budget.
+
+    Carries structured context so callers can log a useful ABANDON reason
+    without re-querying enforcer state.
+
+    Attributes: ``reason`` (``BudgetExhaustedReason``), ``tokens_consumed``,
+    ``steps_consumed``, ``tokens_budgeted``, ``steps_budgeted``.
+    """
+
+    def __init__(
+        self,
+        hypothesis_id: str,
+        reason: BudgetExhaustedReason,
+        tokens_consumed: int,
+        steps_consumed: int,
+        tokens_budgeted: int,
+        steps_budgeted: int,
+    ) -> None:
+        super().__init__(
+            f"{reason}: hypothesis={hypothesis_id} "
+            f"tokens={tokens_consumed}/{tokens_budgeted} "
+            f"steps={steps_consumed}/{steps_budgeted}"
+        )
+        self.hypothesis_id = hypothesis_id
+        self.reason = reason
+        self.tokens_consumed = tokens_consumed
+        self.steps_consumed = steps_consumed
+        self.tokens_budgeted = tokens_budgeted
+        self.steps_budgeted = steps_budgeted
 
 
 class Hypothesis(BaseModel):
@@ -69,9 +108,9 @@ class Hypothesis(BaseModel):
         description="Audit IDs of confirming evidence.",
     )
     assigned_specialist: SpecialistName | None = Field(default=None)
-    tokens_budgeted: int = Field(default=5000, ge=0)
+    tokens_budgeted: int | None = Field(default=None, ge=1)
     tokens_consumed: int = Field(default=0, ge=0)
-    steps_budgeted: int = Field(default=10, ge=0)
+    steps_budgeted: int | None = Field(default=None, ge=1)
     steps_consumed: int = Field(default=0, ge=0)
 
 
@@ -100,6 +139,7 @@ def make_hypothesis_id(seq: int) -> str:
 
 __all__ = [
     "BudgetExceeded",
+    "BudgetExhaustedReason",
     "Hypothesis",
     "HypothesisEvent",
     "HypothesisEventType",
