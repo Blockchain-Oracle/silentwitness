@@ -147,9 +147,9 @@ def test_broken_verify_link_context_window(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_expand_for_pdf_produces_superscript_link(tmp_path: Path) -> None:
+def test_expand_for_pdf_produces_superscript_link() -> None:
     body = "PowerShell ran [verify:F-001/sift-aj-20260613-007]."
-    out = VerifyLinkRenderer().expand_for_pdf(body, audit_dir=tmp_path)
+    out = VerifyLinkRenderer().expand_for_pdf(body)
     assert "[<sup>verify:F-001/sift-aj-20260613-007</sup>]" in out
     assert "(#audit-sift-aj-20260613-007)" in out
 
@@ -159,9 +159,9 @@ def test_expand_for_pdf_produces_superscript_link(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_expand_for_pdf_leaves_other_text_unchanged(tmp_path: Path) -> None:
+def test_expand_for_pdf_leaves_other_text_unchanged() -> None:
     body = "Intro text. [verify:F-001/sift-aj-20260613-007]. Conclusion."
-    out = VerifyLinkRenderer().expand_for_pdf(body, audit_dir=tmp_path)
+    out = VerifyLinkRenderer().expand_for_pdf(body)
     assert "Intro text." in out
     assert "Conclusion." in out
     # The original plain ref is gone
@@ -183,9 +183,9 @@ def test_expand_for_markdown_noop() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_expand_for_pdf_multiple_refs_same_line(tmp_path: Path) -> None:
+def test_expand_for_pdf_multiple_refs_same_line() -> None:
     body = "[verify:F-001/sift-aj-20260613-001] and [verify:F-002/sift-aj-20260613-002]."
-    out = VerifyLinkRenderer().expand_for_pdf(body, audit_dir=tmp_path)
+    out = VerifyLinkRenderer().expand_for_pdf(body)
     assert "(#audit-sift-aj-20260613-001)" in out
     assert "(#audit-sift-aj-20260613-002)" in out
     assert "[verify:F-001/sift-aj-20260613-001]" not in out
@@ -224,8 +224,24 @@ def test_extract_span_positions_correct() -> None:
 
 def test_broken_verify_link_context_has_ellipsis(tmp_path: Path) -> None:
     d = _audit_dir(tmp_path, [])
-    body = "A" * 100 + "[verify:F-001/sift-alice-20260602-007]" + "B" * 100
+    ref_token = "[verify:F-001/sift-alice-20260602-007]"  # noqa: S105
+    body = "A" * 100 + ref_token + "B" * 100
     with pytest.raises(BrokenVerifyLink) as exc_info:
         VerifyLinkRenderer().validate(body, audit_dir=d)
     ctx = exc_info.value.context
     assert "…" in ctx
+    # context window is ±40 chars around the ref edges + up to 2 ellipsis chars
+    max_expected_len = 40 + len(ref_token) + 40 + 2
+    assert len(ctx) <= max_expected_len
+
+
+# ---------------------------------------------------------------------------
+# 15. validate() with nonexistent audit_dir raises BrokenVerifyLink
+# ---------------------------------------------------------------------------
+
+
+def test_validate_nonexistent_audit_dir_raises(tmp_path: Path) -> None:
+    body = "Ref [verify:F-001/sift-aj-20260613-001]."
+    with pytest.raises(BrokenVerifyLink) as exc_info:
+        VerifyLinkRenderer().validate(body, audit_dir=tmp_path / "nonexistent")
+    assert exc_info.value.audit_id == "sift-aj-20260613-001"

@@ -1,4 +1,4 @@
-"""Unit tests for AuditIndex (9 tests)."""
+"""Unit tests for AuditIndex (10 tests)."""
 
 from __future__ import annotations
 
@@ -94,7 +94,24 @@ def test_contains_returns_true_for_indexed(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 6. from_dir returns empty index when audit_dir does not exist
+# 6. from_dir skips non-dict JSON values (valid JSON but not a dict)
+# ---------------------------------------------------------------------------
+
+
+def test_from_dir_skips_non_dict_json_lines(tmp_path: Path) -> None:
+    audit_dir = tmp_path / "audit"
+    audit_dir.mkdir()
+    (audit_dir / "mixed.jsonl").write_text(
+        '["not", "a", "dict"]\n{"audit_id": "sift-aj-20260613-001", "tool": "vol3"}\n42\n',
+        encoding="utf-8",
+    )
+    index = AuditIndex.from_dir(audit_dir)
+    assert len(index) == 1
+    assert index.contains("sift-aj-20260613-001")
+
+
+# ---------------------------------------------------------------------------
+# 8. from_dir returns empty index when audit_dir does not exist
 # ---------------------------------------------------------------------------
 
 
@@ -104,7 +121,7 @@ def test_from_dir_nonexistent_dir_returns_empty(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 7. from_dir skips malformed JSON lines without crashing
+# 9. from_dir skips malformed JSON lines without crashing
 # ---------------------------------------------------------------------------
 
 
@@ -121,7 +138,7 @@ def test_from_dir_skips_malformed_lines(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 8. from_dir skips records without audit_id field; ts field is captured
+# 10. from_dir skips records without audit_id field; ts field is captured
 # ---------------------------------------------------------------------------
 
 
@@ -143,7 +160,7 @@ def test_from_dir_captures_ts_and_skips_no_audit_id(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 9. from_dir deduplicates — first occurrence of an audit_id wins
+# 11. from_dir deduplicates — first occurrence of an audit_id wins
 # ---------------------------------------------------------------------------
 
 
