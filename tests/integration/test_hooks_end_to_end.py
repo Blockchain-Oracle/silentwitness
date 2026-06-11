@@ -21,6 +21,7 @@ from pydantic_ai.models.test import TestModel
 from silentwitness_agent.hooks import build_investigator_hooks
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
+from silentwitness_agent.hypothesis.types import SpecialistName
 from silentwitness_agent.investigator import (
     InvestigatorDeps,
     InvestigatorResult,
@@ -102,14 +103,20 @@ async def test_hooks_end_to_end_produces_valid_audit_jsonl(tmp_path: Path) -> No
 
 
 @pytest.mark.anyio
-async def test_hooks_budget_record_tokens_called_per_step(tmp_path: Path) -> None:
-    """BudgetEnforcer.record_tokens is called for each model step when a hypothesis is active."""
+async def test_hooks_budget_record_tokens_attributed_to_active_hypothesis(
+    tmp_path: Path,
+) -> None:
+    """record_tokens is called with the active hypothesis_id when a hypothesis is active."""
     case_dir = tmp_path / "case_budget"
     case_dir.mkdir()
     examiner = "aj"
 
     stack = HypothesisStack(case_dir=case_dir, examiner=examiner)
     budget = BudgetEnforcer()
+    # Form a hypothesis BEFORE the agent run so it is active during model steps.
+    stack.form("If C2 beacon, expect DNS TTL anomaly", SpecialistName.NETWORK)
+    hyp_id = stack.snapshot().active.id  # type: ignore[union-attr]
+
     hooks = build_investigator_hooks(case_dir, examiner, stack, budget)
 
     test_agent: Agent[InvestigatorDeps, InvestigatorResult] = Agent(
@@ -135,9 +142,9 @@ async def test_hooks_budget_record_tokens_called_per_step(tmp_path: Path) -> Non
     record_tokens_calls: list[tuple[str, int, int]] = []
     original_record = budget.record_tokens
 
-    def _spy(hyp_id: str, prompt: int, completion: int) -> None:
-        record_tokens_calls.append((hyp_id, prompt, completion))
-        original_record(hyp_id, prompt, completion)
+    def _spy(h_id: str, prompt: int, completion: int) -> None:
+        record_tokens_calls.append((h_id, prompt, completion))
+        original_record(h_id, prompt, completion)
 
     with (
         patch("silentwitness_agent.investigator.build_investigator", return_value=cfg),
@@ -147,8 +154,13 @@ async def test_hooks_budget_record_tokens_called_per_step(tmp_path: Path) -> Non
     ):
         await investigate(case_dir, examiner, "test prompt")
 
-    # Without an active hypothesis, record_tokens is not called — that is the correct
-    # behaviour per the story spec (token attribution requires a named hypothesis).
-    # The finish line IS written regardless.
+    # With an active hypothesis, record_tokens must have been called at least once,
+    # and every call must be attributed to the correct hypothesis_id.
+    assert len(record_tokens_calls) >= 1
+    for h_id, _prompt, _completion in record_tokens_calls:
+        assert h_id == hyp_id
+
+    # finish line must still be present and carry zero append failures.
     finish_lines = [ln for ln in _read_jsonl(case_dir) if ln["type"] == "finish"]
     assert len(finish_lines) == 1
+    assert finish_lines[0]["audit_append_failures"] == 0

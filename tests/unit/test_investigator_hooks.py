@@ -310,6 +310,7 @@ async def test_after_run_emits_finish_line(tmp_path: Path) -> None:
     assert finish["final_state"] == "COMPLETED"
     assert finish["model_used"] == "test-model"
     assert finish["total_tokens_consumed"] == 500
+    assert finish["audit_append_failures"] == 0
     assert "stack_snapshot" in finish
     snap = finish["stack_snapshot"]
     assert "active" in snap
