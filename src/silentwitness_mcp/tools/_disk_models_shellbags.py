@@ -12,7 +12,9 @@ Column reality (verified against context/domain/06 §5.8 + encyclopedia §23):
  - AbsolutePath is verbatim SBECmd tree reconstruction — backslash
    separators are preserved as-is (even on POSIX hosts).
  - IconReference carries the literal path stored in the BagMRU ShellItem
-   (e.g. "C:\\Tools\\Ethereal\\ethereal.ico") — forensically significant."""
+   (e.g. "C:\\Tools\\Ethereal\\ethereal.ico") — forensically significant; blank
+   values are coerced to None (same empty-string normalisation as
+   FirstInteracted / LastInteracted)."""
 
 from __future__ import annotations
 
@@ -21,6 +23,9 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
+# extra="ignore": SBECmd emits ShellItem-type-specific extra columns
+# (network locations, ZIP/FTP paths, custom namespaces) that vary by row.
+# Contrast with ShellbagsOutput (extra="forbid") — the output shape is stable.
 _ROW_CONFIG = ConfigDict(frozen=True, extra="ignore", populate_by_name=True)
 _OUT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
@@ -56,6 +61,7 @@ class ShellbagEntry(BaseModel):
     def _coerce(cls, data: Any) -> Any:
         if not isinstance(data, dict):
             return data
+        data = dict(data)  # never mutate caller's dict
         # Coerce empty/whitespace-only optional fields → None.
         for k in _OPTIONAL_INT_FIELDS + _OPTIONAL_STR_FIELDS:
             if not (data.get(k) or "").strip():

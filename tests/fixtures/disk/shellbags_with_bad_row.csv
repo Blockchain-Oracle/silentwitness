@@ -1,0 +1,3 @@
+BagPath,Slot,NodeSlot,MRUPosition,AbsolutePath,ShellType,Value,ChildBags,FirstInteracted,LastInteracted,LastWriteTime,MFTEntry,MFTSequenceNumber,IconReference,HasExplored,Hive,RegistryPath
+0\0,1,1,0,Desktop\My Computer\C:\Users\AJ\Documents,File System Directory,Documents,2,2024-09-01 10:00:00,2024-11-15 14:30:00,2024-11-15 14:30:00,1234567,1,,True,NTUSER.DAT,SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU
+0\1,2,2,1,Desktop\My Computer\E:\confidential\,Root,Removable Disk (E:) [ABCD1234],0,2024-10-01 09:00:00,2024-11-10 16:00:00,NOT_A_DATETIME,,,C:\Tools\Ethereal\ethereal.ico,True,UsrClass.dat,Local Settings\Software\Microsoft\Windows\Shell\BagMRU

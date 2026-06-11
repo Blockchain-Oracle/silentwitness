@@ -10,6 +10,7 @@ from typing import Any
 
 import pytest
 from tests.unit.tools._disk_test_helpers import (
+    FakeProc,
     force_dotnet,
     force_mount_ok,
     force_sbecmd,
@@ -30,7 +31,8 @@ MODEL = "claude-sonnet-4-6"
 
 _FIXTURE_DIR = Path(__file__).resolve().parents[2] / "fixtures" / "disk"
 _SHELLBAGS_SAMPLE = _FIXTURE_DIR / "shellbags_sample.csv"
-_CSV_FILENAME = "20260611160000_SBECmd_Output.csv"
+# SBECmd names output after the hive: <Username>_UsrClass.csv / <Username>_NTUSER.csv
+_CSV_FILENAME = "AJ_UsrClass.csv"
 
 
 @pytest.fixture
@@ -292,6 +294,30 @@ def test_parse_shellbags_sbecmd_not_installed_refuses(
     assert envelope.success is False
     assert envelope.advisories[-1] == DiskFailureReason.EZ_TOOL_NOT_FOUND.value
     assert calls == []
+
+
+def test_parse_shellbags_serilog_error_on_exit_zero_refuses(
+    env: tuple[Path, Path, Path, AuditLogger, EvidenceRegistry],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """SBECmd exits 0 with [FTL] on stderr → TOOL_FAILED advisory.
+    This is the primary reliability hazard: SBECmd calls Environment.Exit(0)
+    on errors — only Serilog stderr parsing detects the failure."""
+    force_dotnet(monkeypatch, tmp_path)
+    force_mount_ok(monkeypatch)
+    force_sbecmd(monkeypatch, tmp_path)
+    serilog_stderr = b"[08:00:01 FTL] SBECmd: unable to open hive\n"
+    install_dotnet_mock(
+        monkeypatch,
+        csv_fixture=_SHELLBAGS_SAMPLE,
+        csv_out_dir=env[2],
+        csv_filename=_CSV_FILENAME,
+        proc=FakeProc(stdout=b"", stderr=serilog_stderr, returncode=0),
+    )
+    envelope = _invoke(env)
+    assert envelope.success is False
+    assert envelope.advisories[-1] == DiskFailureReason.TOOL_FAILED.value
 
 
 def test_parse_shellbags_corroboration_propagates_on_refuse(

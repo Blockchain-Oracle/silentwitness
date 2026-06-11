@@ -333,10 +333,13 @@ async def parse_shellbags(
 
     ``evidence_path`` may be a directory (batch ``-d``, preferred — SBECmd
     picks up both NTUSER.DAT + UsrClass.dat together) or a single hive file
-    (``-f``). SBECmd exit code is unreliable; Serilog stderr scanning is
-    mandatory (``check_serilog_stderr=True``).
+    (``-f``). SBECmd is NOT pre-installed on stock SIFT 2026;
+    ``EZ_TOOL_NOT_FOUND`` fires if the DLL is absent. SBECmd exit code is
+    unreliable; Serilog stderr scanning is mandatory
+    (``check_serilog_stderr=True``).
 
-    Post-success: if the input is a directory without ``UsrClass.dat``,
+    Post-success: if the input is a directory without ``UsrClass.dat``
+    (case-insensitive check — handles usrclass.dat from image mounts),
     a sparse-results advisory is appended — Win10+ writes the bulk of
     ShellBag data to UsrClass.dat and NTUSER.DAT-only results will be thin."""
     ez_argv = [
@@ -349,7 +352,7 @@ async def parse_shellbags(
         tool_name="parse_shellbags",
         ez_tool="SBECmd",
         ez_argv=ez_argv,
-        csv_glob_pattern="*_SBECmd_Output.csv",
+        csv_glob_pattern="**/*.csv",
         csv_out_dir=csv_out,
         output_cls=ShellbagsOutput,
         parse_csv=_parse_shellbag_rows,
@@ -366,7 +369,10 @@ async def parse_shellbags(
     )
     if not envelope.success or envelope.data is None:
         return envelope
-    if evidence_path.is_dir() and not (evidence_path / "UsrClass.dat").exists():
+    _usrclass_present = evidence_path.is_dir() and any(
+        p.name.lower() == "usrclass.dat" for p in evidence_path.iterdir() if p.is_file()
+    )
+    if evidence_path.is_dir() and not _usrclass_present:
         return envelope.model_copy(
             update={
                 "advisories": (
