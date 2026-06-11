@@ -1,0 +1,11 @@
+amcache
+appcompatcache
+bam
+compname
+currentversion
+run
+services
+shellbags
+timezone
+userassist
+usbstor

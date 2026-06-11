@@ -1,0 +1,12 @@
+compname v.20200515
+(System) Get ComputerName value from System hive
+
+Key path: SYSTEM\CurrentControlSet\Control\ComputerName\ComputerName
+LastWrite: 2024-01-15 08:30:00Z
+
+ComputerName        REG_SZ    WORKSTATION-01
+
+Key path: SYSTEM\CurrentControlSet\Control\ComputerName\ActiveComputerName
+LastWrite: 2024-01-15 08:30:00Z
+
+ComputerName        REG_SZ    WORKSTATION-01

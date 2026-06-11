@@ -116,6 +116,7 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "parse_shimcache": EMPTY_PATTERNS,
     "parse_prefetch": EMPTY_PATTERNS,
     "parse_shellbags": EMPTY_PATTERNS,
+    "regripper_run": EMPTY_PATTERNS,
     "parse_evtx": _EVTX,
     # Explicit "universal rules only" sentinel — callers that don't need
     # per-tool transforms use this rather than a typo'd tool name silently
