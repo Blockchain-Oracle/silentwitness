@@ -1,0 +1,3 @@
+RecordNumber,EventRecordId,TimeCreated,EventId,Level,Provider,Channel,Computer,UserId,MapDescription,UserName,RemoteHost,PayloadData1,PayloadData2,PayloadData3,PayloadData4,PayloadData5,PayloadData6,ExecutableInfo,HiddenRecord,SourceFile,Keywords,Payload
+1,12341,2024-01-15 08:30:00.0000000,4624,Information,Microsoft-Windows-Security-Auditing,Security,WORKSTATION-01,S-1-5-18,An account was successfully logged on,SYSTEM,,-,,,,,,False,False,Security.evtx,-9218868437227405312,
+2,12342,2024-01-15 08:31:05.0000000,4672,Information,Microsoft-Windows-Security-Auditing,Security,WORKSTATION-01,S-1-5-18,Special privileges assigned to new logon,SYSTEM,,SeAssignPrimaryToken
