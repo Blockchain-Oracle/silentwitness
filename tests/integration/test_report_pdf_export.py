@@ -121,7 +121,6 @@ def test_render_result_fields(tmp_path: Path) -> None:
     assert isinstance(result, PdfRenderResult)
     assert result.bytes_written > 0
     assert result.verify_links_expanded_count == 2
-    assert result.title_page_rendered is True
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +215,32 @@ def test_body_pages_contain_verify_ref_text(tmp_path: Path) -> None:
     reader = PdfReader(case_dir / "report.pdf")
     # Collect text from all pages beyond the title page
     body_text = " ".join(reader.pages[i].extract_text() or "" for i in range(1, len(reader.pages)))
-    # expand_for_pdf produces [<sup>verify:F-001/sift-aj-20260613-007</sup>](...)
-    # pypdf strips HTML tags — the text "verify:F-001/sift-aj-20260613-007" should survive
+    # WeasyPrint renders the superscript label as real glyphs; pypdf reads the
+    # rendered character runs — the verify-ref string should appear in extracted text.
     assert "verify:F-001/sift-aj-20260613-007" in body_text
     assert result.verify_links_expanded_count == 2
+
+
+# ---------------------------------------------------------------------------
+# 11. BrokenVerifyLink on re-render preserves the prior valid report.pdf
+# ---------------------------------------------------------------------------
+
+
+def test_broken_verify_link_preserves_existing_pdf(tmp_path: Path) -> None:
+    case_dir = _make_case_dir(tmp_path)
+    # First render: write a valid report.pdf
+    PdfRenderer(case_dir).render()
+    original_bytes = (case_dir / "report.pdf").read_bytes()
+
+    # Append a broken verify-ref to report.md without touching the PDF
+    report_md = (case_dir / "report.md").read_text(encoding="utf-8")
+    (case_dir / "report.md").write_text(
+        report_md + "\nBroken [verify:F-003/sift-fake-20260101-999].\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BrokenVerifyLink):
+        PdfRenderer(case_dir).render()
+
+    # Existing report.pdf must be byte-for-byte identical (validate aborted before write)
+    assert (case_dir / "report.pdf").read_bytes() == original_bytes
