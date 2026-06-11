@@ -1,0 +1,6 @@
+BagPath,Slot,NodeSlot,MRUPosition,AbsolutePath,ShellType,Value,ChildBags,FirstInteracted,LastInteracted,LastWriteTime,MFTEntry,MFTSequenceNumber,IconReference,HasExplored,Hive,RegistryPath
+0\0,1,1,0,Desktop\My Computer\C:\Users\AJ\Documents,File System Directory,Documents,2,2024-09-01 10:00:00,2024-11-15 14:30:00,2024-11-15 14:30:00,1234567,1,,True,NTUSER.DAT,SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU
+0\1,2,2,1,Desktop\My Computer\E:\confidential\,Root,Removable Disk (E:) [ABCD1234],0,2024-10-01 09:00:00,2024-11-10 16:00:00,2024-11-10 16:00:00,,,C:\Tools\Ethereal\ethereal.ico,True,UsrClass.dat,Local Settings\Software\Microsoft\Windows\Shell\BagMRU
+0\2,3,3,,\\fileserver\share\data,Network Resource,share,1,,2024-11-12 11:00:00,2024-11-12 11:00:00,,,,True,NTUSER.DAT,SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU
+0\3,4,4,3,Desktop\My Computer\C:\Tools\deleted_folder,File System Directory,deleted_folder,0,2024-08-15 13:00:00,,2024-08-15 13:00:00,,,,False,NTUSER.DAT,SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU
+0\4,5,5,2,Desktop\My Computer\C:\Windows\System32,File System Directory,System32,8,2023-01-01 09:00:00,2024-11-14 10:00:00,2024-11-14 10:00:00,45678,2,,True,NTUSER.DAT,SOFTWARE\Classes\Local Settings\Software\Microsoft\Windows\Shell\BagMRU

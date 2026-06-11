@@ -35,11 +35,18 @@ from silentwitness_mcp.tools._disk_models_prefetch import (
     PrefetchEntry,
     PrefetchOutput,
 )
+from silentwitness_mcp.tools._disk_models_shellbags import (
+    SHELLBAGS_CAVEATS,
+    SHELLBAGS_CORROBORATION,
+    ShellbagEntry,
+    ShellbagsOutput,
+)
 from silentwitness_mcp.tools._disk_pipeline import run_disk_wrapper
 
-# PECmd is NOT pre-installed on stock SIFT 2026 — absence produces
-# PECMD_NOT_INSTALLED advisory. Testable via monkeypatch on this constant.
+# PECmd and SBECmd are NOT pre-installed on stock SIFT 2026 — absence
+# produces EZ_TOOL_NOT_FOUND. Testable via monkeypatch on these constants.
 _PECMD_DLL: Final[Path] = dll_path_for("PECmd")
+_SBECMD_DLL: Final[Path] = dll_path_for("SBECmd")
 
 
 def _parse_mft_rows(rows: list[dict[str, str | None]], truncated: bool) -> MftOutput:
@@ -298,4 +305,84 @@ async def parse_prefetch(
     return envelope
 
 
-__all__ = ["parse_amcache", "parse_mft", "parse_prefetch", "parse_shimcache"]
+def _parse_shellbag_rows(rows: list[dict[str, str | None]], truncated: bool) -> ShellbagsOutput:
+    """Row-by-row parse of SBECmd CSV. Per-row ValidationErrors are skipped
+    (partial-success preferred over hard reject)."""
+    entries: list[ShellbagEntry] = []
+    skipped = 0
+    for row in rows:
+        try:
+            entries.append(ShellbagEntry.model_validate(row))
+        except ValidationError:
+            skipped += 1
+    return ShellbagsOutput(entries=tuple(entries), truncated=truncated or skipped > 0)
+
+
+async def parse_shellbags(
+    evidence_path: Path,
+    csv_out: Path,
+    *,
+    case_dir: Path,
+    evidence_registry: EvidenceRegistry,
+    audit_logger: AuditLogger,
+    model_used: str,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> ToolResponse[ShellbagsOutput]:
+    """Parse NTUSER.DAT / UsrClass.dat ShellBag hives via SBECmd → typed
+    :class:`ShellbagsOutput`.
+
+    ``evidence_path`` may be a directory (batch ``-d``, preferred — SBECmd
+    picks up both NTUSER.DAT + UsrClass.dat together) or a single hive file
+    (``-f``). SBECmd exit code is unreliable; Serilog stderr scanning is
+    mandatory (``check_serilog_stderr=True``).
+
+    Post-success: if the input is a directory without ``UsrClass.dat``,
+    a sparse-results advisory is appended — Win10+ writes the bulk of
+    ShellBag data to UsrClass.dat and NTUSER.DAT-only results will be thin."""
+    ez_argv = [
+        "--csv",
+        str(csv_out),
+        "-d" if evidence_path.is_dir() else "-f",
+        str(evidence_path),
+    ]
+    envelope = await run_disk_wrapper(
+        tool_name="parse_shellbags",
+        ez_tool="SBECmd",
+        ez_argv=ez_argv,
+        csv_glob_pattern="*_SBECmd_Output.csv",
+        csv_out_dir=csv_out,
+        output_cls=ShellbagsOutput,
+        parse_csv=_parse_shellbag_rows,
+        caveats=SHELLBAGS_CAVEATS,
+        corroboration=SHELLBAGS_CORROBORATION,
+        check_serilog_stderr=True,
+        dll_check_override=_SBECMD_DLL,
+        evidence_path=evidence_path,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
+        timeout_s=timeout_s,
+    )
+    if not envelope.success or envelope.data is None:
+        return envelope
+    if evidence_path.is_dir() and not (evidence_path / "UsrClass.dat").exists():
+        return envelope.model_copy(
+            update={
+                "advisories": (
+                    *envelope.advisories,
+                    "UsrClass.dat absent — Win10+ stores the bulk of ShellBags in "
+                    "UsrClass.dat; results from NTUSER.DAT alone will be sparse",
+                )
+            }
+        )
+    return envelope
+
+
+__all__ = [
+    "parse_amcache",
+    "parse_mft",
+    "parse_prefetch",
+    "parse_shellbags",
+    "parse_shimcache",
+]
