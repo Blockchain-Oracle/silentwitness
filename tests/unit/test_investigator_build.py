@@ -1,19 +1,22 @@
 """Unit tests for investigator factory — ≥7 tests per story spec.
 
 No network calls — uses pydantic-ai's built-in TestModel stub and fake API
-keys (key is validated at call-time, not at Agent construction).
+keys (keys are validated at call-time, not at Agent construction).
 """
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from pydantic_ai import Agent
 from pydantic_ai.mcp import MCPServerStdio
+from pydantic_ai.models import Model
 from pydantic_ai.models.test import TestModel
 
+from silentwitness_agent.hypothesis.types import SpecialistName
 from silentwitness_agent.investigator import (
     _DEFAULT_MAX_ITERS,
     _DEFAULT_MODEL,
@@ -21,6 +24,7 @@ from silentwitness_agent.investigator import (
     InvestigatorDeps,
     InvestigatorResult,
     _AgentConfig,
+    _parse_max_iters_env,
     _resolve_model,
     build_investigator,
     investigate,
@@ -96,6 +100,18 @@ def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPa
     assert cfg.max_iters == 7
 
 
+def test_factory_invalid_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "not_a_number")
+    with pytest.raises(ValueError, match="SILENTWITNESS_MAX_ITERS"):
+        _parse_max_iters_env(50)
+
+
+def test_factory_zero_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "0")
+    with pytest.raises(ValueError, match="must be >= 1"):
+        _parse_max_iters_env(50)
+
+
 # ---------------------------------------------------------------------------
 # Factory — MCP toolset
 # ---------------------------------------------------------------------------
@@ -115,6 +131,14 @@ def test_mcp_toolset_command_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
     ts: MCPServerStdio = cfg.agent._user_toolsets[0]  # type: ignore[assignment]
     assert ts.command == "python"
     assert ts.args == ["-m", "silentwitness_mcp"]
+
+
+def test_mcp_sampling_model_is_model_instance(monkeypatch: pytest.MonkeyPatch) -> None:
+    """sampling_model must be a Model instance (not a raw string) to avoid AttributeError."""
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
+    cfg = build_investigator()
+    ts: MCPServerStdio = cfg.agent._user_toolsets[0]  # type: ignore[assignment]
+    assert isinstance(ts.sampling_model, Model)
 
 
 # ---------------------------------------------------------------------------
@@ -162,8 +186,26 @@ def test_investigator_result_is_frozen() -> None:
         result.model_used = "mutated"  # type: ignore[misc]
 
 
+def test_investigator_result_rejects_negative_counters() -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        InvestigatorResult(
+            hypotheses_formed=-1,
+            hypotheses_confirmed=0,
+            hypotheses_pivoted=0,
+            hypotheses_abandoned=0,
+            findings_staged=0,
+            total_tool_calls=0,
+            total_tokens_consumed=0,
+            time_elapsed_ms=0.0,
+            final_state="COMPLETED",
+            model_used="test",
+        )
+
+
 # ---------------------------------------------------------------------------
-# _resolve_model — vllm routing
+# _resolve_model — vllm routing and passthrough
 # ---------------------------------------------------------------------------
 
 
@@ -174,9 +216,19 @@ def test_resolve_model_vllm_returns_openai_chat_model() -> None:
     assert isinstance(result, OpenAIChatModel)
 
 
-def test_resolve_model_passthrough_returns_string() -> None:
-    result = _resolve_model("anthropic:claude-opus-4-7")
-    assert result == "anthropic:claude-opus-4-7"
+def test_resolve_model_vllm_empty_url_raises() -> None:
+    with pytest.raises(ValueError, match="vllm: prefix requires a full HTTP"):
+        _resolve_model("vllm:")
+
+
+def test_resolve_model_vllm_non_http_url_raises() -> None:
+    with pytest.raises(ValueError, match="vllm: prefix requires a full HTTP"):
+        _resolve_model("vllm:ftp://localhost:8000")
+
+
+def test_resolve_model_passthrough_returns_model_instance() -> None:
+    result = _resolve_model("test")
+    assert isinstance(result, Model)
 
 
 # ---------------------------------------------------------------------------
@@ -214,10 +266,16 @@ async def test_investigate_completed_path(tmp_path: Path) -> None:
     assert result.final_state == "COMPLETED"
     assert result.model_used == "test"
     assert result.time_elapsed_ms >= 0
+    assert result.findings_staged == 1
+    assert result.total_tool_calls == 4
+    assert result.hypotheses_formed == 0  # fresh stack, agent ran but no form() calls
+    assert result.total_tokens_consumed >= 0
 
 
 @pytest.mark.anyio
-async def test_investigate_max_iterations_path(tmp_path: Path) -> None:
+async def test_investigate_max_iterations_path(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     from pydantic_ai.exceptions import UsageLimitExceeded
 
     cfg = _make_test_cfg()
@@ -228,7 +286,43 @@ async def test_investigate_max_iterations_path(tmp_path: Path) -> None:
     with (
         patch("silentwitness_agent.investigator.build_investigator", return_value=cfg),
         patch.object(cfg.agent, "run", side_effect=_fail),
+        caplog.at_level(logging.WARNING),
     ):
         result = await investigate(tmp_path, "aj", "test prompt")
+
     assert result.final_state == "MAX_ITERATIONS"
     assert result.model_used == "test"
+    assert result.findings_staged == 0
+    assert result.total_tokens_consumed == 0
+    assert "UsageLimitExceeded" in caplog.text
+
+
+@pytest.mark.anyio
+async def test_investigate_max_iterations_abandons_active_hypothesis(tmp_path: Path) -> None:
+    """stack.abandon() is called when an active hypothesis exists at MAX_ITERATIONS."""
+
+    from pydantic_ai.exceptions import UsageLimitExceeded
+
+    from silentwitness_agent.hypothesis.stack import HypothesisStack
+
+    cfg = _make_test_cfg()
+    pre_seeded_stack = HypothesisStack(case_dir=tmp_path, examiner="aj")
+    pre_seeded_stack.form("If persistence, expect Run-key entry", SpecialistName.DISK)
+
+    async def _fail(*_a: object, **_kw: object) -> None:
+        raise UsageLimitExceeded("request limit reached")
+
+    with (
+        patch("silentwitness_agent.investigator.build_investigator", return_value=cfg),
+        patch("silentwitness_agent.investigator.HypothesisStack", return_value=pre_seeded_stack),
+        patch.object(cfg.agent, "run", side_effect=_fail),
+    ):
+        result = await investigate(tmp_path, "aj", "test prompt")
+
+    assert result.final_state == "MAX_ITERATIONS"
+    # The active hypothesis is abandoned — stack snapshot should reflect it
+    snap = pre_seeded_stack.snapshot()
+    from silentwitness_agent.hypothesis.types import HypothesisStatus
+
+    assert snap.active is None  # abandoned, promoted queue was empty
+    assert any(h.status == HypothesisStatus.ABANDONED for h in snap.history)
