@@ -496,11 +496,11 @@ stories:
   # ─────────────────────────────────────────────────────────────────────
   - id: story-cli-init
     epic: "Epic 12 — CLI + Claude Code drop-in"
-    status: PENDING
+    status: COMPLETE
     depends_on: [common-types, evidence-registry]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/56"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/183"
+    merged_at: "2026-06-11T22:20:00Z"
 
   - id: story-cli-register-evidence
     epic: "Epic 12 — CLI + Claude Code drop-in"
