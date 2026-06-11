@@ -64,3 +64,4 @@ yarn.lock
 
 # Sub-agent research scratch
 /tmp/
+.claude/*.lock
