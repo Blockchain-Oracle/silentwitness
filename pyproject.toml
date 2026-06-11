@@ -61,6 +61,8 @@ dev = [
     "cyclonedx-bom>=7",
     "pip-licenses>=5",
     "python-semantic-release>=9",
+    # PDF integration tests — text and annotation extraction from rendered PDFs
+    "pypdf>=4",
 ]
 
 [project.scripts]
