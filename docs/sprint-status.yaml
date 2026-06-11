@@ -434,11 +434,11 @@ stories:
   # ─────────────────────────────────────────────────────────────────────
   - id: story-critic-agent
     epic: "Epic 10 — Critic"
-    status: PENDING
+    status: COMPLETE
     depends_on: [investigator-agent]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/49"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/176"
+    merged_at: "2026-06-11T18:05:32Z"
 
   - id: story-critic-trigger
     epic: "Epic 10 — Critic"
