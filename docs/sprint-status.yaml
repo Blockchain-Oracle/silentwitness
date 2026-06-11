@@ -321,7 +321,7 @@ stories:
 
   - id: story-hayabusa-timeline
     epic: "Epic 7 — Log + Network tool wrappers"
-    status: PENDING
+    status: IN_PROGRESS
     depends_on: [parse-evtx]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/36"
     pr_url: ""

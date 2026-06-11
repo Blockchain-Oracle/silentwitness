@@ -118,6 +118,7 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "parse_shellbags": EMPTY_PATTERNS,
     "regripper_run": EMPTY_PATTERNS,
     "parse_evtx": _EVTX,
+    "hayabusa_csv_timeline": EMPTY_PATTERNS,
     # Explicit "universal rules only" sentinel — callers that don't need
     # per-tool transforms use this rather than a typo'd tool name silently
     # producing wrong output.

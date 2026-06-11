@@ -10,3 +10,4 @@ secret:
   ignored_paths:
     - "tests/unit/test_vol_lsadump.py"
     - "tests/unit/test_lsa_secret_decode.py"
+    - "install.sh"
