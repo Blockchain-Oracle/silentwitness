@@ -242,7 +242,7 @@ def test_hayabusa_audit_write_failure_refuses(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """Audit JSONL write failure after success → TOOL_FAILED, blob cleaned up."""
+    """Audit JSONL write failure after success → TOOL_FAILED, orphan blob deleted."""
     _force_gates_ok(monkeypatch, tmp_path)
     _case_dir, _evtx_dir, csv_out, *_ = env
 
@@ -254,10 +254,17 @@ def test_hayabusa_audit_write_failure_refuses(
     def _always_raise(*_: Any, **__: Any) -> None:
         raise OSError("disk full")
 
+    deleted_blobs: list[Path] = []
+
+    def _capture_delete(blob_path: Path) -> None:
+        deleted_blobs.append(blob_path)
+
     monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa._run_native_log_tool", _fake)
     monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa.append_jsonl_line", _always_raise)
+    monkeypatch.setattr("silentwitness_mcp.tools._log_hayabusa.delete_orphan_blob", _capture_delete)
     resp = _invoke(env)
 
     assert resp.success is False
     assert resp.advisories[1] == LogFailureReason.TOOL_FAILED
     assert any("AUDIT_WRITE_FAILED" in a for a in resp.advisories)
+    assert len(deleted_blobs) == 1
