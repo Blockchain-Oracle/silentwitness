@@ -450,11 +450,11 @@ stories:
 
   - id: story-critic-verdict-handling
     epic: "Epic 10 — Critic"
-    status: PENDING
+    status: COMPLETE
     depends_on: [critic-agent, record-interpretation-tool]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/51"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/178"
+    merged_at: "2026-06-11T18:53:23Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 11 — Report-as-state
