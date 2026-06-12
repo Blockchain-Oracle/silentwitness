@@ -111,8 +111,8 @@ def register_as_investigator_tool(
             case_dir=ctx.deps.case_dir,
             examiner=ctx.deps.examiner,
             hypothesis_id=hypothesis_id,
-            evidence_paths=[],
-            pending_critiques=ctx.deps.pending_critiques,
+            evidence_paths=(),
+            pending_critiques=tuple(ctx.deps.pending_critiques),
         )
         result = await memory_specialist.run(
             question,
