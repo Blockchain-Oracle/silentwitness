@@ -1,0 +1,21 @@
+# SilentWitness
+
+> pitch
+
+<!-- DEMO_VIDEO_URL --> https://youtu.be/PLACEHOLDER
+
+![alt](docs/assets/x.png)
+
+```bash
+docker compose up -d
+```
+
+```mermaid
+flowchart TB
+  A[a (architectural)] --> B[b (architectural)]
+  C[c (architectural)] --> D[d (architectural)]
+  E[e (architectural)] --> F[f (architectural)]
+  P[p (prompt-based)]
+```
+
+MIT
