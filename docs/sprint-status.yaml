@@ -399,11 +399,11 @@ stories:
   # ─────────────────────────────────────────────────────────────────────
   - id: story-memory-specialist
     epic: "Epic 9 — Specialists"
-    status: PENDING
+    status: COMPLETE
     depends_on: [investigator-agent, vol-pslist, vol-pstree-psscan, vol-malfind, vol-netscan, vol-cmdline, vol-dlllist-handles, vol-lsadump]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/45"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/191"
+    merged_at: "2026-06-12"
 
   - id: story-disk-specialist
     epic: "Epic 9 — Specialists"
