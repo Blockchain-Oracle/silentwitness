@@ -51,6 +51,10 @@ SKIP_PATTERNS = (
     "tests/*/fixtures/*",
     "vendored/*",
     ".pre-commit-hooks/*",
+    # Typer command registry — every CLI command registers on a single `app =
+    # typer.Typer(...)` module-level object. Splitting requires typer.add_typer
+    # sub-apps which changes the public CLI surface (docs/ux-spec §2 contract).
+    "src/silentwitness_agent/cli.py",
 )
 
 

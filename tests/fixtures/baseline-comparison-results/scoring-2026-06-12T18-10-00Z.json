@@ -1,0 +1,53 @@
+{
+  "dataset_id": "nitroba",
+  "commit_sha": "fixture-sha",
+  "scored_at": "2026-06-12T18:10:00Z",
+  "baseline": {
+    "dataset_id": "nitroba",
+    "side": "baseline",
+    "true_positives": 5,
+    "false_positives": 1,
+    "hallucinations": 4,
+    "false_negatives": 2,
+    "total_findings_emitted": 10,
+    "time_to_first_finding_seconds": 95.0,
+    "time_to_handoff_ready_report_seconds": 610.0,
+    "precision": 0.5,
+    "recall": 0.7142857142857143,
+    "hallucination_rate": 0.4
+  },
+  "silentwitness": {
+    "dataset_id": "nitroba",
+    "side": "silentwitness",
+    "true_positives": 7,
+    "false_positives": 1,
+    "hallucinations": 0,
+    "false_negatives": 2,
+    "total_findings_emitted": 8,
+    "time_to_first_finding_seconds": 40.0,
+    "time_to_handoff_ready_report_seconds": 250.0,
+    "precision": 0.875,
+    "recall": 0.7777777777777778,
+    "hallucination_rate": 0.0
+  },
+  "classifications": [],
+  "notes": [],
+  "hallucination_examples": [
+    {
+      "side": "baseline",
+      "finding_id": "B-001",
+      "cited_artifact_path": "C:\\Tools\\HotPlugSpy\\dropper.exe",
+      "evidence_shellout_argv": ["find", "/evidence/case-001", "-iname", "dropper.exe"],
+      "evidence_shellout_hits": 0,
+      "excerpt": "C:\\Tools\\HotPlugSpy\\dropper.exe"
+    },
+    {
+      "side": "baseline",
+      "finding_id": "B-002",
+      "cited_artifact_path": "C:\\Users\\bogus\\secret.dat",
+      "evidence_shellout_argv": ["find", "/evidence/case-001", "-iname", "secret.dat"],
+      "evidence_shellout_hits": 0,
+      "excerpt": "C:\\Users\\bogus\\secret.dat"
+    }
+  ]
+}

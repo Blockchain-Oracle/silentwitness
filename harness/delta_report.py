@@ -26,7 +26,7 @@ from harness.delta_report_models import (
     Direction,
     HallucinationCallout,
 )
-from silentwitness_common.atomic_io import write_bytes_atomic  # type: ignore[import-untyped]
+from silentwitness_common.atomic_io import write_bytes_atomic
 
 _BASELINE_COLOR = "#d96c5c"  # ux-spec §3.5 Error red (baseline = "needs improvement")
 _SW_COLOR = "#7fb069"  # ux-spec §3.5 Success green (SilentWitness = improved)
