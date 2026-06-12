@@ -216,6 +216,35 @@ def status(
     raise typer.Exit(code=code)
 
 
+@app.command("review")
+def review(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    finding_id: str | None = typer.Option(None, "--finding-id", "-f"),
+    status_filter: str = typer.Option("DRAFT", "--status"),
+    non_interactive: bool = typer.Option(False, "--non-interactive"),
+) -> None:
+    from silentwitness_agent.cli_commands.review import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = Console(stderr=True, no_color=cli_ctx.no_color)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    examiner = _read_case_examiner(case_dir, fallback=os.environ.get("USER", "examiner"))
+    code = _run(
+        case_dir,
+        case_id,
+        finding_id,
+        status_filter,
+        non_interactive=non_interactive,
+        no_color=cli_ctx.no_color,
+        examiner=examiner,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
