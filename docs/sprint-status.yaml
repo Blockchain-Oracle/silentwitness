@@ -415,11 +415,11 @@ stories:
 
   - id: story-network-specialist
     epic: "Epic 9 — Specialists"
-    status: PENDING
+    status: COMPLETE
     depends_on: [investigator-agent, zeek-run, suricata-run]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/47"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/193"
+    merged_at: "2026-06-12T07:53:47Z"
 
   - id: story-log-specialist
     epic: "Epic 9 — Specialists"
