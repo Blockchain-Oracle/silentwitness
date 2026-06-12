@@ -1,18 +1,13 @@
-"""Disk / NTFS-artifact forensics specialist subagent (architecture §5.2).
-
-Invoked by the investigator via Pydantic AI agent-delegation:
-``dispatch_disk_specialist`` runs this agent inside an @investigator.tool
-and credits tokens against the investigator's usage budget.
-"""
+"""Disk / NTFS-artifact forensics specialist subagent (architecture §5.2)."""
 
 from __future__ import annotations
 
+import logging
 import os
-from typing import TYPE_CHECKING
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models import infer_model
+from pydantic_ai.models import Model, infer_model
 
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
 from silentwitness_agent.specialists._base import (
@@ -21,11 +16,10 @@ from silentwitness_agent.specialists._base import (
     _load_specialist_prompt,
 )
 
-if TYPE_CHECKING:
-    from pydantic_ai.models import Model
+_LOG = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Tool allowlist (architecture §5.2 — 6 disk/registry + 4 record = 10)
+# Tool allowlist — architecture §5.2
 # ---------------------------------------------------------------------------
 
 DISK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
@@ -53,10 +47,22 @@ _HIGH_QUALITY_MODEL = "anthropic:claude-opus-4-7"
 
 def _resolve_specialist_model(model: str | None) -> Model:
     if model is not None:
-        return infer_model(model)
+        try:
+            return infer_model(model)
+        except (ValueError, Exception) as exc:
+            raise ValueError(
+                f"disk specialist: explicit model={model!r} is not a valid Pydantic AI "
+                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
+            ) from exc
     env_model = os.environ.get(_ENV_MODEL_KEY)
     if env_model:
-        return infer_model(env_model)
+        try:
+            return infer_model(env_model)
+        except (ValueError, Exception) as exc:
+            raise ValueError(
+                f"disk specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
+                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
+            ) from exc
     if os.environ.get(_ENV_QUALITY_KEY, "").lower() == "high":
         return infer_model(_HIGH_QUALITY_MODEL)
     return infer_model(_DEFAULT_MODEL)
@@ -71,6 +77,8 @@ def build_disk_specialist(
     → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7) → default (haiku-4-5).
     """
     resolved = _resolve_specialist_model(model)
+    model_name = getattr(resolved, "model_name", repr(resolved))
+    _LOG.debug("disk specialist: resolved model=%s", model_name)
 
     mcp_server = MCPServerStdio(
         "python",
@@ -94,8 +102,9 @@ def register_as_investigator_tool(
 ) -> None:
     """Register ``dispatch_disk_specialist`` as an @investigator.tool.
 
-    The tool runs the disk specialist in its own context window and propagates
-    token usage back to the investigator budget via ``usage=ctx.usage``.
+    The tool runs the disk specialist in its own context window.
+    usage=ctx.usage ensures disk specialist tokens count against the
+    investigator's per-hypothesis budget, not a separate uncapped pool.
     """
 
     @investigator.tool
@@ -109,13 +118,23 @@ def register_as_investigator_tool(
             examiner=ctx.deps.examiner,
             hypothesis_id=hypothesis_id,
             evidence_paths=(),
-            pending_critiques=tuple(ctx.deps.pending_critiques),
+            pending_critiques=tuple(ctx.deps.pending_critiques or ()),
         )
-        result = await disk_specialist.run(
-            question,
-            deps=specialist_deps,
-            usage=ctx.usage,
-        )
+        try:
+            result = await disk_specialist.run(
+                question,
+                deps=specialist_deps,
+                usage=ctx.usage,
+            )
+        except Exception:
+            _LOG.error(
+                "dispatch_disk_specialist failed (hypothesis_id=%s, examiner=%s, question=%r)",
+                hypothesis_id,
+                ctx.deps.examiner,
+                question,
+                exc_info=True,
+            )
+            raise
         return result.output
 
 

@@ -256,3 +256,52 @@ async def test_dispatch_disk_specialist_runs(
     )
     result = await investigator.run("test question", deps=deps)
     assert result.output.total_tool_calls == 1
+    assert result.output.final_state == "COMPLETED"
+
+
+# ---------------------------------------------------------------------------
+# 13. Default model is haiku when both env vars are unset (behavioural)
+# ---------------------------------------------------------------------------
+
+
+def test_factory_default_model_is_haiku(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SILENTWITNESS_SPECIALIST_MODEL_DISK", raising=False)
+    monkeypatch.delenv("SILENTWITNESS_MODEL_QUALITY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from silentwitness_agent.specialists.disk import _resolve_specialist_model
+
+    model = _resolve_specialist_model(None)
+    assert hasattr(model, "model_name"), f"unexpected model type {type(model)}"
+    assert "haiku" in model.model_name  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# 14. Blank env var falls through to default (does not pass "" to infer_model)
+# ---------------------------------------------------------------------------
+
+
+def test_blank_disk_model_env_falls_through_to_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SILENTWITNESS_SPECIALIST_MODEL_DISK", "")
+    monkeypatch.delenv("SILENTWITNESS_MODEL_QUALITY", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
+    from silentwitness_agent.specialists.disk import _resolve_specialist_model
+
+    model = _resolve_specialist_model(None)
+    assert hasattr(model, "model_name"), f"unexpected model type {type(model)}"
+    assert "haiku" in model.model_name  # type: ignore[union-attr]
+
+
+# ---------------------------------------------------------------------------
+# 15. Invalid model env var raises ValueError with env-var name in message
+# ---------------------------------------------------------------------------
+
+
+def test_factory_invalid_model_env_raises_with_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("SILENTWITNESS_SPECIALIST_MODEL_DISK", "bogus:nonexistent")
+    monkeypatch.delenv("SILENTWITNESS_MODEL_QUALITY", raising=False)
+    with pytest.raises(ValueError, match="SILENTWITNESS_SPECIALIST_MODEL_DISK"):
+        build_disk_specialist()
