@@ -46,7 +46,7 @@ def _resolve_specialist_model(model: str | None) -> Model:
     if model is not None:
         try:
             return infer_model(model)
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             raise ValueError(
                 f"log specialist: explicit model={model!r} is not a valid Pydantic AI "
                 f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
@@ -55,7 +55,7 @@ def _resolve_specialist_model(model: str | None) -> Model:
     if env_model:
         try:
             return infer_model(env_model)
-        except (ValueError, Exception) as exc:
+        except Exception as exc:
             raise ValueError(
                 f"log specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
                 f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"

@@ -293,3 +293,49 @@ async def test_dispatch_log_specialist_runs(
     result = await investigator.run("test question", deps=deps)
     assert result.output.total_tool_calls == 1
     assert result.output.final_state == "COMPLETED"
+
+
+# ---------------------------------------------------------------------------
+# 16. dispatch_log_specialist re-raises specialist exceptions
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_dispatch_log_specialist_propagates_exception(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """dispatch_log_specialist logs and re-raises — it never swallows exceptions."""
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    from silentwitness_agent.hypothesis.budget import BudgetEnforcer
+    from silentwitness_agent.hypothesis.stack import HypothesisStack
+    from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
+
+    specialist: Agent[SpecialistDeps, SpecialistReport] = Agent(
+        TestModel(call_tools=[]),
+        deps_type=SpecialistDeps,
+        output_type=SpecialistReport,
+    )
+
+    async def _always_raise(*_a: object, **_kw: object) -> None:
+        raise UnexpectedModelBehavior("specialist-failure")
+
+    monkeypatch.setattr(specialist, "run", _always_raise)
+
+    investigator: Agent[InvestigatorDeps, InvestigatorResult] = Agent(
+        TestModel(call_tools=["dispatch_log_specialist"]),
+        deps_type=InvestigatorDeps,
+        output_type=InvestigatorResult,
+    )
+    register_as_investigator_tool(investigator, specialist)
+
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    deps = InvestigatorDeps(
+        case_dir=case_dir,
+        examiner="analyst",
+        stack=HypothesisStack(case_dir=case_dir, examiner="analyst"),
+        budget=BudgetEnforcer(),
+    )
+    with pytest.raises(UnexpectedModelBehavior, match="specialist-failure"):
+        await investigator.run("test question", deps=deps)
