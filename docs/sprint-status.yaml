@@ -625,11 +625,11 @@ stories:
 
   - id: story-baseline-runner
     epic: "Epic 14 — Accuracy harness"
-    status: PENDING
+    status: COMPLETE
     depends_on: [dataset-manifests]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/71"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/198"
+    merged_at: "2026-06-12T10:40:34Z"
 
   - id: story-silentwitness-runner
     epic: "Epic 14 — Accuracy harness"
