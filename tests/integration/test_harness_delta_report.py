@@ -189,3 +189,111 @@ def test_module_dump_dump_roundtrips_delta_row() -> None:
     restored = DeltaRow.model_validate_json(row.model_dump_json())
     assert restored.delta == pytest.approx(0.35)
     assert restored.direction == "higher_is_better"
+
+
+class TestReviewFindings:
+    """Tests added in response to PR #201 review findings."""
+
+    def test_insufficient_data_branch_in_interpretation(self) -> None:
+        """compute_delta_rows with both sides empty surfaces 'insufficient data' interpretation."""
+        from harness.delta_report import compute_delta_rows
+
+        rows = compute_delta_rows({}, {})
+        precision = next(r for r in rows if r.metric == "precision")
+        assert precision.baseline_value is None
+        assert precision.silentwitness_value is None
+        assert precision.delta is None
+        assert "insufficient data" in precision.interpretation
+
+    def test_bool_value_does_not_coerce_to_int(self) -> None:
+        """precision=True must NOT become 1.0 (bool is int subclass; Pydantic quirk)."""
+        from harness.delta_report import compute_delta_rows
+
+        rows = compute_delta_rows({"precision": True}, {"precision": 0.85})
+        precision = next(r for r in rows if r.metric == "precision")
+        assert precision.baseline_value is None
+
+    def test_malformed_callout_drops_with_note(self, tmp_path: Path) -> None:
+        """Malformed hallucination_examples entries are skipped; count surfaces in report.notes."""
+        import json as _json
+
+        from harness.delta_report import build_delta_report
+
+        case = tmp_path / "nitroba"
+        case.mkdir()
+        # Copy good fixtures, then overwrite scoring with mixed good+bad callouts
+        good_scoring = _json.loads(
+            (_FIXTURES / "nitroba" / "scoring-2026-06-12T18-10-00Z.json").read_text()
+        )
+        good_scoring["hallucination_examples"] = [
+            good_scoring["hallucination_examples"][0],
+            {"side": "baseline"},  # missing required fields
+            {"not_a_callout": "garbage"},  # missing 'side'
+        ]
+        (case / "baseline-2026-06-12T18-00-00Z.json").write_text(
+            (_FIXTURES / "nitroba" / "baseline-2026-06-12T18-00-00Z.json").read_text()
+        )
+        (case / "silentwitness-2026-06-12T18-05-00Z.json").write_text(
+            (_FIXTURES / "nitroba" / "silentwitness-2026-06-12T18-05-00Z.json").read_text()
+        )
+        (case / "scoring-2026-06-12T18-10-00Z.json").write_text(_json.dumps(good_scoring))
+
+        report = build_delta_report("nitroba", tmp_path)
+        assert len(report.baseline_hallucinated_callouts) == 1
+        assert any("malformed hallucination_examples" in n for n in report.notes)
+        assert any("2 malformed" in n for n in report.notes)
+
+    def test_refused_count_surfaces_entity_gate_rejections(self) -> None:
+        """silentwitness_refused_count comes from sw runner's entity_gate_rejections."""
+        from harness.delta_report import build_delta_report, render_markdown
+
+        report = build_delta_report("nitroba", _FIXTURES)
+        # Fixture sets entity_gate_rejections=4
+        assert report.silentwitness_refused_count == 4
+        md = render_markdown(report)
+        assert "count = 4)" in md
+
+    def test_path_traversal_dataset_id_rejected(self, tmp_path: Path) -> None:
+        """--dataset '../etc' → exit 2; no write outside results_dir."""
+        from harness import delta_report as mod
+
+        rc = mod.main(["--dataset", "../etc", "--results-dir", str(tmp_path)])
+        assert rc == 2
+
+    def test_markdown_callout_sanitizes_backticks(self) -> None:
+        """Backticks/newlines in cited_artifact_path don't break Markdown code spans."""
+        from datetime import UTC, datetime as _dt
+
+        from harness.delta_report import render_markdown
+        from harness.delta_report_models import DeltaReport, HallucinationCallout
+
+        callout = HallucinationCallout(
+            side="baseline",
+            cited_artifact_path="C:\\evil`backtick\nnewline.exe",
+            excerpt="x",
+            evidence_shellout_argv=["find", "/ev", "-iname", "`evil`"],
+            evidence_shellout_hits=0,
+        )
+        report = DeltaReport(
+            dataset_id="nitroba",
+            baseline_result_path=Path("b.json"),
+            silentwitness_result_path=Path("s.json"),
+            scoring_result_path=Path("sc.json"),
+            generated_at=_dt.now(UTC),
+            rows=[],
+            baseline_hallucinated_callouts=[callout],
+            silentwitness_refused_callouts=[],
+            silentwitness_refused_count=0,
+            notes=[],
+        )
+        md = render_markdown(report)
+        # Original path had backtick + newline; sanitized form is in the output
+        assert "`backtick" not in md  # original backtick replaced with '
+        assert "\nnewline" not in md or md.count("nnewline") == 1  # newline collapsed to space
+
+    def test_brand_colors_used_in_chart(self, tmp_path: Path) -> None:
+        """Bar chart uses ux-spec §3.5 brand colors (#d96c5c / #7fb069)."""
+        from harness.delta_report import _BASELINE_COLOR, _SW_COLOR
+
+        assert _BASELINE_COLOR == "#d96c5c"
+        assert _SW_COLOR == "#7fb069"

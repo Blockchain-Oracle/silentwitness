@@ -11,17 +11,13 @@ Exit codes: 0 ok; 2 config/validation; 3 missing result file.
 from __future__ import annotations
 
 import json
-import os
+import re
 import sys
-import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")  # CI-friendly; no display required
-import matplotlib.pyplot as plt
+from pydantic import ValidationError
 
 from harness.delta_report_models import (
     METRIC_DIRECTIONS,
@@ -30,24 +26,16 @@ from harness.delta_report_models import (
     Direction,
     HallucinationCallout,
 )
+from silentwitness_common.atomic_io import write_bytes_atomic  # type: ignore[import-untyped]
+
+_BASELINE_COLOR = "#d96c5c"  # ux-spec §3.5 Error red (baseline = "needs improvement")
+_SW_COLOR = "#7fb069"  # ux-spec §3.5 Success green (SilentWitness = improved)
+_DATASET_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
-def _write_atomic(path: Path, data: bytes) -> None:
-    """Atomic-rename write: tmp file in same dir, fsync, replace."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "wb") as fh:
-            fh.write(data)
-            fh.flush()
-            os.fsync(fh.fileno())
-        Path(tmp).replace(path)
-    except OSError:
-        try:
-            os.unlink(tmp)
-        except OSError as cleanup_exc:
-            print(f"warning: tmp cleanup failed: {cleanup_exc}", file=sys.stderr)
-        raise
+def _safe_md(s: str) -> str:
+    """Sanitize attacker-influenced strings before embedding in Markdown code spans."""
+    return s.replace("`", "'").replace("\n", " ").replace("\r", " ")
 
 
 def _interpret(metric: str, baseline: float | None, sw: float | None, direction: Direction) -> str:
@@ -72,8 +60,9 @@ def compute_delta_rows(
     for metric, direction in METRIC_DIRECTIONS.items():
         b = baseline_metrics.get(metric)
         s = silentwitness_metrics.get(metric)
-        b_val = float(b) if isinstance(b, (int, float)) else None
-        s_val = float(s) if isinstance(s, (int, float)) else None
+        # Exclude bool (subclass of int) — "precision: true" would coerce to 1.0
+        b_val = float(b) if isinstance(b, (int, float)) and not isinstance(b, bool) else None
+        s_val = float(s) if isinstance(s, (int, float)) and not isinstance(s, bool) else None
         rows.append(
             DeltaRow(
                 metric=metric,
@@ -125,16 +114,15 @@ def render_markdown(report: DeltaReport) -> str:
     ]
     if report.baseline_hallucinated_callouts:
         for c in report.baseline_hallucinated_callouts[:10]:
-            argv_str = " ".join(c.evidence_shellout_argv)
-            lines.append(
-                f"- `{c.cited_artifact_path}` — `{argv_str}` → {c.evidence_shellout_hits} hits"
-            )
+            argv_str = " ".join(_safe_md(a) for a in c.evidence_shellout_argv)
+            cited = _safe_md(c.cited_artifact_path)
+            lines.append(f"- `{cited}` — `{argv_str}` → {c.evidence_shellout_hits} hits")
     else:
         lines.append("- (no baseline hallucinations on this dataset)")
-    refused = len(report.silentwitness_refused_callouts)
+    # Use the refused_count from the SW runner's entity_gate_rejections, NOT len(callouts).
     refused_line = (
         "SilentWitness rejected the equivalent class of claims at the entity gate "
-        f"(count = {refused})."
+        f"(count = {report.silentwitness_refused_count})."
     )
     lines += [
         "",
@@ -150,7 +138,7 @@ def render_markdown(report: DeltaReport) -> str:
 
 
 def _bar_pair(ax: Any, title: str, labels: list[str], values: list[float], ylabel: str) -> None:
-    colors = ["#888888", "#1a73e8"]
+    colors = [_BASELINE_COLOR, _SW_COLOR]
     ax.bar(labels, values, color=colors)
     ax.set_title(title, fontsize=10)
     ax.set_ylabel(ylabel, fontsize=9)
@@ -169,6 +157,12 @@ def _row_by_metric(rows: list[DeltaRow]) -> dict[str, DeltaRow]:
 
 def render_bar_chart_png(report: DeltaReport, out_path: Path) -> None:
     """Render a 4-panel grouped bar chart and save to out_path (atomic write)."""
+    # Lazy import so --help and exit-3 paths don't pay matplotlib's ~600ms cost
+    import matplotlib
+
+    matplotlib.use("Agg")  # CI-friendly; no display required
+    import matplotlib.pyplot as plt
+
     by_metric = _row_by_metric(report.rows)
     fig, axes = plt.subplots(2, 2, figsize=(10, 7), dpi=120)
     fig.suptitle(
@@ -211,14 +205,14 @@ def render_bar_chart_png(report: DeltaReport, out_path: Path) -> None:
             [_val(precision, "baseline"), _val(recall, "baseline")],
             width,
             label="baseline",
-            color="#888888",
+            color=_BASELINE_COLOR,
         )
         axes[1][0].bar(
             x + width / 2,
             [_val(precision, "silentwitness"), _val(recall, "silentwitness")],
             width,
             label="silentwitness",
-            color="#1a73e8",
+            color=_SW_COLOR,
         )
         axes[1][0].set_xticks(x)
         axes[1][0].set_xticklabels(["precision", "recall"])
@@ -239,9 +233,10 @@ def render_bar_chart_png(report: DeltaReport, out_path: Path) -> None:
     import io as _io
 
     buf = _io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight")
+    _md = {"Software": "silentwitness-delta-report"}
+    fig.savefig(buf, format="png", bbox_inches="tight", metadata=_md, pil_kwargs={"optimize": True})
     plt.close(fig)
-    _write_atomic(out_path, buf.getvalue())
+    write_bytes_atomic(out_path, buf.getvalue())
 
 
 def _latest_match(results_dir: Path, prefix: str) -> Path | None:
@@ -300,8 +295,11 @@ def build_delta_report(dataset_id: str, results_dir: Path) -> DeltaReport:
     callouts_raw = scoring_result.get("hallucination_examples", [])
     b_callouts: list[HallucinationCallout] = []
     s_callouts: list[HallucinationCallout] = []
+    notes: list[str] = []
+    malformed = 0
     for ex in callouts_raw[:20]:
         if not isinstance(ex, dict) or "side" not in ex:
+            malformed += 1
             continue
         try:
             c = HallucinationCallout(
@@ -316,17 +314,17 @@ def build_delta_report(dataset_id: str, results_dir: Path) -> DeltaReport:
                     )
                 }
             )
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValidationError):
+            malformed += 1
             continue
         if c.side == "baseline":
             b_callouts.append(c)
         else:
             s_callouts.append(c)
+    if malformed:
+        notes.append(f"{malformed} malformed hallucination_examples entries skipped")
 
-    refused = sw_result.get("entity_gate_rejections", 0)
-    # Use a placeholder list with the rejection count surfacing as a footnote-equivalent.
-    if refused and not s_callouts:
-        s_callouts = []
+    refused_count = int(sw_result.get("entity_gate_rejections", 0))
 
     return DeltaReport(
         dataset_id=dataset_id,
@@ -337,6 +335,8 @@ def build_delta_report(dataset_id: str, results_dir: Path) -> DeltaReport:
         rows=rows,
         baseline_hallucinated_callouts=b_callouts[:10],
         silentwitness_refused_callouts=s_callouts[:10],
+        silentwitness_refused_count=refused_count,
+        notes=notes,
     )
 
 
@@ -345,7 +345,7 @@ def write_delta_artifacts(report: DeltaReport, results_dir: Path) -> tuple[Path,
     case_dir.mkdir(parents=True, exist_ok=True)
     md_path = case_dir / "delta.md"
     png_path = case_dir / "delta.png"
-    _write_atomic(md_path, (render_markdown(report)).encode("utf-8"))
+    write_bytes_atomic(md_path, (render_markdown(report)).encode("utf-8"))
     render_bar_chart_png(report, png_path)
     return md_path, png_path
 
@@ -364,6 +364,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-png", type=Path, default=None)
     args = parser.parse_args(argv)
 
+    if not _DATASET_ID_RE.match(args.dataset):
+        print(
+            f"config/validation error: dataset must match {_DATASET_ID_RE.pattern}",
+            file=sys.stderr,
+        )
+        return 2
+
     try:
         report = build_delta_report(args.dataset, args.results_dir)
     except FileNotFoundError as exc:
@@ -378,7 +385,7 @@ def main(argv: list[str] | None = None) -> int:
         png_path = args.out_png or (args.results_dir / args.dataset / "delta.png")
         md_path.parent.mkdir(parents=True, exist_ok=True)
         png_path.parent.mkdir(parents=True, exist_ok=True)
-        _write_atomic(md_path, (render_markdown(report)).encode("utf-8"))
+        write_bytes_atomic(md_path, (render_markdown(report)).encode("utf-8"))
         render_bar_chart_png(report, png_path)
     else:
         md_path, png_path = write_delta_artifacts(report, args.results_dir)

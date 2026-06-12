@@ -61,3 +61,7 @@ class DeltaReport(BaseModel):
     rows: list[DeltaRow]
     baseline_hallucinated_callouts: list[HallucinationCallout]
     silentwitness_refused_callouts: list[HallucinationCallout]
+    # SilentWitness entity-gate rejection count (PRD §6 — surfaces the killer demo metric)
+    silentwitness_refused_count: int = Field(default=0, ge=0)
+    # Surface diagnostic notes (malformed callouts, missing metrics, schema drift)
+    notes: list[str] = Field(default_factory=list)
