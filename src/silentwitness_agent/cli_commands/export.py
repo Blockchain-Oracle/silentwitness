@@ -7,6 +7,7 @@ from pathlib import Path
 from rich.console import Console
 
 from silentwitness_agent.report.pdf import PdfRenderer
+from silentwitness_agent.report.verify_links import BrokenVerifyLink
 
 _IOC_EXTENSIONS: dict[str, str] = {
     "csv": "iocs.csv",
@@ -51,7 +52,6 @@ def run(
     pdf: bool,
     md: bool,
     out: Path | None,
-    include_appendix_audit: bool,
     ioc_format: str,
     no_color: bool,
 ) -> int:
@@ -102,6 +102,13 @@ def run(
     except FileNotFoundError:
         err.print(
             "[red]✗[/red] report.md not generated; run `silentwitness investigate` first",
+            highlight=False,
+        )
+        return 2
+    except BrokenVerifyLink as exc:
+        err.print(
+            f"[red]✗[/red] PDF render failed: broken verify-link in report.md — "
+            f"{exc}. Re-run `silentwitness verify` or `silentwitness investigate --resume`.",
             highlight=False,
         )
         return 2

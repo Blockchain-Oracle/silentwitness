@@ -302,9 +302,6 @@ def export(
     case_id: str = typer.Argument(...),
     pdf: bool = typer.Option(False, "--pdf"),
     md: bool = typer.Option(False, "--md"),
-    include_appendix_audit: bool = typer.Option(
-        True, "--include-appendix-audit/--no-appendix-audit"
-    ),
     ioc_format: str = typer.Option("csv", "--ioc-format"),
     out: Path | None = typer.Option(None, "--out"),
 ) -> None:
@@ -322,7 +319,6 @@ def export(
         pdf=pdf,
         md=md,
         out=out,
-        include_appendix_audit=include_appendix_audit,
         ioc_format=ioc_format,
         no_color=cli_ctx.no_color,
     )

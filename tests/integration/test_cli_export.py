@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from silentwitness_agent.cli import app
 from silentwitness_agent.report.pdf import PdfRenderResult
+from silentwitness_agent.report.verify_links import BrokenVerifyLink
 from tests.integration._helpers_status import init_case
 
 runner = CliRunner()
@@ -194,3 +195,39 @@ def test_export_out_ignored_in_md_mode(tmp_path: Path, monkeypatch: pytest.Monke
     assert result.exit_code == 0
     assert "--out ignored" in result.output
     assert str((case_dir / "report.md").resolve()) in result.output
+
+
+# ---------------------------------------------------------------------------
+# 11. Stdout discipline — path is on the last output line (no ANSI contamination)
+# ---------------------------------------------------------------------------
+
+
+def test_export_path_is_last_output_line(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The emitted path is the last non-empty line of combined output, free of ANSI codes."""
+    case_dir = _make_case(tmp_path, "mr-exp-011", monkeypatch)
+    result = runner.invoke(app, ["export", "mr-exp-011"], catch_exceptions=False)
+    assert result.exit_code == 0
+    non_empty_lines = [ln for ln in result.output.splitlines() if ln.strip()]
+    assert non_empty_lines, "expected at least one output line"
+    last_line = non_empty_lines[-1]
+    expected = str((case_dir / "report.md").resolve())
+    assert last_line == expected, f"last line {last_line!r} is not the bare path {expected!r}"
+
+
+# ---------------------------------------------------------------------------
+# 12. BrokenVerifyLink → exit 2 with verify-link hint in output
+# ---------------------------------------------------------------------------
+
+
+def test_export_pdf_broken_verify_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """BrokenVerifyLink from the renderer exits 2 with a verify-link remediation hint."""
+    _make_case(tmp_path, "mr-exp-012", monkeypatch)
+
+    def _raise_broken(self: object, *, output_path: Path | None = None) -> PdfRenderResult:
+        raise BrokenVerifyLink("F-999", "sift-001", "audit id not found")
+
+    monkeypatch.setattr("silentwitness_agent.cli_commands.export.PdfRenderer.render", _raise_broken)
+    result = runner.invoke(app, ["export", "mr-exp-012", "--pdf"], catch_exceptions=False)
+    assert result.exit_code == 2
+    assert "broken verify-link" in result.output
+    assert "silentwitness verify" in result.output
