@@ -1,0 +1,24 @@
+{
+  "dataset_id": "nitroba",
+  "scenario_summary": "CI stub for the 2010 DFRWS Nitroba wardrive pcap challenge. Campus packet capture tracing harassing email from a dorm resident to a faculty member. This manifest covers the committed stub fixture used by the dataset-hash-verify CI gate only.",
+  "download_url": null,
+  "sha256": "acc530668c8bc60b2d229281130b1899bfc81d70fdada5c34b3236c628f739c8",
+  "size_bytes": 24,
+  "evidence_files": [
+    {
+      "relative_path": "stubs/nitroba-stub.pcap",
+      "sha256": "acc530668c8bc60b2d229281130b1899bfc81d70fdada5c34b3236c628f739c8",
+      "size_bytes": 24
+    }
+  ],
+  "expected_investigation_path": [
+    "identify dorm DHCP lease window",
+    "filter SMTP/HTTP to lilytuckrige@yahoo.com",
+    "extract willselfdestruct.com one-shot URL",
+    "pivot to roster + MAC + dorm room"
+  ],
+  "ground_truth_status": "password_gated",
+  "LLM_memorization_risk": "medium",
+  "memorization_risk_note": "The Nitroba challenge is a 2010 competition dataset with published community writeups. Memorization risk is medium — the wardrive scenario is widely discussed but per-packet evidence paths require genuine forensic reasoning. The stub in this manifest is a minimal pcap header for CI only; the full 56 MB pcap is gitignored and hash-verified locally.",
+  "notes": "Truncated stub used only for CI dataset-hash-verify per CICD_SPEC §3.dataset-hash-verify. The stub is a 24-byte valid pcap global header (no packet records). Full Nitroba pcap SHA256 is pinned in nitroba.manifest.json."
+}
