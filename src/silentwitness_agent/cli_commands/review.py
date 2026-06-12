@@ -40,7 +40,7 @@ def _staged_fmt(finding: dict[str, Any]) -> str:
     ts = str(finding.get("staged_at") or "")
     try:
         return datetime.fromisoformat(ts).strftime("%H:%M:%SZ") if ts else "-"
-    except ValueError:
+    except (ValueError, OverflowError):
         return ts[:8] or "-"
 
 
@@ -72,6 +72,7 @@ def _print_block(
 
 
 def _reject(case_dir: Path, finding_id: str, reason: str, examiner: str, *, err: Console) -> None:
+    # First block: state mutation. If this fails, nothing is committed.
     try:
         with findings_lock(case_dir):
             findings = read_findings(case_dir)
@@ -81,20 +82,28 @@ def _reject(case_dir: Path, finding_id: str, reason: str, examiner: str, *, err:
             idx, finding = located
             findings[idx] = {**finding, "status": "REJECTED", "rejection_reason": reason}
             write_json_atomic(case_dir / "findings.json", findings)
-        cli_log = case_dir / "audit" / "cli.jsonl"
-        cli_log.parent.mkdir(parents=True, exist_ok=True)
-        entry = json.dumps(
-            {
-                "ts": datetime.now(UTC).isoformat(),
-                "tool": "cli.review.reject",
-                "finding_id": finding_id,
-                "reason": reason,
-                "examiner": examiner,
-            }
-        )
-        append_jsonl_line(cli_log, entry)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         err.print(f"[red]✗[/red] reject write failed: {exc}", highlight=False)
+        return
+    # Second block: audit write. findings.json is already committed at this point.
+    cli_log = case_dir / "audit" / "cli.jsonl"
+    cli_log.parent.mkdir(parents=True, exist_ok=True)
+    entry = json.dumps(
+        {
+            "ts": datetime.now(UTC).isoformat(),
+            "tool": "cli.review.reject",
+            "finding_id": finding_id,
+            "reason": reason,
+            "examiner": examiner,
+        }
+    )
+    try:
+        append_jsonl_line(cli_log, entry)
+    except (OSError, ValueError) as exc:
+        err.print(
+            f"[red]✗[/red] rejection committed but audit write failed: {exc}",
+            highlight=False,
+        )
 
 
 def _modify(
@@ -112,23 +121,31 @@ def _modify(
     obs_text = obs.get("text") or ""
     interp_text = interp.get("text") or ""
     yaml_content = (
-        "# (the edited text will be HMAC-signed at approve time)\n"
+        "# edits are saved to findings.json; original observation text is HMAC-signed\n"
         f"observation: |\n  {obs_text}\ninterpretation: |\n  {interp_text}\n"
     )
-    with tempfile.NamedTemporaryFile(
-        suffix=".yaml", mode="w", encoding="utf-8", delete=False
-    ) as tf:
-        tf.write(yaml_content)
-        tf_path = tf.name
+    # delete=False: file must be closed before the editor process opens it by path;
+    # finally ensures cleanup even if subprocess or yaml parse raises.
+    tf_path: str | None = None
     edited: dict[str, Any] = {}
     try:
+        with tempfile.NamedTemporaryFile(
+            suffix=".yaml", mode="w", encoding="utf-8", delete=False
+        ) as tf:
+            tf.write(yaml_content)
+            tf_path = tf.name
         rc = subprocess.run([editor, tf_path]).returncode  # noqa: S603
         if rc != 0:
             err.print("[red]✗[/red] editor exited non-zero; modify aborted", highlight=False)
             return False
-        edited = yaml.safe_load(Path(tf_path).read_text(encoding="utf-8")) or {}
+        raw = yaml.safe_load(Path(tf_path).read_text(encoding="utf-8"))
+        edited = raw if isinstance(raw, dict) else {}
+    except (OSError, yaml.YAMLError) as exc:
+        err.print(f"[red]✗[/red] editor failed: {exc}", highlight=False)
+        return False
     finally:
-        Path(tf_path).unlink(missing_ok=True)
+        if tf_path is not None:
+            Path(tf_path).unlink(missing_ok=True)
     try:
         with findings_lock(case_dir):
             findings = read_findings(case_dir)
@@ -138,16 +155,15 @@ def _modify(
             idx, finding = located
             mc = int(finding.get("modification_count") or 0) + 1
             update: dict[str, Any] = {"modification_count": mc}
-            if isinstance(edited, dict):
-                new_obs = (edited.get("observation") or "").strip()
-                new_interp = (edited.get("interpretation") or "").strip()
-                if new_obs and new_obs != obs_text:
-                    update["edited_observation"] = new_obs
-                if new_interp and new_interp != interp_text:
-                    update["edited_interpretation"] = new_interp
+            new_obs = (edited.get("observation") or "").strip()
+            new_interp = (edited.get("interpretation") or "").strip()
+            if new_obs and new_obs != obs_text:
+                update["edited_observation"] = new_obs
+            if new_interp and new_interp != interp_text:
+                update["edited_interpretation"] = new_interp
             findings[idx] = {**finding, **update}
             write_json_atomic(case_dir / "findings.json", findings)
-    except OSError as exc:
+    except (OSError, ValueError) as exc:
         err.print(f"[red]✗[/red] modify write failed: {exc}", highlight=False)
         return False
     return True
@@ -219,6 +235,8 @@ def run_detail(
     _print_block(finding, obs, interp, 1, 1, console=console)
     if non_interactive:
         return 0
+    # input() rather than rich.Prompt: CliRunner patches sys.stdin for test isolation;
+    # rich.Prompt reads from Console.file, bypassing the runner's stdin capture.
     while True:
         try:
             key = input(_PROMPT).strip().lower()[:1]
@@ -240,7 +258,17 @@ def run_detail(
                 _reject(case_dir, finding_id, reason, examiner, err=err)
             return 0
         if key == "m":
-            _modify(case_dir, finding_id, obs, interp, err=err)
+            if _modify(case_dir, finding_id, obs, interp, err=err):
+                # Re-read so _print_block reflects the committed edits on disk.
+                try:
+                    refreshed = read_findings(case_dir)
+                except (json.JSONDecodeError, ValueError, OSError):
+                    refreshed = findings
+                loc2 = locate_finding(refreshed, finding_id)
+                if loc2 is not None:
+                    _, finding = loc2
+                    obs = _find_obs(refreshed, finding.get("observation_id", ""))
+                    interp = _find_interp(obs, finding.get("interpretation_id", ""))
             console.print(highlight=False)
             _print_block(finding, obs, interp, 1, 1, console=console)
 

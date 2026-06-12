@@ -111,6 +111,9 @@ def test_review_list_draft_only(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     assert "F-002" in result.output
     assert "F-003" in result.output
     assert "F-999" not in result.output
+    # Verify staged_at ascending sort by checking positional order in output.
+    pos1, pos2, pos3 = (result.output.index(f) for f in ("F-001", "F-002", "F-003"))
+    assert pos1 < pos2 < pos3
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +266,13 @@ def test_review_keystroke_r(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert finding is not None
     assert finding["status"] == "REJECTED"
     assert finding["rejection_reason"] == "insufficient evidence"
+    cli_log = case_dir / "audit" / "cli.jsonl"
+    assert cli_log.is_file()
+    lines = [ln for ln in cli_log.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    entry = json.loads(lines[-1])
+    assert entry["tool"] == "cli.review.reject"
+    assert entry["finding_id"] == "F-001"
+    assert entry["reason"] == "insufficient evidence"
 
 
 # ---------------------------------------------------------------------------
@@ -360,3 +370,24 @@ def test_review_list_empty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code == 0
     # DRAFT filter → no rows; table header still appears
     assert "ID" in result.output
+
+
+# ---------------------------------------------------------------------------
+# 13. Interactive prompt appears in default (interactive) mode
+# ---------------------------------------------------------------------------
+
+
+def test_review_interactive_prompt_shown(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """In interactive mode (no --non-interactive), the action prompt is shown."""
+    case_dir = init_case(tmp_path, "mr-prompt-001", monkeypatch)
+    _with_finding(case_dir, finding_id="F-001")
+    result = runner.invoke(
+        app,
+        ["review", "mr-prompt-001", "--finding-id", "F-001"],
+        input="q\n",
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    assert "[a]pprove" in result.output
+    assert "[r]eject" in result.output
+    assert "[m]odify" in result.output
