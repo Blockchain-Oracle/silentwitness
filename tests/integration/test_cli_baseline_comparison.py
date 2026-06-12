@@ -103,7 +103,7 @@ class TestBaselineComparison:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", _GT_NAME])
         assert result.exit_code == 2
-        assert "GROUND_TRUTH_MISSING" in result.output
+        assert "GROUND_TRUTH_MISSING" in result.output.replace("\n", " ")
 
     def test_case_not_found_exits_1(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("SILENTWITNESS_CASES_DIR", str(tmp_path))
@@ -111,7 +111,7 @@ class TestBaselineComparison:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", "no-such-case"])
         assert result.exit_code == 1
-        assert "case 'no-such-case' not found" in result.output
+        assert "case 'no-such-case' not found" in result.output.replace("\n", " ")
 
     def test_table_renders_improvement_in_green(self, cli_env: Path) -> None:
         """Fixture: SW hallucination_rate=0.0, baseline=0.4 → -0.4 (improvement)."""
@@ -178,8 +178,9 @@ class TestBaselineComparison:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", _GT_NAME])
         assert result.exit_code == 2
-        assert "baseline-runner not installed" in result.output
-        assert "Epic 14" in result.output
+        flat = result.output.replace("\n", " ")
+        assert "baseline-runner not installed" in flat
+        assert "Epic 14" in flat
 
 
 class TestReviewFindings:
@@ -215,7 +216,7 @@ class TestReviewFindings:
             app, ["baseline-comparison", _GT_NAME, "--metrics", "bogus,alsobogus"]
         )
         assert result.exit_code == 0
-        assert "unknown --metrics" in result.output
+        assert "unknown --metrics" in result.output.replace("\n", " ")
 
     def test_path_traversal_dataset_id_rejected(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -228,7 +229,7 @@ class TestReviewFindings:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", _GT_NAME])
         assert result.exit_code == 2
-        assert "fails validation" in result.output
+        assert "fails validation" in result.output.replace("\n", " ")
 
     def test_non_dict_result_json_rejected(self, cli_env: Path) -> None:
         """Non-dict top-level result JSON → clean exit 2, not uncaught AttributeError."""
@@ -238,7 +239,9 @@ class TestReviewFindings:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", _GT_NAME])
         assert result.exit_code == 2
-        assert "top-level must be a JSON object" in result.output
+        # Rich may wrap the message across lines on narrow terminals — collapse first
+        flat = result.output.replace("\n", " ")
+        assert "top-level must be a JSON object" in flat
 
     def test_baseline_delta_json_schema_round_trip(self, cli_env: Path) -> None:
         """baseline-delta.json keys all have expected types (no string-vs-float drift)."""
