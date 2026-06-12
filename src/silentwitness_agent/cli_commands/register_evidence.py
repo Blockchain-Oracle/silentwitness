@@ -7,6 +7,7 @@ import json
 import time
 from pathlib import Path
 
+from pydantic import ValidationError
 from rich.console import Console
 
 from silentwitness_agent.cli_commands._evidence_types import (
@@ -128,7 +129,7 @@ def run(
             elapsed_ms=(time.monotonic() - t0) * 1000,
             model_used="cli",
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, ValidationError) as exc:
         err.print(f"[red]✗[/red] system error writing audit entry: {exc}", highlight=False)
         return 2
     finally:

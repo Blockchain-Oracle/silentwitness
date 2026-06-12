@@ -284,12 +284,14 @@ def verify(
     if not case_dir.exists():
         err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
         raise typer.Exit(code=1)
+    examiner = _read_case_examiner(case_dir, fallback=os.environ.get("USER", "examiner"))
     code = _run(
         case_dir,
         case_id,
         ledger_dir=ledger if ledger is not None else _DEFAULT_LEDGER_DIR,
         strict=strict,
         no_color=cli_ctx.no_color,
+        examiner=examiner,
     )
     raise typer.Exit(code=code)
 
