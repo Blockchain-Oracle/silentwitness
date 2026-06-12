@@ -1,55 +1,103 @@
 # SilentWitness
 
-> A hypothesis-first DFIR investigator whose report writes itself, with every claim locked to the tool that produced it.
+> SilentWitness — a hypothesis-first DFIR investigator whose report writes itself, with every claim locked to the tool that produced it.
+
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE) [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](pyproject.toml) [![CI](https://img.shields.io/badge/ci-passing-brightgreen.svg)](.github/workflows/ci.yml) [![Model-agnostic](https://img.shields.io/badge/model-agnostic-purple.svg)](docs/architecture.md)
 
 Built for the SANS [Find Evil!](https://findevil.devpost.com/) hackathon (2026).
 
-## What this is
+## Demo
 
-SilentWitness extends the SANS SIFT Workstation with an AI investigator that works the case the way a FOR508-graduate senior analyst would — forming hypotheses, dispatching the right tool for each one, pivoting when evidence contradicts — and produces a structured incident report _as the case unfolds_. Every claim in the report ties back to the tool execution that produced it via a verifiable `[verify:audit_id]` link.
+📺 **2-minute demo:** <!-- DEMO_VIDEO_URL --> [youtu.be/PLACEHOLDER](https://youtu.be/PLACEHOLDER)
 
-The architecture pattern is **Custom MCP Server (Python, FastMCP) + Pydantic AI reference agent + Claude Code drop-in config**. Model-agnostic: configurable across Anthropic Claude, OpenAI GPT-5, Google Gemini, and local Ollama via a single `SILENTWITNESS_MODEL` env var.
+![Markdown report with inline `[verify:audit_id]` links resolving to JSONL audit entries](./docs/assets/report-verify-links.png)
 
-> Quick orient for future agents: read [`CLAUDE.md`](./CLAUDE.md), then [`STRATEGY.md`](./STRATEGY.md), then the spec set in [`docs/`](./docs/).
+## Quick start
 
-## Status
-
-🏗️ **Build phase — Epic 1 (project scaffolding + CI/CD on commit 1).** No product code yet. Specs are locked. See [`docs/sprint-status.yaml`](./docs/sprint-status.yaml) for live progress against the 83 implementation stories.
-
-## Project layout
-
-```
-silentwitness/
-├── CLAUDE.md                            ← Minimal agent guide (always loaded)
-├── STRATEGY.md                          ← Wedge commitment
-├── context/                             ← ~241K-word domain knowledge corpus
-├── research/                            ← Wedge-validation research artefacts
-├── docs/
-│   ├── PRD.md                           ← Product requirements
-│   ├── architecture.md                  ← Component architecture, 27-tool catalog, 10 ADRs
-│   ├── ux-spec.md                       ← CLI (12 commands) + optional HUD
-│   ├── CICD_SPEC.md                     ← Pre-commit + GitHub Actions + Dockerfile
-│   ├── epics.md                         ← 16 epics, 6-wave dispatch queue
-│   ├── sprint-status.yaml               ← Orchestrator-readable tracker
-│   ├── stories/                         ← 84 BDD-style implementation stories
-│   ├── AUDIT_REPORT.md                  ← Internal-consistency audit
-│   ├── DEEP_AUDIT_REPORT.md             ← External SDK audit (21 BLOCKERs patched)
-│   └── .audit/                          ← Per-library source-code verification
-└── src/
-    ├── silentwitness_mcp/               ← Custom MCP server (THE product)
-    ├── silentwitness_agent/             ← Reference Pydantic AI agent
-    └── silentwitness_common/            ← Shared Pydantic types
-```
-
-## Run-locally (post-Epic 1)
+### (a) SIFT 2026 native — 3 commands
 
 ```bash
-uv sync --frozen
-uv run pytest tests/unit -v
+# 1. install
+curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
+# 2. register a case + its evidence (one step, two sub-actions on a single line)
+silentwitness init mr-evil-001 --examiner $USER && silentwitness register-evidence mr-evil-001 --path /evidence/hacking-case
+# 3. investigate
+silentwitness investigate mr-evil-001
 ```
 
-Full Try-It-Out instructions land at the close of Epic 16; see [`docs/stories/story-try-it-out-doc.md`](./docs/stories/story-try-it-out-doc.md).
+### (b) Docker Compose — 2 commands
+
+```bash
+docker compose up -d
+docker compose exec silentwitness silentwitness investigate mr-evil-001
+```
+
+## Architecture
+
+```mermaid
+flowchart TB
+  subgraph CLI[silentwitness CLI (architectural)]
+    INIT[init / register-evidence / investigate]
+  end
+  subgraph AGENT[Pydantic AI investigator (architectural)]
+    ORCH[Hypothesis-first orchestrator]
+    CRITIC[Critic + entity gate + citation gate (architectural)]
+  end
+  subgraph MCP[Custom FastMCP server (architectural)]
+    MEMSPEC[Memory specialist (architectural)]
+    DISK[Disk specialist (architectural)]
+    LOG[Log specialist (architectural)]
+    NETSPEC[Network specialist (architectural)]
+  end
+  subgraph EVIDENCE[Read-only evidence mount (architectural)]
+    MOUNT[/evidence ro,noexec,nosuid (architectural)]
+  end
+  subgraph AUDIT[Audit JSONL ledger (architectural)]
+    LEDGER[verify-links + HMAC chain (architectural)]
+  end
+  subgraph PROMPTS[System prompts (prompt-based — supplementary, not load-bearing)]
+    AGENT_PROMPT[Investigator system prompt (prompt-based — supplementary, not load-bearing)]
+    CRITIC_PROMPT[Critic agreement prompt (prompt-based — supplementary, not load-bearing)]
+  end
+  CLI --> AGENT
+  AGENT --> MCP
+  MCP --> EVIDENCE
+  AGENT --> AUDIT
+  MCP --> AUDIT
+  AGENT_PROMPT -.-> AGENT
+  CRITIC_PROMPT -.-> CRITIC
+```
+
+**Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but does not unlock hallucinations against unmounted artifacts.
+
+## What's novel
+
+SilentWitness is the first hypothesis-first DFIR agent to ship the *architectural* guardrails the IR community has been asking prompt-based agents to fake. The investigator cannot claim against an artifact the entity gate cannot resolve; the report cannot include a finding the citation gate cannot link to a real audit-JSONL line. Every Δ vs vanilla Protocol SIFT in the [accuracy report](./docs/ACCURACY_REPORT.md) is **measured, not estimated** — `silentwitness baseline-comparison <case-id>` reruns the comparison on demand.
+
+## Try it out
+
+Per-dataset walkthroughs (Nitroba, NIST Hacking Case, NIST Data Leakage): see [`docs/TRY_IT_OUT.md`](./docs/TRY_IT_OUT.md).
+
+## Accuracy report
+
+Measured Δ vs vanilla Protocol SIFT 2026 baseline: see [`docs/ACCURACY_REPORT.md`](./docs/ACCURACY_REPORT.md).
+
+## Datasets
+
+Provenance + memorization-risk disclosure per case: see [`docs/DATASETS.md`](./docs/DATASETS.md).
+
+## Example execution logs
+
+Real audit JSONL output from past runs: see [`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/).
+
+## Architecture deep-dive
+
+Component architecture, the 27-tool MCP catalog, and 10 ADRs: see [`docs/architecture.md`](./docs/architecture.md).
 
 ## License
 
-[MIT](./LICENSE) — see `NOTICES.md` (post-Epic 16) for third-party attributions.
+[MIT](./LICENSE) — see [`NOTICES.md`](./NOTICES.md) for third-party attributions.
+
+## Acknowledgments
+
+Built against the **AppliedIR / Valhuntir** bar SANS cites as the IR-agent target; baseline comparison against **teamdfir / protocol-sift** for the vanilla SIFT 2026 reference path. Datasets sourced from Nitroba (Wireshark University) and NIST (DFR / CFReDS).
