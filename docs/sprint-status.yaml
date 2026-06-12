@@ -423,11 +423,11 @@ stories:
 
   - id: story-log-specialist
     epic: "Epic 9 — Specialists"
-    status: PENDING
+    status: COMPLETE
     depends_on: [investigator-agent, parse-evtx, hayabusa-timeline, chainsaw-hunt]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/48"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/194"
+    merged_at: "2026-06-12T08:12:43Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 10 — Critic
