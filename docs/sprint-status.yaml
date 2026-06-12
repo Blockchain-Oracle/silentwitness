@@ -544,11 +544,11 @@ stories:
 
   - id: story-cli-verify
     epic: "Epic 12 — CLI + Claude Code drop-in"
-    status: PENDING
+    status: COMPLETE
     depends_on: [cli-init, hmac-ledger]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/62"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/189"
+    merged_at: "2026-06-12"
 
   - id: story-cli-export
     epic: "Epic 12 — CLI + Claude Code drop-in"
