@@ -1,0 +1,49 @@
+{
+  // SilentWitness — Claude Code drop-in config (architecture §6.2)
+  // Installed to $HOME/.claude/silentwitness/ by: silentwitness install --claude-code
+  "mcpServers": {
+    "silentwitness": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "silentwitness_mcp"]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(silentwitness *)",
+      "mcp__silentwitness__*"
+    ],
+    "deny": [
+      // Destructive shell operations
+      "Bash(rm -rf*)",
+      "Bash(dd *)",
+      "Bash(wget *)",
+      "Bash(curl *)",
+      "Bash(ssh *)",
+      "Bash(nc *)",
+      "Bash(socat *)",
+      "WebFetch",
+      // Audit-chain integrity: these files must only be written via MCP tools
+      "Edit(cases/*/audit/*.jsonl)",
+      "Edit(cases/*/evidence.json)",
+      "Edit(cases/*/report.md)",
+      "Edit(cases/*/findings.json)",
+      "Edit(/var/lib/silentwitness/**)",
+      "Write(cases/*/audit/*.jsonl)",
+      "Write(cases/*/evidence.json)",
+      "Write(/var/lib/silentwitness/**)",
+      // Approve requires explicit human confirmation — never invoke autonomously
+      "Bash(silentwitness approve*)",
+      "Bash(*silentwitness approve*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        // HOOK-tier provenance: logs Bash command + output hash to audit/claude-code.jsonl
+        "matcher": "Bash",
+        "command": "silentwitness audit-hook"
+      }
+    ]
+  }
+}
