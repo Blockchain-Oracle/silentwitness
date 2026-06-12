@@ -5,6 +5,14 @@ a full binary is fetched and pinned for the first time).
 
 Usage:
   uv run python harness/datasets/recompute_manifest.py <manifest.json> [<manifest.json> ...]
+
+Progress lines (changed/unchanged/written) go to stdout.
+Errors, skipped-file warnings, and validation failures go to stderr.
+
+Exit codes:
+  0 — all manifests processed (or already up-to-date)
+  1 — hash, I/O, or schema-validation error while processing a manifest
+  2 — usage error or manifest file not found
 """
 
 from __future__ import annotations
@@ -71,7 +79,7 @@ def _recompute(manifest_path: Path) -> int:
             primary_sha = sha256
             primary_size = size
 
-    # Sync manifest-level sha256/size_bytes to the primary evidence file.
+    # Sync manifest-level sha256/size_bytes from the first evidence file.
     if primary_sha is not None and (
         raw.get("sha256") != primary_sha or raw.get("size_bytes") != primary_size
     ):
@@ -83,28 +91,29 @@ def _recompute(manifest_path: Path) -> int:
         print(f"  {manifest_path.name}: no changes")
         return 0
 
-    # Validate before writing — reject semantically invalid JSON.
+    # Validate against the schema before writing — catch field constraint violations early.
     try:
         DatasetManifest.model_validate(raw)
     except ValidationError as exc:
         print(f"  schema validation failed: {exc}", file=sys.stderr)
         return 1
 
-    # Atomic write: write to a temp file in the same directory, then rename.
+    # Atomic write: fdopen handles partial-write detection; rename is POSIX-atomic.
     text = json.dumps(raw, indent=2, ensure_ascii=False) + "\n"
     fd, tmp_path = tempfile.mkstemp(dir=manifest_path.parent, suffix=".tmp")
     try:
-        try:
-            os.write(fd, text.encode("utf-8"))
-        finally:
-            os.close(fd)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
         Path(tmp_path).replace(manifest_path)
     except OSError as exc:
         print(f"  error writing {manifest_path.name}: {exc}", file=sys.stderr)
         try:
             os.unlink(tmp_path)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            print(
+                f"  warning: could not remove temp file {tmp_path}: {cleanup_exc}",
+                file=sys.stderr,
+            )
         return 1
 
     print(f"  {manifest_path.name}: written")

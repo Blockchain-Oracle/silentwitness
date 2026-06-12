@@ -55,7 +55,6 @@ def _sha256_file(path: Path) -> str:
 def _verify_one(
     manifest_path: Path,
     *,
-    strict: bool,
     table: Table,
 ) -> tuple[int, int]:
     """Verify one manifest. Returns (mismatch_count, missing_count)."""
@@ -63,6 +62,7 @@ def _verify_one(
         raw = manifest_path.read_text(encoding="utf-8")
         manifest = DatasetManifest.model_validate(json.loads(raw))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValidationError) as exc:
+        print(f"parse error in {manifest_path}: {exc}", file=sys.stderr)
         table.add_row(
             manifest_path.name,
             "—",
@@ -156,7 +156,7 @@ def main(argv: list[str]) -> int:
     total_mismatches = 0
     total_missing = 0
     for mp in manifest_paths:
-        mismatches, missing = _verify_one(mp, strict=args.strict, table=table)
+        mismatches, missing = _verify_one(mp, table=table)
         total_mismatches += mismatches
         total_missing += missing
 

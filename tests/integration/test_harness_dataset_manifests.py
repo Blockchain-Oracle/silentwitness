@@ -56,8 +56,9 @@ def test_verify_stub_only_exits_0() -> None:
     )
     assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
     combined = result.stdout + result.stderr
-    # Rich table shows dataset_id="nitroba" and the match result; file path may be truncated
     assert "nitroba" in combined
+    # "stubs" appears in the file column (stubs/nitroba-stub.pcap), distinguishing stub from full
+    assert "stubs" in combined
     assert "match=True" in combined
 
 
@@ -86,7 +87,7 @@ def test_verify_full_manifests_skips_missing() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_verify_strict_exits_2_on_missing(tmp_path: Path) -> None:
+def test_verify_strict_exits_2_on_missing() -> None:
     """--strict exits 2 if any pinned evidence file is absent from disk."""
     stub_manifest = _MANIFEST_DIR / "nist-hacking-case.manifest.json"
     result = subprocess.run(
@@ -103,7 +104,7 @@ def test_verify_strict_exits_2_on_missing(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_corrupted_stub_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_corrupted_stub_exits_1(tmp_path: Path) -> None:
     """A single-byte mutation of the stub pcap must cause verify to exit 1."""
     original = _STUB_PCAP.read_bytes()
     corrupted = bytes([original[0] ^ 0xFF]) + original[1:]
