@@ -1,0 +1,8 @@
+{"ts": "2026-06-12T10:00:00Z", "type": "form", "hypothesis_id": "H-001", "reason": "Initial hypothesis: targeted credential theft", "tokens_spent": 500, "steps_spent": 1}
+{"ts": "2026-06-12T10:01:00Z", "type": "dispatch", "hypothesis_id": "H-001", "reason": "Dispatching memory analysis", "tokens_spent": 800, "steps_spent": 2}
+{"ts": "2026-06-12T10:05:00Z", "type": "confirm", "hypothesis_id": "H-001", "reason": "lsass dump confirmed by prefetch", "tokens_spent": 1200, "steps_spent": 4}
+{"ts": "2026-06-12T10:06:00Z", "type": "pivot", "hypothesis_id": "H-001", "reason": "C2 traffic found; pivoting to network exfil hypothesis", "tokens_spent": 1500, "steps_spent": 5}
+{"ts": "2026-06-12T10:07:00Z", "type": "form", "hypothesis_id": "H-002", "reason": "New hypothesis: data exfiltration via C2 channel", "tokens_spent": 1600, "steps_spent": 6}
+{"ts": "2026-06-12T10:10:00Z", "type": "dispatch", "hypothesis_id": "H-002", "reason": "Dispatching network analysis", "tokens_spent": 2000, "steps_spent": 8}
+{"ts": "2026-06-12T10:15:00Z", "type": "pivot", "hypothesis_id": "H-002", "reason": "Scheduled task found; pivoting to persistence hypothesis", "tokens_spent": 2800, "steps_spent": 11}
+{"ts": "2026-06-12T10:20:00Z", "type": "confirm", "hypothesis_id": "H-003", "reason": "Persistence mechanism confirmed", "tokens_spent": 3200, "steps_spent": 13}
