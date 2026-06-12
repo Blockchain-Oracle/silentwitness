@@ -1,57 +1,130 @@
-"""Dataset manifest verifier — stub until Epic 14 lands.
+"""Dataset manifest verifier — Epic 14 accuracy harness.
 
-The full implementation (SHA-256-pinned manifest of forensic image stubs +
-fair-compare evaluation harness) is owned by Epic 14 stories. For Epic 1, this
-stub exists so the CI `dataset-hash-verify` job has something concrete to call.
+Usage:
+  uv run python harness/datasets/verify_manifest.py [--stub-only] [--strict] [--manifest <path>]
 
-Forcing-function design: when Epic 14 lands real manifests under
-``harness/datasets/manifests/``, ``--stub-only`` will refuse to run — that
-prevents the gate from silently no-opping at submission time. A future Epic 14
-PR has to flip CI to the real verifier in the same commit that introduces the
-first manifest file.
+Reads every *.manifest.json under harness/datasets/ (or the single path given by
+--manifest), computes SHA256 of each file listed in evidence_files that exists on
+disk, and prints a rich table comparing expected vs actual hashes.
+
+Exit codes:
+  0 — all present files match their pinned SHA256
+  1 — at least one sha256 mismatch
+  2 — --strict and at least one evidence file is missing from disk
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from pathlib import Path
 
-_MANIFEST_DIR = Path(__file__).resolve().parent / "manifests"
+# Allow direct execution as `python harness/datasets/verify_manifest.py` without
+# installing the harness package — the repo root (two levels up) must be on sys.path
+# for `from harness.datasets.schema import ...` to resolve.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from rich.console import Console  # noqa: E402
+from rich.table import Table  # noqa: E402
+
+from harness.datasets.schema import DatasetManifest  # noqa: E402
+
+_MANIFEST_DIR = Path(__file__).resolve().parent
+_CHUNK = 8192
 
 
-def _manifest_files_present() -> list[Path]:
-    if not _MANIFEST_DIR.exists():
-        return []
-    return sorted(p for p in _MANIFEST_DIR.iterdir() if p.is_file())
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(_CHUNK):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_one(
+    manifest_path: Path,
+    *,
+    strict: bool,
+    console: Console,
+    table: Table,
+) -> tuple[int, int]:
+    """Verify one manifest. Returns (mismatch_count, missing_count)."""
+    raw = manifest_path.read_text(encoding="utf-8")
+    manifest = DatasetManifest.model_validate(json.loads(raw))
+    base_dir = manifest_path.parent
+
+    mismatches = 0
+    missing = 0
+    for ef in manifest.evidence_files:
+        file_path = base_dir / ef.relative_path
+        if not file_path.exists():
+            missing += 1
+            table.add_row(
+                manifest.dataset_id,
+                ef.relative_path,
+                ef.sha256[:16] + "…",
+                "[yellow]—[/yellow]",
+                "[yellow]missing (skipped)[/yellow]",
+            )
+            continue
+
+        actual = _sha256_file(file_path)
+        match = actual == ef.sha256
+        if not match:
+            mismatches += 1
+        table.add_row(
+            manifest.dataset_id,
+            ef.relative_path,
+            ef.sha256[:16] + "…",
+            actual[:16] + "…",
+            "[green]match=True[/green]" if match else "[red]match=False (sha256 mismatch)[/red]",
+        )
+
+    return mismatches, missing
 
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Verify dataset manifest hashes.")
-    parser.add_argument(
-        "--stub-only",
-        action="store_true",
-        help="Stub mode (Epic 1): succeed if no manifests are present yet.",
-    )
+    parser.add_argument("--stub-only", action="store_true", help="Only verify -stub manifests.")
+    parser.add_argument("--strict", action="store_true", help="Exit 2 if evidence files missing.")
+    parser.add_argument("--manifest", type=Path, help="Verify a single manifest file.")
     args = parser.parse_args(argv[1:])
+
+    if args.manifest:
+        manifest_paths = [args.manifest]
+    else:
+        manifest_paths = sorted(_MANIFEST_DIR.glob("*.manifest.json"))
+
     if args.stub_only:
-        manifests = _manifest_files_present()
-        if manifests:
-            print(
-                "verify_manifest: STUB MODE INVOKED BUT MANIFESTS EXIST — "
-                "Epic 14 landed but CI is still calling --stub-only. "
-                f"Found: {[m.name for m in manifests]}. "
-                "Flip .github/workflows/ci.yml `dataset-hash-verify` to the real verifier.",
-                file=sys.stderr,
-            )
-            return 2
-        print("verify_manifest: stub mode — no manifests present (Epic 14 not yet merged).")
-        return 0
-    print(
-        "verify_manifest: real verification not implemented yet (owned by Epic 14).",
-        file=sys.stderr,
-    )
-    return 2
+        manifest_paths = [p for p in manifest_paths if "-stub" in p.name]
+
+    console = Console()
+    table = Table("dataset_id", "file", "expected (16…)", "actual (16…)", "result")
+
+    total_mismatches = 0
+    total_missing = 0
+    for mp in manifest_paths:
+        mismatches, missing = _verify_one(mp, strict=args.strict, console=console, table=table)
+        total_mismatches += mismatches
+        total_missing += missing
+
+    console.print(table)
+
+    if total_mismatches > 0:
+        console.print(f"[red]✗[/red] {total_mismatches} sha256 mismatch(es)", highlight=False)
+        return 1
+    if args.strict and total_missing > 0:
+        console.print(
+            f"[red]✗[/red] {total_missing} evidence file(s) missing (--strict)",
+            highlight=False,
+        )
+        return 2
+    console.print("[green]✓[/green] all present files match their pinned sha256", highlight=False)
+    return 0
 
 
 if __name__ == "__main__":

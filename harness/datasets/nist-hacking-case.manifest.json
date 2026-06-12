@@ -1,0 +1,24 @@
+{
+  "dataset_id": "nist-hacking-case",
+  "scenario_summary": "NIST CFReDS Hacking Case (Greg Schardt / Mr. Evil). A Windows 98 Dell Latitude CPi forensic image from a 2004 NIST challenge. The suspect installed hacking tools including Ethereal, Anonymizer, and Cain, and intercepted network credentials. Canonical evidence: single reassembled EnCase E01 at images/4Dell Latitude CPi.E01 on the CFReDS archive.",
+  "download_url": null,
+  "sha256": "<computed-on-fetch>",
+  "size_bytes": 6000000000,
+  "evidence_files": [
+    {
+      "relative_path": "4Dell Latitude CPi.E01",
+      "sha256": "<computed-on-fetch>",
+      "size_bytes": 6000000000
+    }
+  ],
+  "expected_investigation_path": [
+    "identify primary user profile (Mr. Evil)",
+    "enumerate installed tools (Ethereal/Anonymizer/Cain)",
+    "extract MAC + IP + hostname",
+    "correlate intercepted credentials in pcap"
+  ],
+  "ground_truth_status": "public_writeups",
+  "LLM_memorization_risk": "very_high",
+  "memorization_risk_note": "Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) appear in hundreds of indexed writeups. A passing finding here is not evidence of working forensic capability — it is evidence the model has seen the writeups. The citation + entity gate forces every claim to ground in evidence-present spans rather than regurgitated memory; this dataset demonstrates the gates work, not latent capability.",
+  "notes": "Canonical evidence is the single reassembled EnCase E01 (not the legacy multi-part DD split). The E01 is the authoritative single-file form published by NIST. Legacy DD MD5 (from context/evaluation §A.3): aee4fcd9301c03b3b054623ca261959a (~6 GB). The E01 has a different MD5 — record both after first fetch. SHA256 = <computed-on-fetch>; update via recompute_manifest.py. Download URL: https://cfreds-archive.nist.gov (see NIST CFReDS archive for current path; URL-encoded space in filename)."
+}

@@ -1,0 +1,13 @@
+{
+  "dataset_id": "case-trapdoor",
+  "scenario_summary": "Synthetic adversary-pair challenge case created specifically for SilentWitness evaluation to avoid LLM memorization bias. Evidence artifacts and ground-truth answers will be provided when Epic 15 ships. The scorer and runners skip this dataset gracefully when the sha256 placeholder is detected.",
+  "download_url": null,
+  "sha256": "<filled-by-epic-15>",
+  "size_bytes": 0,
+  "evidence_files": [],
+  "expected_investigation_path": [],
+  "ground_truth_status": "synthetic",
+  "LLM_memorization_risk": "low",
+  "memorization_risk_note": "Synthetic dataset with no prior public disclosure. LLM memorization risk is low by design — the case-trapdoor is constructed to contain novel artifacts not present in any training corpus.",
+  "notes": "Filled by Epic 15 if optional adversary-pair epic ships; harness skips gracefully when sha256 is the placeholder."
+}

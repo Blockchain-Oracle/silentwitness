@@ -1,0 +1,24 @@
+{
+  "dataset_id": "nitroba",
+  "scenario_summary": "2010 DFRWS Nitroba wardrive challenge pcap. A campus network packet capture traces harassing email activity from a dorm resident to a faculty member. The forensic pivot chain moves from DHCP lease windows through SMTP/HTTP flows to a one-shot URL and finally to a roster-matched dorm room and MAC address.",
+  "download_url": null,
+  "sha256": "2b77a9eaefc1d6af163d1ba793c96dbccacb04e6befdf1a0b01f8c67553ec2fb",
+  "size_bytes": 56180821,
+  "evidence_files": [
+    {
+      "relative_path": "nitroba.pcap",
+      "sha256": "2b77a9eaefc1d6af163d1ba793c96dbccacb04e6befdf1a0b01f8c67553ec2fb",
+      "size_bytes": 56180821
+    }
+  ],
+  "expected_investigation_path": [
+    "identify dorm DHCP lease window",
+    "filter SMTP/HTTP to lilytuckrige@yahoo.com",
+    "extract willselfdestruct.com one-shot URL",
+    "pivot to roster + MAC + dorm room"
+  ],
+  "ground_truth_status": "password_gated",
+  "LLM_memorization_risk": "medium",
+  "memorization_risk_note": "The Nitroba challenge is a 2010 competition dataset with published community writeups. Memorization risk is medium — the wardrive scenario is widely discussed but per-packet evidence paths require genuine forensic reasoning against the mounted pcap.",
+  "notes": "MD5 legacy (from context/evaluation §A.1): 9981827f11968773ff815e39f5458ec8. Full binary is gitignored; fetch from the DFRWS 2010 challenge archive. Stub for CI hash-verify is at stubs/nitroba-stub.pcap (nitroba-stub.manifest.json)."
+}

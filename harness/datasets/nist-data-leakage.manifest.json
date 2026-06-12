@@ -1,0 +1,29 @@
+{
+  "dataset_id": "nist-data-leakage",
+  "scenario_summary": "NIST CFReDS Data Leakage case. A Windows XP workstation E01 image from an insider-threat scenario where employee Iaman Informant attempts to exfiltrate sensitive company documents via removable media and external channels. Official answer key published as leakage-answers.pdf (ground_truth_status public_pdf).",
+  "download_url": null,
+  "sha256": "<computed-on-fetch>",
+  "size_bytes": 2000000000,
+  "evidence_files": [
+    {
+      "relative_path": "pc.E01",
+      "sha256": "<computed-on-fetch>",
+      "size_bytes": 2000000000
+    },
+    {
+      "relative_path": "removable-media.iso",
+      "sha256": "<computed-on-fetch>",
+      "size_bytes": 0
+    }
+  ],
+  "expected_investigation_path": [
+    "identify primary user profile (Iaman Informant)",
+    "enumerate exfiltration vectors (USB, email, cloud)",
+    "extract staged files from recycle bin and temp directories",
+    "correlate document metadata to leaked content"
+  ],
+  "ground_truth_status": "public_pdf",
+  "LLM_memorization_risk": "high",
+  "memorization_risk_note": "The NIST Data Leakage scenario summary and Iaman Informant pivot chain appear in widely indexed forensic course materials. Memorization risk is high for the scenario-level narrative; medium for individual artifact paths (per evaluation context §A.2). The citation gate enforces that every claim references a tool-output span rather than recalled course content.",
+  "notes": "MD5 legacy PC E01 (from context/evaluation §A.2): A49D1254C873808C58E6F1BCD60B5BDE. Size approximately 2.0 GB (not 20 GB — earlier drafts were off by 10x). SHA256 and exact size_bytes must be computed locally via recompute_manifest.py after first fetch. Removable-media size_bytes is a placeholder pending fetch. Download from NIST CFReDS archive."
+}
