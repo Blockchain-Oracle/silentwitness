@@ -170,13 +170,42 @@ install_suricata() {
 }
 
 # ---------------------------------------------------------------------------
+# Mermaid CLI (optional, --diagrams flag) — docs-time only.
+# SIFT 2026 ships dotnet 9 + Python but NOT Node.js (context/.raw-design-research/03
+# line 207). We provision Node 20 LTS via nvm and install @mermaid-js/mermaid-cli@^10
+# globally to give docs maintainers `mmdc` for regenerating docs/diagrams/*.png.
+# Pinned major: ^10 (mmdc 10.x stable; v11 introduces breaking flags).
+# ---------------------------------------------------------------------------
+install_mermaid_cli() {
+    log "provisioning Node 20 + @mermaid-js/mermaid-cli@^10 (docs-time)"
+    if ! command -v nvm >/dev/null 2>&1; then
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+        export NVM_DIR="$HOME/.nvm"
+        # shellcheck source=/dev/null
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    fi
+    nvm install 20
+    nvm use 20
+    npm install -g "@mermaid-js/mermaid-cli@^10"
+    mmdc --version || fail "mmdc runtime check failed"
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+DIAGRAMS=0
+for arg in "$@"; do
+    case "$arg" in
+        --diagrams) DIAGRAMS=1 ;;
+    esac
+done
+
 install_hayabusa
 install_hayabusa_rules
 install_chainsaw
 install_sigma_rules
 install_zeek
 install_suricata
+[ "$DIAGRAMS" = "1" ] && install_mermaid_cli
 
 log "all tools provisioned successfully"

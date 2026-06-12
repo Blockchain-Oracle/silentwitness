@@ -66,3 +66,7 @@ clean:
 # Build the Docker image locally (final image = runtime stage from Dockerfile).
 build:
     docker build -t silentwitness:local .
+
+# Render docs/diagrams/*.mmd to PNG via mmdc. Run `./install.sh --diagrams` first.
+diagrams:
+    ./scripts/render_diagrams.sh

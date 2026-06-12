@@ -69,12 +69,12 @@ Top-level shape of the system. The three artifacts (`silentwitness-mcp`, `silent
 flowchart LR
     subgraph user_machine["Examiner workstation (SIFT 2026 VM or Docker)"]
 
-        subgraph claude_code_artifact["silentwitness-claude-code (drop-in config)"]
+        subgraph claude_code_artifact["silentwitness-claude-code (drop-in config) (prompt-based — supplementary, not load-bearing)"]
             cc_md["CLAUDE.md<br/>senior-analyst frame"]
             cc_settings["settings.json<br/>MCP registration + allow/deny"]
         end
 
-        subgraph agent_artifact["silentwitness-agent (reference Pydantic AI agent)"]
+        subgraph agent_artifact["silentwitness-agent (reference Pydantic AI agent) (architectural)"]
             investigator["investigator.py<br/>main Agent<br/>model: SILENTWITNESS_MODEL"]
             mem_spec["specialists/memory.py"]
             disk_spec["specialists/disk.py"]
@@ -85,7 +85,7 @@ flowchart LR
             critic["critic.py<br/>separate Agent,<br/>fresh context"]
         end
 
-        subgraph mcp_artifact["silentwitness-mcp (FastMCP server — THE PRODUCT)"]
+        subgraph mcp_artifact["silentwitness-mcp (FastMCP server — THE PRODUCT) (architectural)"]
             srv["server.py<br/>FastMCP entrypoint"]
             tools["tools/<br/>~22 forensic tool wrappers"]
             envelope["envelope.py<br/>Pydantic response model"]
@@ -100,7 +100,7 @@ flowchart LR
             findings["findings/<br/>observation, interpretation,<br/>narrative tools"]
         end
 
-        subgraph sift_tools["SIFT 2026 native tooling (subprocess trust boundary)"]
+        subgraph sift_tools["SIFT 2026 native tooling (subprocess trust boundary) (architectural)"]
             vol3["/opt/volatility3/bin/vol"]
             ez["/opt/zimmermantools/*"]
             hayabusa["/opt/hayabusa/hayabusa<br/>(installed by us)"]
@@ -111,23 +111,23 @@ flowchart LR
             tsk["mmls, fls, icat, mactime"]
         end
 
-        subgraph evidence_volume["/evidence/ mount (ro,noexec,nosuid)"]
+        subgraph evidence_volume["/evidence/ mount (ro,noexec,nosuid) (architectural)"]
             ev_files[("disk images,<br/>memory dumps,<br/>EVTX, pcap")]
         end
 
-        subgraph case_volume["cases/<case_id>/ (read-write)"]
+        subgraph case_volume["cases/<case_id>/ (read-write) (architectural)"]
             audit_dir[("audit/*.jsonl")]
             report_md[("report.md")]
             findings_json[("findings.json")]
         end
 
-        subgraph ledger_volume["/var/lib/silentwitness/verification/ (0700/0600)"]
+        subgraph ledger_volume["/var/lib/silentwitness/verification/ (0700/0600) (architectural)"]
             led_jsonl[("<case_id>.jsonl<br/>HMAC-signed")]
         end
 
     end
 
-    subgraph llm_provider["External LLM provider (model-agnostic)"]
+    subgraph llm_provider["External LLM provider (model-agnostic) (prompt-based — supplementary, not load-bearing)"]
         prov{{"anthropic | openai |<br/>google-gla | ollama"}}
     end
 

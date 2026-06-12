@@ -1,0 +1,106 @@
+flowchart LR
+    subgraph user_machine["Examiner workstation (SIFT 2026 VM or Docker)"]
+
+        subgraph claude_code_artifact["silentwitness-claude-code (drop-in config) (prompt-based — supplementary, not load-bearing)"]
+            cc_md["CLAUDE.md<br/>senior-analyst frame"]
+            cc_settings["settings.json<br/>MCP registration + allow/deny"]
+        end
+
+        subgraph agent_artifact["silentwitness-agent (reference Pydantic AI agent) (architectural)"]
+            investigator["investigator.py<br/>main Agent<br/>model: SILENTWITNESS_MODEL"]
+            mem_spec["specialists/memory.py"]
+            disk_spec["specialists/disk.py"]
+            net_spec["specialists/network.py"]
+            log_spec["specialists/log.py"]
+            hyp_stack["hypothesis/stack.py<br/>state machine"]
+            report["report/renderer.py<br/>Markdown SoT"]
+            critic["critic.py<br/>separate Agent,<br/>fresh context"]
+        end
+
+        subgraph mcp_artifact["silentwitness-mcp (FastMCP server — THE PRODUCT) (architectural)"]
+            srv["server.py<br/>FastMCP entrypoint"]
+            tools["tools/<br/>~22 forensic tool wrappers"]
+            envelope["envelope.py<br/>Pydantic response model"]
+            cit_gate["verification/citation_gate.py"]
+            ent_gate["verification/entity_gate.py"]
+            sanit["verification/sanitizer.py"]
+            norm["verification/normalizer.py"]
+            audit_log["audit/logger.py<br/>JSONL writer"]
+            hmac_led["audit/ledger.py<br/>HMAC-signed approval ledger"]
+            ev_reg["evidence/registry.py<br/>SHA256 manifest"]
+            mount_v["evidence/mount.py<br/>ro,noexec,nosuid check"]
+            findings["findings/<br/>observation, interpretation,<br/>narrative tools"]
+        end
+
+        subgraph sift_tools["SIFT 2026 native tooling (subprocess trust boundary) (architectural)"]
+            vol3["/opt/volatility3/bin/vol"]
+            ez["/opt/zimmermantools/*"]
+            hayabusa["/opt/hayabusa/hayabusa<br/>(installed by us)"]
+            chainsaw["/opt/chainsaw/chainsaw<br/>(installed by us)"]
+            zeek["zeek (installed by us)"]
+            suricata["suricata (installed by us)"]
+            regripper["/usr/local/bin/rip.pl"]
+            tsk["mmls, fls, icat, mactime"]
+        end
+
+        subgraph evidence_volume["/evidence/ mount (ro,noexec,nosuid) (architectural)"]
+            ev_files[("disk images,<br/>memory dumps,<br/>EVTX, pcap")]
+        end
+
+        subgraph case_volume["cases/<case_id>/ (read-write) (architectural)"]
+            audit_dir[("audit/*.jsonl")]
+            report_md[("report.md")]
+            findings_json[("findings.json")]
+        end
+
+        subgraph ledger_volume["/var/lib/silentwitness/verification/ (0700/0600) (architectural)"]
+            led_jsonl[("<case_id>.jsonl<br/>HMAC-signed")]
+        end
+
+    end
+
+    subgraph llm_provider["External LLM provider (model-agnostic) (prompt-based — supplementary, not load-bearing)"]
+        prov{{"anthropic | openai |<br/>google-gla | ollama"}}
+    end
+
+    cc_md -.-> investigator
+    cc_settings -.-> srv
+    investigator --> hyp_stack
+    investigator --> mem_spec
+    investigator --> disk_spec
+    investigator --> net_spec
+    investigator --> log_spec
+    investigator --> report
+    investigator -. periodic .-> critic
+    critic -. CHALLENGE/REJECT .-> investigator
+    mem_spec & disk_spec & net_spec & log_spec --> srv
+
+    investigator -- MCP stdio/HTTP --> srv
+    srv --> tools
+    srv --> findings
+    tools --> sift_tools
+    sift_tools -. read-only .-> ev_files
+
+    findings --> cit_gate
+    findings --> ent_gate
+    findings --> sanit
+    cit_gate --> norm
+    cit_gate --> audit_log
+    ent_gate --> audit_log
+    sanit --> audit_log
+    audit_log --> audit_dir
+    findings --> findings_json
+    findings --> report_md
+
+    tools --> ev_reg
+    ev_reg --> ev_files
+    mount_v --> ev_files
+
+    investigator <-- model API --> prov
+    critic <-- model API --> prov
+
+    findings -. "examiner approves via CLI" .-> hmac_led
+    hmac_led --> led_jsonl
+
+    classDef boundary stroke-dasharray:5 5,stroke-width:2px;
+    class mcp_artifact,sift_tools,evidence_volume,ledger_volume boundary;
