@@ -1,0 +1,86 @@
+[
+  {
+    "id": "GT-NIT-001",
+    "dataset_id": "nitroba",
+    "category": "user_profile",
+    "summary": "Suspect identified as Johnny Lee Henry (community-converged answer from DFRWS 2010 challenge)",
+    "expected_artifact_substrings": ["Johnny", "Henry"],
+    "expected_path_globs": [],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "Community-converged answer: the harassing emails were sent by Johnny Lee Henry, a student in the dorm building. Identity confirmed by MAC-to-DHCP-to-roster pivot."
+  },
+  {
+    "id": "GT-NIT-002",
+    "dataset_id": "nitroba",
+    "category": "network_indicator",
+    "summary": "DHCP lease window identifies dorm resident; SMTP traffic to lilytuckrige@yahoo.com",
+    "expected_artifact_substrings": ["lilytuckrige@yahoo.com"],
+    "expected_path_globs": ["*.pcap", "*.cap"],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "SMTP/HTTP flows to lilytuckrige@yahoo.com. The harrassing email target address. Pivot from DHCP lease to dorm VLAN to identify the sender's IP."
+  },
+  {
+    "id": "GT-NIT-003",
+    "dataset_id": "nitroba",
+    "category": "network_indicator",
+    "summary": "One-shot URL willselfdestruct.com used as evidence-destruction measure",
+    "expected_artifact_substrings": ["willselfdestruct.com"],
+    "expected_path_globs": ["*.pcap", "*.cap"],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "willselfdestruct.com one-shot URL accessed from the suspect's machine — a self-destructing URL service used to transmit content without persistent trace."
+  },
+  {
+    "id": "GT-NIT-004",
+    "dataset_id": "nitroba",
+    "category": "network_indicator",
+    "summary": "Suspect MAC address pivots to DHCP lease and dorm room assignment",
+    "expected_artifact_substrings": ["DHCP", "MAC"],
+    "expected_path_globs": ["*.pcap", "*.cap"],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "DHCP REQUEST/ACK pairs in the pcap bind the suspect's MAC address to an IP, which is then cross-referenced against the campus DHCP lease log to identify the dorm room."
+  },
+  {
+    "id": "GT-NIT-005",
+    "dataset_id": "nitroba",
+    "category": "user_profile",
+    "summary": "Class roster + dorm assignment confirms dorm room and resident identity",
+    "expected_artifact_substrings": ["roster"],
+    "expected_path_globs": [],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "Cross-reference campus class roster against the dorm room obtained from the DHCP lease pivot. Johnny Lee Henry is the only resident matching the dorm room at the time of the incident."
+  },
+  {
+    "id": "GT-NIT-006",
+    "dataset_id": "nitroba",
+    "category": "communication",
+    "summary": "Harassment emails sent to faculty member Lily Tuckrige at lilytuckrige@yahoo.com",
+    "expected_artifact_substrings": ["lilytuckrige", "yahoo.com"],
+    "expected_path_globs": ["*.pcap", "*.cap"],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "SMTP flows in the wardrive pcap show emails addressed to lilytuckrige@yahoo.com. The recipient is a faculty member. Content is harassing per the case description."
+  },
+  {
+    "id": "GT-NIT-007",
+    "dataset_id": "nitroba",
+    "category": "timestamp",
+    "summary": "DHCP lease window narrows the time of transmission to a specific date range",
+    "expected_artifact_substrings": ["DHCP"],
+    "expected_path_globs": ["*.pcap", "*.cap"],
+    "supporting_question_id": null,
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "The DHCP lease timestamps bound the period during which the suspect's MAC held the relevant IP address. This anchors the harassing communications to a specific time window."
+  }
+]
