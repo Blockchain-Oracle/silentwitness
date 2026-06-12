@@ -223,6 +223,21 @@ def test_system_prompt_excludes_forbidden_phrases() -> None:
 
 
 # ---------------------------------------------------------------------------
+# 14. _load_specialist_prompt — network slug loads and error path
+# ---------------------------------------------------------------------------
+
+
+def test_load_specialist_prompt_network_slug_loads() -> None:
+    prompt = _load_specialist_prompt("network")
+    assert len(prompt) > 100
+
+
+def test_load_specialist_prompt_missing_slug_raises() -> None:
+    with pytest.raises(FileNotFoundError, match="nonexistent_slug"):
+        _load_specialist_prompt("nonexistent_slug")
+
+
+# ---------------------------------------------------------------------------
 # 14. dispatch_network_specialist tool body executes via TestModel
 # ---------------------------------------------------------------------------
 
