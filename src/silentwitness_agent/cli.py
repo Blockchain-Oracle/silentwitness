@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
-import json
 import os
 import shutil
 import time
@@ -15,21 +14,11 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from silentwitness_agent.cli_commands._evidence_types import (
-    detect_evidence_type,
-    human_size,
-    sha256_hex,
-)
 from silentwitness_agent.config import SilentWitnessConfig, load_config
 from silentwitness_agent.report.template import Frontmatter, ReportStatus, dump_frontmatter
 from silentwitness_common.atomic_io import write_json_atomic, write_text_atomic
 from silentwitness_common.version import __version__ as _sw_version
 from silentwitness_mcp.audit.logger import AuditLogger
-from silentwitness_mcp.evidence.registry import (
-    EvidenceContentDriftError,
-    EvidenceRegistry,
-    EvidenceRegistryError,
-)
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, rich_markup_mode="rich")
 
@@ -277,6 +266,34 @@ def approve(
     raise typer.Exit(code=code)
 
 
+@app.command("verify")
+def verify(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    ledger: Path | None = typer.Option(None, "--ledger"),
+    strict: bool = typer.Option(False, "--strict"),
+) -> None:
+    from silentwitness_agent.cli_commands.verify import (
+        _DEFAULT_LEDGER_DIR,
+        run as _run,
+    )
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = Console(stderr=True, no_color=cli_ctx.no_color)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    code = _run(
+        case_dir,
+        case_id,
+        ledger_dir=ledger if ledger is not None else _DEFAULT_LEDGER_DIR,
+        strict=strict,
+        no_color=cli_ctx.no_color,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
@@ -285,113 +302,22 @@ def register_evidence(
     dry_run: bool = typer.Option(False, "--dry-run"),
     recursive: bool = typer.Option(False, "--recursive"),
 ) -> None:
+    from silentwitness_agent.cli_commands.register_evidence import run as _run
+
     cli_ctx: _CliCtx = ctx.obj
-    out = _console(cli_ctx.no_color)
     err = _console(cli_ctx.no_color, stderr=True)
-    t0 = time.monotonic()
-    if not path.exists():
-        err.print(f"[red]✗[/red] '{path}' does not exist", highlight=False)
-        raise typer.Exit(code=1)
     case_dir = _resolve_case_dir(case_id)
     if not case_dir.exists():
         err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
         raise typer.Exit(code=1)
-    try:
-        candidates = path.rglob("*") if recursive and path.is_dir() else [path]
-        files = [p for p in candidates if p.is_file()]
-    except PermissionError as exc:
-        err.print(f"[red]✗[/red] permission denied traversing '{path}': {exc}", highlight=False)
-        raise typer.Exit(code=1) from exc
-    except OSError as exc:
-        err.print(f"[red]✗[/red] system error traversing '{path}': {exc}", highlight=False)
-        raise typer.Exit(code=2) from exc
-    if not files:
-        hint = (
-            " (use --recursive to traverse subdirectories)"
-            if path.is_dir() and not recursive
-            else ""
-        )
-        err.print(f"[red]✗[/red] no files found under '{path}'{hint}", highlight=False)
-        raise typer.Exit(code=1)
-    if dry_run:
-        for p in files:
-            try:
-                digest, _ = sha256_hex(p)
-                out.print(
-                    f"DRY-RUN sha256:{digest}  {p.name}  ({detect_evidence_type(p)})",
-                    highlight=False,
-                )
-            except PermissionError as exc:
-                err.print(f"[red]✗[/red] permission denied: {p.name}: {exc}", highlight=False)
-            except OSError as exc:
-                err.print(f"[red]✗[/red] system error reading {p.name}: {exc}", highlight=False)
-        return
     examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
-    try:
-        registry = EvidenceRegistry(case_dir=case_dir)
-        audit_log = AuditLogger(case_dir, examiner)
-        invocation_audit_id = audit_log.next_audit_id()
-    except RuntimeError as exc:
-        err.print(f"[red]✗[/red] audit lock conflict for case '{case_id}': {exc}", highlight=False)
-        raise typer.Exit(code=2) from exc
-    except OSError as exc:
-        err.print(
-            f"[red]✗[/red] system error initialising case '{case_id}': {exc}", highlight=False
-        )
-        raise typer.Exit(code=2) from exc
-    registered = 0
-    failed = 0
-    for p in files:
-        try:
-            record = registry.register(p, detect_evidence_type(p), invocation_audit_id)
-            if record.registered_audit_id != invocation_audit_id:
-                # Returned record carries the original audit_id → idempotent re-register hit.
-                out.print(
-                    f"[yellow]⚠[/yellow] already registered (sha256 matches): {p.name}",
-                    highlight=False,
-                )
-            else:
-                sha_s = f"{record.sha256[:4]}...{record.sha256[-4:]}"
-                out.print(
-                    f"[green]✓[/green] registered {p.name}\n"
-                    f"       sha256: {sha_s}    size: {human_size(record.size_bytes)}",
-                    highlight=False,
-                )
-            registered += 1
-        except EvidenceContentDriftError as exc:
-            err.print(
-                f"[red]✗[/red] sha256_mismatch_on_reregister: {p.name}: {exc}",
-                highlight=False,
-            )
-            failed += 1
-        except (EvidenceRegistryError, PermissionError, OSError) as exc:
-            err.print(f"[red]✗[/red] {p.name}: {exc}", highlight=False)
-            failed += 1
-    result_summary: dict[str, object] = {"registered": registered, "errors": failed}
-    try:
-        audit_log.emit(
-            backend="cli",
-            tool="cli.register-evidence",
-            params={"case_id": case_id, "paths": [str(p) for p in files], "recursive": recursive},
-            result_summary=result_summary,
-            result_sha256=hashlib.sha256(
-                json.dumps(result_summary, sort_keys=True).encode()
-            ).hexdigest(),
-            stdout_path=case_dir / "audit" / "cli.jsonl",
-            elapsed_ms=(time.monotonic() - t0) * 1000,
-            model_used="cli",
-        )
-    except (OSError, ValueError) as exc:
-        err.print(f"[red]✗[/red] system error writing audit entry: {exc}", highlight=False)
-        raise typer.Exit(code=2) from exc
-    finally:
-        try:
-            audit_log.close()
-        except OSError as close_exc:
-            err.print(
-                f"[red]✗[/red] system error releasing audit log lock: {close_exc}",
-                highlight=False,
-            )
-    # Partial success exits 0; only an all-failure run is a hard error.
-    if failed and not registered:
-        raise typer.Exit(code=1)
+    code = _run(
+        case_dir,
+        case_id,
+        path,
+        dry_run=dry_run,
+        recursive=recursive,
+        examiner=examiner,
+        no_color=cli_ctx.no_color,
+    )
+    raise typer.Exit(code=code)
