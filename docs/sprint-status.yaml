@@ -641,11 +641,11 @@ stories:
 
   - id: story-scorer
     epic: "Epic 14 — Accuracy harness"
-    status: PENDING
+    status: COMPLETE
     depends_on: [ground-truth-parsers, baseline-runner, silentwitness-runner]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/73"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/200"
+    merged_at: "2026-06-12T15:36:00Z"
 
   - id: story-delta-report
     epic: "Epic 14 — Accuracy harness"
