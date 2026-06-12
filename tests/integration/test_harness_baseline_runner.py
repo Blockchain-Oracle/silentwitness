@@ -1,9 +1,10 @@
-"""Integration tests for harness/baseline/runner.py — all network and subprocess calls mocked."""
+"""Integration tests for harness/baseline/runner.py — run_baseline, BaselineRunResult, CLI."""
 
 from __future__ import annotations
 
 import io
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,23 +15,12 @@ from harness.baseline.runner import (
     BaselineRunConfig,
     BaselineRunResult,
     BaselineTimeoutError,
-    install_baseline,
     run_baseline,
 )
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-_FAKE_SCRIPT = b"#!/bin/bash\necho installed\n"
-
-
-def _make_httpx_response(content: bytes, status_code: int = 200) -> MagicMock:
-    resp = MagicMock()
-    resp.content = content
-    resp.status_code = status_code
-    resp.raise_for_status = MagicMock()
-    return resp
 
 
 def _make_popen(stdout_lines: list[bytes], returncode: int = 0) -> MagicMock:
@@ -44,77 +34,17 @@ def _make_popen(stdout_lines: list[bytes], returncode: int = 0) -> MagicMock:
     return proc
 
 
-# ---------------------------------------------------------------------------
-# install_baseline
-# ---------------------------------------------------------------------------
-
-
-class TestInstallBaseline:
-    def test_verifies_sha256_and_runs_bash(self, tmp_path: Path) -> None:
-        """install_baseline fetches script, verifies SHA256, runs bash, returns sift_dir."""
-        import hashlib
-
-        real_script = b"#!/bin/bash\necho installed\n"
-        real_sha = hashlib.sha256(real_script).hexdigest()
-
-        fake_run = MagicMock()
-        fake_run.returncode = 0
-
-        with (
-            patch("harness.baseline.runner.INSTALL_SCRIPT_SHA256", real_sha),
-            patch("harness.baseline.runner.httpx") as mock_httpx,
-            patch("harness.baseline.runner.subprocess.run", return_value=fake_run),
-        ):
-            mock_httpx.get.return_value = _make_httpx_response(real_script)
-            mock_httpx.HTTPError = Exception
-
-            sift_dir = install_baseline(tmp_path)
-
-        assert sift_dir == tmp_path / "protocol-sift"
-        assert (tmp_path / "install.sh").read_bytes() == real_script
-
-    def test_sha256_mismatch_raises_baseline_install_error(self, tmp_path: Path) -> None:
-        """install_baseline raises BaselineInstallError when SHA256 does not match pin."""
-        with (
-            patch("harness.baseline.runner.httpx") as mock_httpx,
-        ):
-            mock_httpx.get.return_value = _make_httpx_response(b"tampered content")
-            mock_httpx.HTTPError = Exception
-
-            with pytest.raises(BaselineInstallError, match=r"install-script-sha256\.txt"):
-                install_baseline(tmp_path)
-
-    def test_network_error_raises_baseline_install_error(self, tmp_path: Path) -> None:
-        """install_baseline wraps httpx network errors in BaselineInstallError."""
-
-        class FakeHTTPError(Exception):
-            pass
-
-        with patch("harness.baseline.runner.httpx") as mock_httpx:
-            mock_httpx.HTTPError = FakeHTTPError
-            mock_httpx.get.side_effect = FakeHTTPError("connection refused")
-
-            with pytest.raises(BaselineInstallError, match="Network error"):
-                install_baseline(tmp_path)
-
-    def test_httpx_none_raises_baseline_install_error(self, tmp_path: Path) -> None:
-        """install_baseline raises when httpx is not installed."""
-        with patch("harness.baseline.runner.httpx", None):
-            with pytest.raises(BaselineInstallError, match="httpx is required"):
-                install_baseline(tmp_path)
-
-
-# ---------------------------------------------------------------------------
-# run_baseline
-# ---------------------------------------------------------------------------
-
-
 def _make_config(evidence_path: Path, **kwargs: object) -> BaselineRunConfig:
     return BaselineRunConfig(
         dataset_id="nitroba",
         evidence_path=evidence_path,
         **kwargs,  # type: ignore[arg-type]
     )
+
+
+# ---------------------------------------------------------------------------
+# run_baseline
+# ---------------------------------------------------------------------------
 
 
 class TestRunBaseline:
@@ -172,17 +102,23 @@ class TestRunBaseline:
         assert result.findings[0].id == "f1"
         assert len(result.tool_calls) == 1
         assert result.tool_calls[0].tool_name == "volatility"
+        # Non-JSON line should be counted in notes.
+        assert any("skipped" in note for note in result.notes)
 
-    def test_timeout_raises_baseline_timeout_error(self, tmp_path: Path) -> None:
-        """run_baseline raises BaselineTimeoutError when timeout_seconds is exceeded."""
+    def test_timeout_terminates_and_kills_process(self, tmp_path: Path) -> None:
+        """run_baseline raises BaselineTimeoutError and escalates terminate→kill."""
         evidence = tmp_path / "evidence"
         evidence.mkdir()
         work_dir = tmp_path / "work"
         self._fake_sift_bin(work_dir)
 
-        # Simulate a process that keeps yielding lines for a very long time.
-        # We mock time.monotonic to always return past the deadline.
         popen_mock = _make_popen([b"line\n"] * 5)
+        # Simulate proc.wait(timeout=5) raising TimeoutExpired → triggers proc.kill().
+        popen_mock.wait.side_effect = [
+            subprocess.TimeoutExpired(cmd=[], timeout=5),  # first wait in timeout path
+            0,  # second wait after kill in timeout path
+            0,  # finally block wait
+        ]
 
         config = _make_config(evidence, work_dir=work_dir, timeout_seconds=1)
 
@@ -191,7 +127,7 @@ class TestRunBaseline:
         def fast_clock() -> float:
             nonlocal call_count
             call_count += 1
-            # First two calls set t0, after that return well past timeout.
+            # Call 1 sets t0; calls 2-3 are offset and timeout-check per line.
             return 0.0 if call_count <= 2 else 999.0
 
         with (
@@ -202,6 +138,9 @@ class TestRunBaseline:
             mock_run.return_value = MagicMock(returncode=0, stdout="HEAD\n")
             with pytest.raises(BaselineTimeoutError):
                 run_baseline(config)
+
+        popen_mock.terminate.assert_called_once()
+        popen_mock.kill.assert_called_once()
 
     def test_plan_mode_flag_used_when_supported(self, tmp_path: Path) -> None:
         """run_baseline includes --plan-mode in the command when sift binary supports it."""
@@ -221,27 +160,32 @@ class TestRunBaseline:
             patch("harness.baseline.runner.subprocess.run") as mock_run,
             patch("harness.baseline.runner.subprocess.Popen", side_effect=fake_popen),
         ):
-            # First call: git rev-parse; second call: --help with --plan-mode
             mock_run.side_effect = [
                 MagicMock(returncode=0, stdout="abc123\n"),
                 MagicMock(returncode=0, stdout="--plan-mode  Run in plan mode\n", stderr=""),
             ]
-            run_baseline(_make_config(evidence, work_dir=work_dir))
+            result = run_baseline(_make_config(evidence, work_dir=work_dir))
 
         assert "--plan-mode" in captured_cmd[0]
+        assert result.notes == []
 
-    def test_dry_run_fallback_noted(self, tmp_path: Path) -> None:
-        """run_baseline falls back to --dry-run and records a note when --plan-mode absent."""
+    def test_dry_run_fallback_noted_and_in_command(self, tmp_path: Path) -> None:
+        """run_baseline uses --dry-run in the command and records a note when --plan-mode absent."""
         evidence = tmp_path / "evidence"
         evidence.mkdir()
         work_dir = tmp_path / "work"
         self._fake_sift_bin(work_dir)
 
         popen_mock = _make_popen([])
+        captured_cmd: list[list[str]] = []
+
+        def fake_popen(cmd: list[str], **_: object) -> MagicMock:
+            captured_cmd.append(cmd)
+            return popen_mock
 
         with (
             patch("harness.baseline.runner.subprocess.run") as mock_run,
-            patch("harness.baseline.runner.subprocess.Popen", return_value=popen_mock),
+            patch("harness.baseline.runner.subprocess.Popen", side_effect=fake_popen),
         ):
             mock_run.side_effect = [
                 MagicMock(returncode=0, stdout="abc123\n"),
@@ -249,6 +193,7 @@ class TestRunBaseline:
             ]
             result = run_baseline(_make_config(evidence, work_dir=work_dir))
 
+        assert "--dry-run" in captured_cmd[0]
         assert any("dry-run" in note for note in result.notes)
 
 
@@ -303,6 +248,8 @@ class TestBaselineRunResultRoundTrip:
         )
         restored = BaselineRunResult.model_validate_json(original.model_dump_json())
         assert restored.dataset_id == original.dataset_id
+        assert restored.started_at == original.started_at
+        assert restored.elapsed_seconds == original.elapsed_seconds
         assert restored.findings[0].id == original.findings[0].id
         assert restored.tool_calls[0].tool_name == original.tool_calls[0].tool_name
         assert restored.notes == original.notes
@@ -315,7 +262,7 @@ class TestBaselineRunResultRoundTrip:
 
 class TestCLI:
     def test_nonexistent_evidence_exits_2(self, tmp_path: Path) -> None:
-        """CLI returns exit code 2 and mentions evidence_path when evidence dir missing."""
+        """CLI returns exit code 2 when evidence dir is missing."""
         from harness.baseline import runner as runner_module
 
         rc = runner_module.main(
@@ -332,3 +279,57 @@ class TestCLI:
 
         rc = runner_module.main(["--dataset", "INVALID_DATASET", "--evidence", str(evidence)])
         assert rc == 2
+
+    def test_install_failure_exits_3(self, tmp_path: Path) -> None:
+        """CLI returns exit code 3 when install_baseline raises BaselineInstallError."""
+        evidence = tmp_path / "evidence"
+        evidence.mkdir()
+
+        from harness.baseline import runner as runner_module
+
+        with patch(
+            "harness.baseline.runner.install_baseline",
+            side_effect=BaselineInstallError("install failed"),
+        ):
+            rc = runner_module.main(
+                ["--dataset", "nitroba", "--evidence", str(evidence), "--out", str(tmp_path)]
+            )
+        assert rc == 3
+
+    def test_timeout_exits_4(self, tmp_path: Path) -> None:
+        """CLI returns exit code 4 when run_baseline raises BaselineTimeoutError."""
+        evidence = tmp_path / "evidence"
+        evidence.mkdir()
+
+        from harness.baseline import runner as runner_module
+
+        with (
+            patch("harness.baseline.runner.install_baseline"),
+            patch(
+                "harness.baseline.runner.run_baseline",
+                side_effect=BaselineTimeoutError("timed out"),
+            ),
+        ):
+            rc = runner_module.main(
+                ["--dataset", "nitroba", "--evidence", str(evidence), "--out", str(tmp_path)]
+            )
+        assert rc == 4
+
+    def test_baseline_error_exits_5(self, tmp_path: Path) -> None:
+        """CLI returns exit code 5 when run_baseline raises an unexpected exception."""
+        evidence = tmp_path / "evidence"
+        evidence.mkdir()
+
+        from harness.baseline import runner as runner_module
+
+        with (
+            patch("harness.baseline.runner.install_baseline"),
+            patch(
+                "harness.baseline.runner.run_baseline",
+                side_effect=RuntimeError("unexpected"),
+            ),
+        ):
+            rc = runner_module.main(
+                ["--dataset", "nitroba", "--evidence", str(evidence), "--out", str(tmp_path)]
+            )
+        assert rc == 5

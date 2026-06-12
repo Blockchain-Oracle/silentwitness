@@ -1,15 +1,8 @@
 """Baseline runner: drives vanilla Protocol SIFT 2026 in plan mode against pinned evidence.
 
-Fetches the upstream install.sh, verifies its SHA256 against
-harness/baseline/install-script-sha256.txt, installs Protocol SIFT into a throwaway
-work_dir, then runs it with --plan-mode (or --dry-run fallback) against the same evidence
-path SilentWitness sees. Model + temperature are pinned identically so the comparison
-measures workflow architecture, not tuning (PRD §14 fair-compare discipline).
-
-Repin install script SHA256: fetch new install.sh, compute sha256sum, update
-install-script-sha256.txt.
-Exit codes (CLI): 0 success, 2 config/validation error, 3 install failure, 4 timeout,
-5 baseline error.
+Runs with --plan-mode (--dry-run fallback); model + temperature are pinned (PRD §14).
+Repin SHA256: sha256sum install.sh -> update install-script-sha256.txt.
+Exit codes: 0 ok, 2 config, 3 install, 4 timeout, 5 error.
 """
 
 from __future__ import annotations
@@ -23,9 +16,9 @@ import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 try:
     import httpx
@@ -34,9 +27,9 @@ except ImportError:
 
 _INSTALL_SCRIPT_SHA256_FILE = Path(__file__).resolve().parent / "install-script-sha256.txt"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "harness" / "results"
-_CHUNK = 8192
-
 INSTALL_SCRIPT_SHA256 = _INSTALL_SCRIPT_SHA256_FILE.read_text(encoding="utf-8").strip()
+_DatasetId = Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
+_DEFAULT_MODEL = "anthropic:claude-opus-4-7-1m"
 
 
 class BaselineInstallError(Exception):
@@ -50,16 +43,15 @@ class BaselineTimeoutError(Exception):
 class BaselineRunConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    dataset_id: Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
+    dataset_id: _DatasetId
     evidence_path: Path
-    examiner: str = "sansforensics"
+    examiner: str = Field(default="sansforensics", min_length=1)
     model: str = Field(
-        default_factory=lambda: os.environ.get(
-            "SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7-1m"
-        )
+        default_factory=lambda: os.environ.get("SILENTWITNESS_MODEL", _DEFAULT_MODEL),
+        min_length=1,
     )
-    temperature: float = 0.0
-    timeout_seconds: int = 1800
+    temperature: float = Field(default=0.0, ge=0.0, le=1.0)
+    timeout_seconds: int = Field(default=1800, gt=0)
     work_dir: Path | None = None
 
 
@@ -84,19 +76,16 @@ class BaselineToolCall(BaseModel):
     exit_code: int = 0
 
 
-BaselineEvent = Annotated[BaselineFinding | BaselineToolCall, Field(discriminator="type")]
-
-
 class BaselineRunResult(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    dataset_id: str
+    dataset_id: _DatasetId
     started_at: datetime
     finished_at: datetime
-    elapsed_seconds: float
+    elapsed_seconds: float = Field(ge=0.0)
     exit_code: int
     model: str
-    temperature: float
+    temperature: float = Field(ge=0.0, le=1.0)
     commit_sha: str
     findings: list[BaselineFinding]
     tool_calls: list[BaselineToolCall]
@@ -105,9 +94,11 @@ class BaselineRunResult(BaseModel):
     report_md_path: Path | None
     notes: list[str]
 
-
-def _sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    @model_validator(mode="after")
+    def _check_temporal_consistency(self) -> BaselineRunResult:
+        if self.finished_at < self.started_at:
+            raise ValueError("finished_at must not precede started_at")
+        return self
 
 
 def install_baseline(
@@ -115,88 +106,99 @@ def install_baseline(
     *,
     install_url: str = "https://raw.githubusercontent.com/teamdfir/protocol-sift/main/install.sh",
 ) -> Path:
-    """Fetch, verify, and run the Protocol SIFT install script. Returns protocol-sift dir."""
+    """Fetch, verify SHA256, and run the Protocol SIFT install script. Returns sift_dir.
+
+    Raises BaselineInstallError on httpx absence, SHA256 mismatch, or non-zero exit.
+    """
     work_dir.mkdir(parents=True, exist_ok=True)
     script_path = work_dir / "install.sh"
     log_path = work_dir / "install.log"
 
     if httpx is None:
-        raise BaselineInstallError(
-            "httpx is required to fetch the install script. "
-            f"Either `uv add httpx` or pre-stage {script_path}."
-        )
+        raise BaselineInstallError("httpx is required. Run `uv add httpx` or pre-stage the script.")
     try:
         response = httpx.get(install_url, follow_redirects=True, timeout=60.0)
         response.raise_for_status()
     except httpx.HTTPError as exc:
-        raise BaselineInstallError(
-            f"Network error fetching install script from {install_url}: {exc!r}"
-        ) from exc
+        raise BaselineInstallError(f"Network error fetching {install_url}: {exc!r}") from exc
 
     script_bytes = response.content
-    actual_sha = _sha256_bytes(script_bytes)
+    actual_sha = hashlib.sha256(script_bytes).hexdigest()
     if actual_sha != INSTALL_SCRIPT_SHA256:
         raise BaselineInstallError(
-            f"install.sh SHA256 mismatch.\n"
-            f"  got:      {actual_sha!r}\n"
-            f"  expected: {INSTALL_SCRIPT_SHA256!r}\n"
-            f"Update {_INSTALL_SCRIPT_SHA256_FILE} if this is an intentional upstream version bump."
+            f"install.sh SHA256 mismatch: got {actual_sha!r}, expected {INSTALL_SCRIPT_SHA256!r}. "
+            f"Update {_INSTALL_SCRIPT_SHA256_FILE} if intentional."
         )
     script_path.write_bytes(script_bytes)
 
     sift_env = {**os.environ, "PROTOCOL_SIFT_HOME": str(work_dir / "protocol-sift")}
     with log_path.open("wb") as log_fh:
-        result = subprocess.run(  # noqa: S603
-            ["bash", str(script_path)],  # noqa: S607
+        result = subprocess.run(  # noqa: S603 — script is SHA256-verified before execution
+            ["bash", str(script_path)],  # noqa: S607 — bash resolves via PATH
             cwd=str(work_dir),
             env=sift_env,
             stdout=log_fh,
             stderr=subprocess.STDOUT,
         )
     if result.returncode != 0:
-        raise BaselineInstallError(
-            f"Install script exited {result.returncode}. See {log_path} for details."
-        )
+        raise BaselineInstallError(f"Install script exited {result.returncode}. See {log_path}.")
 
     sift_dir = work_dir / "protocol-sift"
     if not sift_dir.exists():
-        sift_dir.mkdir(parents=True, exist_ok=True)
+        raise BaselineInstallError(
+            f"Install script exited 0 but {sift_dir} not created. See {log_path}."
+        )
     return sift_dir
 
 
 def _get_commit_sha(sift_dir: Path) -> str:
     try:
-        r = subprocess.run(  # noqa: S603
-            ["git", "-C", str(sift_dir), "rev-parse", "HEAD"],  # noqa: S607
+        r = subprocess.run(  # noqa: S603 — git is a trusted system binary
+            ["git", "-C", str(sift_dir), "rev-parse", "HEAD"],  # noqa: S607 — git resolves via PATH
             capture_output=True,
             text=True,
             timeout=10,
         )
-        return r.stdout.strip() if r.returncode == 0 else "unknown"
-    except Exception:
-        return "unknown"
+        if r.returncode == 0:
+            return r.stdout.strip()
+        return f"unknown (git exit {r.returncode})"
+    except FileNotFoundError:
+        return "unknown (git not found on PATH)"
+    except (PermissionError, OSError) as exc:
+        return f"unknown ({type(exc).__name__}: {exc})"
+    except subprocess.TimeoutExpired:
+        return "unknown (git rev-parse timed out)"
 
 
 def _probe_plan_mode_flag(sift_bin: Path) -> str:
     """Return --plan-mode if supported, else --dry-run, else empty string."""
     try:
-        r = subprocess.run(  # noqa: S603
+        r = subprocess.run(  # noqa: S603 — sift_bin is from the pinned install dir
             [str(sift_bin), "--help"],
             capture_output=True,
             text=True,
             timeout=10,
         )
-        if "--plan-mode" in r.stdout + r.stderr:
-            return "--plan-mode"
-        if "--dry-run" in r.stdout + r.stderr:
-            return "--dry-run"
-    except Exception:  # noqa: S110
-        pass
+    except FileNotFoundError as exc:
+        raise BaselineInstallError(
+            f"protocol-sift binary not found at {sift_bin}. Check install.log."
+        ) from exc
+    except PermissionError as exc:
+        raise BaselineInstallError(f"protocol-sift binary at {sift_bin} not executable.") from exc
+    except subprocess.TimeoutExpired:
+        return ""  # --help hung; degrade gracefully, caller records a note
+    if "--plan-mode" in r.stdout + r.stderr:
+        return "--plan-mode"
+    if "--dry-run" in r.stdout + r.stderr:
+        return "--dry-run"
     return ""
 
 
 def run_baseline(config: BaselineRunConfig) -> BaselineRunResult:
-    """Run Protocol SIFT against evidence; parse --json-events stream."""
+    """Invoke Protocol SIFT investigate with --json-events; parse event stream.
+
+    Raises BaselineInstallError, BaselineTimeoutError, or RuntimeError.
+    """
     work_dir = config.work_dir or Path(tempfile.mkdtemp(prefix="protocol-sift-baseline-"))
     sift_dir = work_dir / "protocol-sift"
     sift_bin = sift_dir / "bin" / "protocol-sift"
@@ -209,10 +211,7 @@ def run_baseline(config: BaselineRunConfig) -> BaselineRunResult:
 
     notes: list[str] = []
     if not plan_flag:
-        notes.append(
-            "Neither --plan-mode nor --dry-run found in baseline --help;"
-            " running without containment flag"
-        )
+        notes.append("Neither --plan-mode nor --dry-run in --help; no containment flag used")
     elif plan_flag == "--dry-run":
         notes.append("--plan-mode not supported; fell back to --dry-run")
 
@@ -239,18 +238,19 @@ def run_baseline(config: BaselineRunConfig) -> BaselineRunResult:
 
     findings: list[BaselineFinding] = []
     tool_calls: list[BaselineToolCall] = []
+    dropped_lines = 0
     started_at = datetime.now(UTC)
     t0 = time.monotonic()
 
     with stdout_path.open("wb") as stdout_fh, stderr_path.open("wb") as stderr_fh:
-        proc = subprocess.Popen(  # noqa: S603
+        proc = subprocess.Popen(  # noqa: S603 — cmd is built from config-validated paths
             cmd,
             stdout=subprocess.PIPE,
             stderr=stderr_fh,
             env=sift_env,
         )
         if proc.stdout is None:
-            raise BaselineInstallError("subprocess.Popen stdout pipe was None")
+            raise RuntimeError("subprocess.Popen stdout pipe was None (process launch failure)")
         try:
             for raw_line in iter(proc.stdout.readline, b""):
                 stdout_fh.write(raw_line)
@@ -261,7 +261,6 @@ def run_baseline(config: BaselineRunConfig) -> BaselineRunResult:
                         proc.wait(timeout=5)
                     except subprocess.TimeoutExpired:
                         proc.kill()
-                    print("baseline timeout", file=sys.stderr)
                     raise BaselineTimeoutError(
                         f"Baseline exceeded timeout_seconds={config.timeout_seconds}"
                     )
@@ -276,21 +275,29 @@ def run_baseline(config: BaselineRunConfig) -> BaselineRunResult:
                         findings.append(BaselineFinding.model_validate(evt_raw))
                     elif evt_type == "tool_call":
                         tool_calls.append(BaselineToolCall.model_validate(evt_raw))
-                except (json.JSONDecodeError, ValidationError):
-                    pass
-        except BaselineTimeoutError:
-            raise
+                except json.JSONDecodeError:
+                    dropped_lines += 1
+                except ValidationError as exc:
+                    raise RuntimeError(
+                        f"Protocol SIFT event schema drift at offset {offset:.1f}s: {exc}\n"
+                        f"Line: {line[:200]}"
+                    ) from exc
         finally:
-            proc.wait()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
     finished_at = datetime.now(UTC)
     elapsed = (finished_at - started_at).total_seconds()
-    exit_code = proc.returncode or 0
+    exit_code = proc.returncode if proc.returncode is not None else 0
 
-    report_md_path: Path | None = None
+    if dropped_lines:
+        notes.append(f"{dropped_lines} non-JSON stdout line(s) skipped.")
+
     candidate = work_dir / "cases" / config.dataset_id / "report.md"
-    if candidate.exists():
-        report_md_path = candidate
+    report_md_path: Path | None = candidate if candidate.exists() else None
 
     return BaselineRunResult(
         dataset_id=config.dataset_id,
@@ -334,8 +341,7 @@ def main(argv: list[str] | None = None) -> int:
             dataset_id=args.dataset,
             evidence_path=args.evidence,
             examiner=args.examiner,
-            model=args.model
-            or os.environ.get("SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7-1m"),
+            model=args.model or os.environ.get("SILENTWITNESS_MODEL", _DEFAULT_MODEL),
             temperature=args.temperature,
             work_dir=args.out,
         )
@@ -344,6 +350,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     work_dir = config.work_dir or Path(tempfile.mkdtemp(prefix="protocol-sift-baseline-"))
+    config = config.model_copy(update={"work_dir": work_dir})
 
     try:
         install_baseline(work_dir)
@@ -353,6 +360,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         result = run_baseline(config)
+    except BaselineInstallError as exc:
+        print(f"install failure: {exc}", file=sys.stderr)
+        return 3
     except BaselineTimeoutError as exc:
         print(f"timeout: {exc}", file=sys.stderr)
         return 4
@@ -378,8 +388,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"failed to write result: {exc}", file=sys.stderr)
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            print(f"warning: failed to remove temp file {tmp}: {cleanup_exc}", file=sys.stderr)
         return 5
 
     print(f"result written to {out_path}", file=sys.stderr)
