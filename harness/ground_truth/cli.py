@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import sys
+import traceback
 from pathlib import Path
 
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
@@ -24,6 +25,7 @@ from harness.ground_truth import (  # noqa: E402
     nist_hacking_case_parser,
     nitroba_parser,
 )
+from harness.ground_truth.schema import SHA256MismatchError  # noqa: E402
 
 _PARSERS = {
     "nitroba": nitroba_parser.parse,
@@ -48,8 +50,16 @@ def main(argv: list[str]) -> int:
 
     try:
         findings = parser_fn()
+    except SHA256MismatchError as exc:
+        print(f"SHA256 mismatch: {exc}", file=sys.stderr)
+        print("Delete the cached PDF and re-run to force a fresh download.", file=sys.stderr)
+        return 2
+    except (OSError, FileNotFoundError) as exc:
+        print(f"File I/O error: {exc}", file=sys.stderr)
+        return 2
     except Exception as exc:
-        print(f"parser error: {exc}", file=sys.stderr)
+        print(f"parser error ({type(exc).__name__}): {exc}", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
         return 2
 
     print(json.dumps([f.model_dump(mode="json") for f in findings], indent=2))

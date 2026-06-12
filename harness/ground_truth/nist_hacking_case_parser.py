@@ -23,12 +23,17 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
-from harness.ground_truth.schema import GroundTruthFinding  # noqa: E402
+from harness.ground_truth.schema import (  # noqa: E402
+    CategoryLiteral,
+    GroundTruthFinding,
+)
 
 try:
     from bs4 import BeautifulSoup
 except ImportError as exc:
     raise ImportError("beautifulsoup4 required: uv add beautifulsoup4") from exc
+
+from pydantic import ValidationError  # noqa: E402
 
 _SNAPSHOTS_DIR = Path(__file__).resolve().parent / "snapshots"
 _INTRINSICODE = _SNAPSHOTS_DIR / "intrinsicode-net-hacking-case.html"
@@ -43,7 +48,10 @@ _ZARAT_URL = (
 
 
 def _parse_intrinsicode() -> list[GroundTruthFinding]:
-    html = _INTRINSICODE.read_text(encoding="utf-8", errors="replace")
+    try:
+        html = _INTRINSICODE.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise RuntimeError(f"Cannot read intrinsicode snapshot {_INTRINSICODE}: {exc}") from exc
     soup = BeautifulSoup(html, "lxml")
     text = soup.get_text(" ", strip=True)
 
@@ -51,6 +59,12 @@ def _parse_intrinsicode() -> list[GroundTruthFinding]:
 
     # Extract the FINDINGS section lines (e.g. "Finding 1  System configuration...")
     finding_blocks = re.findall(r"Finding\s+(\d+)\s+(.+?)(?=Finding\s+\d+|\Z)", text, re.DOTALL)
+    if not finding_blocks:
+        print(
+            f"WARNING: no 'Finding N' blocks found in {_INTRINSICODE}. "
+            "HTML structure may have changed or text extraction failed.",
+            file=sys.stderr,
+        )
     for num, body in finding_blocks:
         body = body.strip()
         if not body:
@@ -96,7 +110,10 @@ def _parse_intrinsicode() -> list[GroundTruthFinding]:
 
 
 def _parse_zarat() -> list[GroundTruthFinding]:
-    html = _ZARAT.read_text(encoding="utf-8", errors="replace")
+    try:
+        html = _ZARAT.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        raise RuntimeError(f"Cannot read zarat snapshot {_ZARAT}: {exc}") from exc
     soup = BeautifulSoup(html, "lxml")
     text = soup.get_text(" ", strip=True)
 
@@ -104,6 +121,12 @@ def _parse_zarat() -> list[GroundTruthFinding]:
 
     # Zarat writeup has numbered Q&A: "N. <question> ... Answer: <answer>"
     qa_blocks = re.findall(r"(\d+)\.\s+(.+?)(?=\d+\.\s+[A-Z一-鿿]|\Z)", text, re.DOTALL)
+    if not qa_blocks:
+        print(
+            f"WARNING: no numbered Q&A blocks found in {_ZARAT}. "
+            "HTML structure may have changed or text extraction failed.",
+            file=sys.stderr,
+        )
     for num, body in qa_blocks[:35]:  # cap at 35 questions
         body = re.sub(r"\s+", " ", body).strip()
         if not body or len(body) < 10:
@@ -131,8 +154,26 @@ def _parse_zarat() -> list[GroundTruthFinding]:
 
 
 def _load_supplemental() -> list[GroundTruthFinding]:
-    raw = json.loads(_SUPPLEMENTAL.read_text(encoding="utf-8"))
-    return [GroundTruthFinding.model_validate(item) for item in raw]
+    try:
+        text = _SUPPLEMENTAL.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(
+            f"Cannot read supplemental findings file {_SUPPLEMENTAL}: {exc}\n"
+            "This file must be committed in the repo."
+        ) from exc
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Malformed JSON in {_SUPPLEMENTAL}: {exc}") from exc
+    findings: list[GroundTruthFinding] = []
+    for i, item in enumerate(raw):
+        try:
+            findings.append(GroundTruthFinding.model_validate(item))
+        except ValidationError as exc:
+            raise ValueError(
+                f"Validation error in {_SUPPLEMENTAL}, item {i} (id={item.get('id', '?')}): {exc}"
+            ) from exc
+    return findings
 
 
 def _substrings_from_text(text: str) -> list[str]:
@@ -151,24 +192,10 @@ def _substrings_from_text(text: str) -> list[str]:
         if s and s not in seen:
             seen.add(s)
             result.append(s)
-    return result or [text[:80].strip()]
+    return result or [text[:80].strip() or "(empty-text-block)"]
 
 
-_Category = Literal[
-    "user_profile",
-    "installed_tool",
-    "credential",
-    "network_indicator",
-    "timestamp",
-    "file_artifact",
-    "persistence",
-    "exfiltration",
-    "communication",
-    "other",
-]
-
-
-def _infer_category(text: str) -> _Category:
+def _infer_category(text: str) -> CategoryLiteral:
     lower = text.lower()
     if any(w in lower for w in ["mac address", "ip address", "hostname", "network", "wireless"]):
         return "network_indicator"
@@ -188,7 +215,10 @@ def _infer_category(text: str) -> _Category:
 
 
 def _dedup(findings: list[GroundTruthFinding]) -> list[GroundTruthFinding]:
-    """Drop supplemental findings whose id already appears (parsed takes precedence)."""
+    """Keep first occurrence of each id.
+
+    Supplemental is passed first so its canonical IDs take precedence over parsed duplicates.
+    """
     seen_ids: set[str] = set()
     result: list[GroundTruthFinding] = []
     for f in findings:
@@ -203,5 +233,5 @@ def parse() -> list[GroundTruthFinding]:
     supplemental = _load_supplemental()
     intrinsicode = _parse_intrinsicode()
     zarat = _parse_zarat()
-    # Supplemental first so their canonical IDs aren't shadowed
+    # Supplemental first so their canonical IDs aren't shadowed by parsed duplicates
     return _dedup(supplemental + intrinsicode + zarat)

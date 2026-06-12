@@ -97,7 +97,7 @@ required-version = "==0.11.18"
 # Coverage — gates per CICD_SPEC §8
 # ----------------------------------------------------------------------
 [tool.coverage.run]
-source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common", "harness/datasets"]
+source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common", "harness/datasets", "harness/ground_truth"]
 branch = true
 parallel = true
 data_file = ".coverage"
