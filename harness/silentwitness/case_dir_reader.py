@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -21,12 +22,20 @@ def read_findings_json(case_dir: Path) -> list[Any]:
     path = case_dir / "findings.json"
     if not path.exists():
         return []
-    data: Any = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data: Any = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"warning: could not parse {path}: {exc}", file=sys.stderr)
+        return []
     if not isinstance(data, list):
+        print(f"warning: {path} contains {type(data).__name__}, expected list", file=sys.stderr)
         return []
 
-    # Only include true observation records — finding records also have observation_id
-    # but must not overwrite the observation entry in the index.
+    # findings.json has two top-level record types:
+    #   - observation records: have "observation_id", no "finding_id"
+    #   - finding records:     have both "finding_id" and "observation_id"
+    # Build an index of observations only; including finding records would
+    # corrupt the index because they share observation_id with their parent.
     obs_index: dict[str, dict[str, Any]] = {
         item["observation_id"]: item
         for item in data
@@ -51,24 +60,27 @@ def read_findings_json(case_dir: Path) -> list[Any]:
     return results
 
 
-def read_hypothesis_jsonl(case_dir: Path) -> list[Any]:
-    """Read audit/hypothesis.jsonl; return SwHypothesisEvent list."""
+def read_hypothesis_jsonl(case_dir: Path) -> tuple[list[Any], list[str]]:
+    """Read audit/hypothesis.jsonl; return (SwHypothesisEvent list, skip notes)."""
     from harness.silentwitness.runner import SwHypothesisEvent
 
     path = case_dir / "audit" / "hypothesis.jsonl"
     if not path.exists():
-        return []
+        return [], []
 
     results: list[SwHypothesisEvent] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    skipped = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line:
             continue
         try:
             results.append(SwHypothesisEvent.model_validate_json(line))
         except (json.JSONDecodeError, ValidationError):
-            pass
-    return results
+            skipped += 1
+
+    notes = [f"{skipped} malformed hypothesis line(s) skipped."] if skipped else []
+    return results, notes
 
 
 def read_audit_jsonl(case_dir: Path) -> tuple[list[Any], list[str]]:
@@ -99,31 +111,35 @@ def read_audit_jsonl(case_dir: Path) -> tuple[list[Any], list[str]]:
     return results, notes
 
 
-def read_critic_jsonl(case_dir: Path) -> list[Any]:
-    """Read audit/critic.jsonl; return SwCriticVerdict list."""
+def read_critic_jsonl(case_dir: Path) -> tuple[list[Any], list[str]]:
+    """Read audit/critic.jsonl; return (SwCriticVerdict list, skip notes)."""
     from harness.silentwitness.runner import SwCriticVerdict
 
     path = case_dir / "audit" / "critic.jsonl"
     if not path.exists():
-        return []
+        return [], []
 
     results: list[SwCriticVerdict] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
+    skipped = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         line = line.strip()
         if not line:
             continue
         try:
             results.append(SwCriticVerdict.model_validate_json(line))
         except (json.JSONDecodeError, ValidationError):
-            pass
-    return results
+            skipped += 1
+
+    notes = [f"{skipped} malformed critic line(s) skipped."] if skipped else []
+    return results, notes
 
 
 def count_gaps_in_report(report_md_path: Path) -> int:
     """Count '- ' bullet lines under '## Gaps' until the next heading."""
-    if not report_md_path.exists():
+    try:
+        content = report_md_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
         return 0
-    content = report_md_path.read_text(encoding="utf-8", errors="replace")
     m = re.search(r"^## Gaps\b", content, re.MULTILINE)
     if not m:
         return 0

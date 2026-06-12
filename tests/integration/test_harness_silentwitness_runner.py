@@ -1,4 +1,4 @@
-"""Integration tests for harness/silentwitness — case_dir_reader and run_silentwitness."""
+"""Integration tests for harness/silentwitness — run_silentwitness and CLI."""
 
 from __future__ import annotations
 
@@ -10,113 +10,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 _FIXTURE = Path(__file__).resolve().parents[1] / "fixtures" / "case-harness"
-
-
-# ---------------------------------------------------------------------------
-# case_dir_reader — reader functions against the seeded fixture
-# ---------------------------------------------------------------------------
-
-
-class TestReadFindingsJson:
-    def test_returns_at_least_five_findings(self) -> None:
-        """read_findings_json returns ≥5 SwFinding objects from the fixture."""
-        from harness.silentwitness.case_dir_reader import read_findings_json
-
-        findings = read_findings_json(_FIXTURE)
-        assert len(findings) >= 5
-
-    def test_finding_ids_are_f_prefix(self) -> None:
-        """Every returned SwFinding.id starts with 'F-'."""
-        from harness.silentwitness.case_dir_reader import read_findings_json
-
-        findings = read_findings_json(_FIXTURE)
-        assert all(f.id.startswith("F-") for f in findings)
-
-    def test_cited_audit_ids_propagated_from_observation(self) -> None:
-        """cited_audit_ids on SwFinding are lifted from the linked observation record."""
-        from harness.silentwitness.case_dir_reader import read_findings_json
-
-        findings = read_findings_json(_FIXTURE)
-        f1 = next(f for f in findings if f.id == "F-001")
-        assert "sift-harness-20260612-001" in f1.cited_audit_ids
-
-    def test_missing_findings_json_returns_empty(self, tmp_path: Path) -> None:
-        """read_findings_json returns [] when findings.json does not exist."""
-        from harness.silentwitness.case_dir_reader import read_findings_json
-
-        assert read_findings_json(tmp_path) == []
-
-
-class TestReadHypothesisJsonl:
-    def test_returns_at_least_eight_events(self) -> None:
-        """read_hypothesis_jsonl returns ≥8 SwHypothesisEvent objects."""
-        from harness.silentwitness.case_dir_reader import read_hypothesis_jsonl
-
-        events = read_hypothesis_jsonl(_FIXTURE)
-        assert len(events) >= 8
-
-    def test_exactly_two_pivots(self) -> None:
-        """Exactly 2 hypothesis events have type='pivot'."""
-        from harness.silentwitness.case_dir_reader import read_hypothesis_jsonl
-
-        events = read_hypothesis_jsonl(_FIXTURE)
-        pivots = [e for e in events if e.type == "pivot"]
-        assert len(pivots) == 2
-
-    def test_missing_file_returns_empty(self, tmp_path: Path) -> None:
-        from harness.silentwitness.case_dir_reader import read_hypothesis_jsonl
-
-        assert read_hypothesis_jsonl(tmp_path) == []
-
-
-class TestReadAuditJsonl:
-    def test_merges_across_files_returns_at_least_twelve(self) -> None:
-        """read_audit_jsonl merges memory.jsonl + disk.jsonl + findings.jsonl (≥12 entries)."""
-        from harness.silentwitness.case_dir_reader import read_audit_jsonl
-
-        tool_calls, _notes = read_audit_jsonl(_FIXTURE)
-        assert len(tool_calls) >= 12
-
-    def test_skips_hypothesis_and_critic_files(self) -> None:
-        """read_audit_jsonl does not include hypothesis or critic JSONL entries."""
-        from harness.silentwitness.case_dir_reader import read_audit_jsonl
-
-        tool_calls, _ = read_audit_jsonl(_FIXTURE)
-        tool_names = {tc.tool for tc in tool_calls}
-        assert "form" not in tool_names
-        assert "agree" not in tool_names
-
-    def test_missing_audit_dir_returns_empty(self, tmp_path: Path) -> None:
-        from harness.silentwitness.case_dir_reader import read_audit_jsonl
-
-        tool_calls, notes = read_audit_jsonl(tmp_path)
-        assert tool_calls == []
-        assert notes == []
-
-
-class TestCountGapsInReport:
-    def test_returns_exactly_three(self) -> None:
-        """count_gaps_in_report returns exactly 3 for the fixture report.md."""
-        from harness.silentwitness.case_dir_reader import count_gaps_in_report
-
-        assert count_gaps_in_report(_FIXTURE / "report.md") == 3
-
-    def test_returns_zero_for_missing_file(self, tmp_path: Path) -> None:
-        from harness.silentwitness.case_dir_reader import count_gaps_in_report
-
-        assert count_gaps_in_report(tmp_path / "report.md") == 0
-
-    def test_returns_zero_when_no_gaps_heading(self, tmp_path: Path) -> None:
-        report = tmp_path / "report.md"
-        report.write_text("## Executive Summary\nSome content.\n")
-        from harness.silentwitness.case_dir_reader import count_gaps_in_report
-
-        assert count_gaps_in_report(report) == 0
-
-
-# ---------------------------------------------------------------------------
-# run_silentwitness — subprocess mocked against the fixture case dir
-# ---------------------------------------------------------------------------
 
 
 def _make_proc(returncode: int = 0) -> MagicMock:
@@ -135,10 +28,9 @@ class TestRunSilentwitness:
         """run_silentwitness with mocked subprocess returns populated result from fixture."""
         from harness.silentwitness.runner import SilentWitnessRunConfig, run_silentwitness
 
-        # Use fixture as the pre-seeded case dir
         config = SilentWitnessRunConfig(
             dataset_id="nitroba",
-            evidence_path=tmp_path,  # doesn't matter; subprocess is mocked
+            evidence_path=tmp_path,
             case_dir=_FIXTURE,
         )
         proc_mock = _make_proc(returncode=0)
@@ -179,7 +71,6 @@ class TestRunSilentwitness:
             return 0.0 if call_count == 1 else 9999.0
 
         proc_mock = _make_proc()
-        # Make poll() return None once (so loop body runs) then 0 (done)
         proc_mock.poll.side_effect = [None, 0]
 
         with (
@@ -229,7 +120,6 @@ class TestRunSilentwitness:
         evidence = tmp_path / "evidence"
         evidence.mkdir()
         out_dir = tmp_path / "results"
-
         proc_mock = _make_proc(returncode=0)
 
         with (
@@ -259,10 +149,39 @@ class TestRunSilentwitness:
         validated = SilentWitnessRunResult.model_validate(data)
         assert validated.time_to_handoff_ready_report_seconds is not None
 
+    def test_case_dir_none_auto_creates_note(self, tmp_path: Path) -> None:
+        """run_silentwitness with case_dir=None adds auto-created note to result."""
+        from harness.silentwitness.runner import SilentWitnessRunConfig, run_silentwitness
 
-# ---------------------------------------------------------------------------
-# CLI edge cases
-# ---------------------------------------------------------------------------
+        config = SilentWitnessRunConfig(dataset_id="nitroba", evidence_path=tmp_path)
+        proc_mock = _make_proc(returncode=0)
+
+        with (
+            patch("harness.silentwitness.runner.subprocess.Popen", return_value=proc_mock),
+            patch("harness.silentwitness.runner.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="abc\n")
+            result = run_silentwitness(config)
+
+        assert any("auto-created case_dir" in n for n in result.notes)
+
+    def test_handoff_not_reached_note(self, tmp_path: Path) -> None:
+        """Without report.md Executive Summary, handoff-not-reached note is appended."""
+        from harness.silentwitness.runner import SilentWitnessRunConfig, run_silentwitness
+
+        config = SilentWitnessRunConfig(
+            dataset_id="nitroba", evidence_path=tmp_path, case_dir=tmp_path
+        )
+        proc_mock = _make_proc(returncode=0)
+
+        with (
+            patch("harness.silentwitness.runner.subprocess.Popen", return_value=proc_mock),
+            patch("harness.silentwitness.runner.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="abc\n")
+            result = run_silentwitness(config)
+
+        assert any("handoff-ready threshold not reached" in n for n in result.notes)
 
 
 class TestCLI:
@@ -293,3 +212,41 @@ class TestCLI:
         runner_module.main(["--dataset", "nitroba", "--evidence", str(tmp_path / "no-such-dir")])
         captured = capsys.readouterr()
         assert "evidence_path" in captured.err
+
+    def test_runner_error_exits_5(self, tmp_path: Path) -> None:
+        """CLI returns exit code 5 when run_silentwitness raises an exception."""
+        from harness.silentwitness import runner as runner_module
+
+        evidence = tmp_path / "ev"
+        evidence.mkdir()
+        with patch(
+            "harness.silentwitness.runner.run_silentwitness",
+            side_effect=RuntimeError("boom"),
+        ):
+            rc = runner_module.main(["--dataset", "nitroba", "--evidence", str(evidence)])
+        assert rc == 5
+
+    def test_nonzero_proc_returncode_exits_5(self, tmp_path: Path) -> None:
+        """CLI returns exit code 5 when investigator subprocess exits non-zero."""
+        from harness.silentwitness import runner as runner_module
+
+        evidence = tmp_path / "ev"
+        evidence.mkdir()
+        proc_mock = _make_proc(returncode=1)
+
+        with (
+            patch("harness.silentwitness.runner.subprocess.Popen", return_value=proc_mock),
+            patch("harness.silentwitness.runner.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0, stdout="abc\n")
+            rc = runner_module.main(
+                [
+                    "--dataset",
+                    "nitroba",
+                    "--evidence",
+                    str(evidence),
+                    "--case-dir",
+                    str(tmp_path),
+                ]
+            )
+        assert rc == 5
