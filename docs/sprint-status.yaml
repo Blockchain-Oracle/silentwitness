@@ -407,11 +407,11 @@ stories:
 
   - id: story-disk-specialist
     epic: "Epic 9 — Specialists"
-    status: PENDING
+    status: COMPLETE
     depends_on: [investigator-agent, parse-mft, parse-amcache-shimcache, parse-prefetch, parse-shellbags]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/46"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/192"
+    merged_at: "2026-06-12T07:43:46Z"
 
   - id: story-network-specialist
     epic: "Epic 9 — Specialists"
