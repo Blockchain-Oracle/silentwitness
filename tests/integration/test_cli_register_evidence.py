@@ -139,7 +139,7 @@ def test_nonexistent_path_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         app, ["register-evidence", "c006", str(tmp_path / "ghost.E01")], catch_exceptions=False
     )
     assert result.exit_code == 1
-    assert "does not exist" in result.stderr
+    assert "does not exist" in result.stderr.replace("\n", " ")
 
 
 # ---------------------------------------------------------------------------
