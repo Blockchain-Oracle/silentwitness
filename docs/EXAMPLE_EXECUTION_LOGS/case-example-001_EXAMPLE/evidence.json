@@ -1,0 +1,12 @@
+{
+  "records": [
+    {
+      "evidence_id": "ev-example-001",
+      "path": "/evidence/sample_EXAMPLE.bin",
+      "registered_at": "2026-06-13T12:00:00Z",
+      "sha256": "ab3d68b001774fd9bae829eff5d51e7aa71f23992295337031d2daebc86c95fd",
+      "size_bytes": 4
+    }
+  ],
+  "schema_version": 1
+}

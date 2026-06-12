@@ -1,0 +1,2 @@
+{"finding_id": "F-example-001", "reason": "interpretation requires intercepted-traffic evidence", "ts": "2026-06-13T12:00:20Z", "verdict": "CHALLENGE"}
+{"finding_id": "F-example-001", "reason": "corroborated via parse_evtx 4624 logon trail", "ts": "2026-06-13T12:00:25Z", "verdict": "APPROVED"}

@@ -1,0 +1,1 @@
+{"audit_id": "sift-example-20260613-003", "backend": "log", "elapsed_ms": 950, "result_sha256": "17acffea1465b611d96341ec534aa33f66fa998df7b632f11693d9054609a992", "status": "OK", "stdout_lines": 21, "tool_name": "parse_evtx", "ts": "2026-06-13T12:00:14Z"}
