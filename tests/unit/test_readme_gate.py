@@ -21,26 +21,59 @@ def _run(fixture: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+_CASES: list[tuple[str, int, str | None]] = [
+    ("happy_path.md", 0, None),
+    ("no_h1.md", 1, "h1"),
+    ("no_demo.md", 1, "demo_video"),
+    ("no_image.md", 1, "image_embed"),
+    ("no_sift_install.md", 1, "sift_install"),
+    ("no_docker.md", 1, "docker_compose"),
+    ("no_mermaid.md", 1, "mermaid_fence"),
+    ("mermaid_too_few_arch.md", 1, "mermaid_architectural"),
+    ("mermaid_no_prompt.md", 1, "mermaid_prompt_based"),
+    ("no_mit.md", 1, "mit_license"),
+    ("banned_vocab.md", 1, "banned_vocab"),
+    ("banned_in_code.md", 1, "banned_vocab"),
+    ("find_evil_marketing.md", 1, "find_evil_marketing"),
+    ("too_long.md", 1, "max_lines"),
+]
+
+
 @pytest.mark.parametrize(
     "fixture,exit_code,rule",
-    [
-        ("happy_path.md", 0, None),
-        ("no_h1.md", 1, "h1"),
-        ("no_demo.md", 1, "demo_video"),
-        ("no_image.md", 1, "image_embed"),
-        ("no_sift_install.md", 1, "sift_install"),
-        ("no_mermaid.md", 1, "mermaid_fence"),
-        ("no_mit.md", 1, "mit_license"),
-        ("banned_vocab.md", 1, "banned_vocab"),
-        ("banned_in_code.md", 1, "banned_vocab"),
-        ("too_long.md", 1, "max_lines"),
-    ],
+    _CASES,
+    ids=[c[0].removesuffix(".md") for c in _CASES],
 )
 def test_gate_rule(fixture: str, exit_code: int, rule: str | None) -> None:
     r = _run(fixture)
     assert r.returncode == exit_code, r.stderr
     if rule is not None:
         assert rule in r.stderr, f"expected rule={rule!r} in stderr, got: {r.stderr}"
+
+
+def test_mit_word_boundary_not_matched_in_substrings(tmp_path: Path) -> None:
+    """`MIT` rule must use word boundaries — `transMIT`/`commit` are not licenses."""
+    bad = tmp_path / "bad.md"
+    bad.write_text(
+        # All-the-other-rules-pass shape, but the only "MIT" letters are inside `commit`.
+        "# SilentWitness\n\n> pitch\n\n<!-- DEMO_VIDEO_URL -->\n\n![alt](x.png)\n\n"
+        "```bash\ncurl https://x/install.sh | bash\n```\n\n"
+        "```bash\ndocker compose up -d\n```\n\n"
+        "```mermaid\nflowchart TB\n"
+        "  A[a (architectural)] --> B[b (architectural)]\n"
+        "  C[c (architectural)] --> D[d (architectural)]\n"
+        "  E[e (architectural)] --> F[f (architectural)]\n"
+        "  P[p (prompt-based)]\n```\n\n"
+        "Please commit and transMIT your changes.\n"
+    )
+    r = subprocess.run(
+        [sys.executable, str(_GATE), str(bad)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert r.returncode == 1
+    assert "mit_license" in r.stderr
 
 
 def test_real_readme_passes() -> None:

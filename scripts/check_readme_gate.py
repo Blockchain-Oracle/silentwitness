@@ -10,8 +10,13 @@ import re
 import sys
 from pathlib import Path
 
+# PRD §11 caps README at 400 lines to stay scannable on one Devpost screen.
 _MAX_LINES = 400
+# First-screen checks (demo, image, mermaid labels) scope to the first 100 lines.
+_HEAD_LINES = 100
 _DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|<!--\s*DEMO_VIDEO_URL\s*-->")
+_MIT_RE = re.compile(r"\bMIT\b")
+_H1_RE = re.compile(r"^# SilentWitness\b")
 _BANNED = (
     "court-admissible",
     "autonomous SOC",
@@ -19,9 +24,11 @@ _BANNED = (
     "replaces L1",
     "eliminates hallucinations",
 )
-# "Find Evil!" (literal hackathon name) is allowed; the marketing phrase "find evil"
-# (lowercase, no exclamation) without the hackathon link context is the banned form.
-_FIND_EVIL_MARKETING = re.compile(r"\bfind evil\b(?!\s*!\s*\])", re.IGNORECASE)
+# "Find Evil!" (with trailing `!`) — the literal hackathon name — is allowed anywhere.
+# The marketing phrase "find evil" without `!` is banned per PRD §14.
+# Implementation: first strip the markdown link form `[Find Evil!](url)` in check()
+# (line 96), then this regex catches bare "find evil" without `!`.
+_FIND_EVIL_MARKETING = re.compile(r"\bfind evil(?!!)", re.IGNORECASE)
 
 
 def _fail(rule: str, detail: str = "") -> int:
@@ -34,21 +41,22 @@ def _fail(rule: str, detail: str = "") -> int:
 
 def check(readme_path: Path) -> int:
     try:
-        text = readme_path.read_text(encoding="utf-8")
+        # Normalize CRLF → LF so the mermaid regex (which requires `\n` after the
+        # ```mermaid fence) does not silently fail on CRLF-saved Windows files.
+        text = readme_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     except OSError as exc:
         return _fail("readable", f"cannot read {readme_path}: {exc}")
     lines = text.splitlines()
 
-    # Rule 1: H1 SilentWitness within first 5 lines
-    if not any(line.startswith("# SilentWitness") for line in lines[:5]):
+    # Rule 1: H1 SilentWitness within first 5 lines (word-bounded — reject SilentWitnessXYZ)
+    if not any(_H1_RE.match(line) for line in lines[:5]):
         return _fail("h1", "expected `# SilentWitness` within first 5 lines")
 
     # Rule 9: total line count
     if len(lines) > _MAX_LINES:
         return _fail("max_lines", f"{len(lines)} > {_MAX_LINES}")
 
-    # Limit subsequent first-screen checks to first 100 lines
-    head = "\n".join(lines[:100])
+    head = "\n".join(lines[:_HEAD_LINES])
 
     # Rule 2: demo video link or placeholder marker
     if not _DEMO_RE.search(head):
@@ -84,8 +92,8 @@ def check(readme_path: Path) -> int:
     if "(prompt-based" not in mermaid:
         return _fail("mermaid_prompt_based", "missing `(prompt-based` label inside mermaid block")
 
-    # Rule 8: literal MIT license reference
-    if "MIT" not in text:
+    # Rule 8: literal `MIT` (word-bounded — must not match `transMIT`, `commit`, etc.)
+    if not _MIT_RE.search(text):
         return _fail("mit_license", "missing literal `MIT` license reference")
 
     # Rule 10: banned vocab list (CI grep gate, PRD §14)

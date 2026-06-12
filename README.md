@@ -17,8 +17,11 @@ Built for the SANS [Find Evil!](https://findevil.devpost.com/) hackathon (2026).
 ### (a) SIFT 2026 native — 3 commands
 
 ```bash
+# 1. install
 curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
+# 2. register a case + its evidence (one step, two sub-actions on a single line)
 silentwitness init mr-evil-001 --examiner $USER && silentwitness register-evidence mr-evil-001 --path /evidence/hacking-case
+# 3. investigate
 silentwitness investigate mr-evil-001
 ```
 
