@@ -21,9 +21,10 @@ from silentwitness_agent.cli_commands.review import (
     _print_block,
 )
 from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
-from silentwitness_mcp.audit.ledger import HMACLedger, LedgerSecurityError
+from silentwitness_mcp.audit.ledger import HMACLedger, LedgerCorruptionError, LedgerSecurityError
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._approval_store import (
+    CaseSaltMalformedError,
     findings_lock,
     load_case_salt,
     locate_finding,
@@ -44,6 +45,10 @@ class _NoTTYError(Exception):
     pass
 
 
+class _VerifierCorruptError(Exception):
+    """CASE.yaml has verifier fields that exist but are unreadable or malformed."""
+
+
 def _read_password(prompt: str = "examiner password: ") -> str:
     # _SILENTWITNESS_TEST_PASSWORD: test-only bypass for TTY requirement.
     # Only active when pytest is loaded — never in production.
@@ -55,24 +60,37 @@ def _read_password(prompt: str = "examiner password: ") -> str:
 
 
 def _load_verifier(case_dir: Path) -> tuple[bytes, bytes] | None:
-    """Return (verifier_salt, verifier_hash) from CASE.yaml if both fields present."""
+    """Return (verifier_salt, verifier_hash) from CASE.yaml, or None if not enrolled.
+
+    Raises _VerifierCorruptError when fields exist but are unreadable or malformed —
+    mirrors the load_case_salt discipline: absent != corrupt.
+    """
     path = case_dir / "CASE.yaml"
     if not path.exists():
         return None
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return None
+    except yaml.YAMLError as exc:
+        raise _VerifierCorruptError(f"CASE.yaml is not valid YAML: {exc}") from exc
+    except (OSError, UnicodeDecodeError) as exc:
+        raise _VerifierCorruptError(f"CASE.yaml unreadable: {exc}") from exc
     if not isinstance(data, dict):
         return None
     vs = data.get("verifier_salt_hex")
     vh = data.get("verifier_hex")
+    if vs is None and vh is None:
+        return None  # verifier never enrolled
     if not (isinstance(vs, str) and isinstance(vh, str)):
-        return None
+        raise _VerifierCorruptError(
+            f"CASE.yaml has partial or non-string verifier fields: "
+            f"verifier_salt_hex={vs!r}, verifier_hex={vh!r}"
+        )
     try:
         return bytes.fromhex(vs), bytes.fromhex(vh)
-    except ValueError:
-        return None
+    except ValueError as exc:
+        raise _VerifierCorruptError(
+            f"CASE.yaml verifier hex fields are not valid hex: {exc}"
+        ) from exc
 
 
 def _check_verifier(password: str, case_dir: Path) -> bool | None:
@@ -105,20 +123,31 @@ def _write_cli_audit(
     )
     try:
         append_jsonl_line(cli_log, entry)
-    except (OSError, ValueError):
-        pass  # audit write failure does not block the approval outcome
+    except (OSError, ValueError) as exc:
+        # cli.jsonl is secondary; the tamper-evident record is the HMACLedger entry.
+        Console(stderr=True).print(
+            f"[yellow]![/yellow] cli audit write failed ({type(exc).__name__}: {exc}); "
+            "approval outcome is unaffected",
+            highlight=False,
+        )
 
 
 def _ledger_info(ledger_dir: Path, case_id: str) -> tuple[int, str]:
-    """Return (1-indexed line count, hmac abbreviation) by reading the last entry."""
+    """Return (entry count, hmac abbreviation) after a successful approve_finding append.
+
+    Precondition: called after approve_finding has already appended the entry.
+    Re-raises LedgerCorruptionError — tamper evidence must not be silenced.
+    """
     try:
         ledger = HMACLedger(ledger_dir=ledger_dir, case_id=case_id)
         entries = ledger.read_all()
         if not entries:
-            return 1, "????"
+            return 0, "????"
         last = entries[-1]
         hmac_short = last.hmac[:4] + "..." + last.hmac[-4:]
         return len(entries), hmac_short
+    except LedgerCorruptionError:
+        raise
     except Exception:
         return 0, "????"
 
@@ -137,8 +166,13 @@ def run(
     err = Console(stderr=True, no_color=no_color)
     cli_log = case_dir / "audit" / "cli.jsonl"
 
-    # Pre-checks (before password prompt): salt, ledger dir, finding existence.
-    salt = load_case_salt(case_dir)
+    # Pre-checks before password prompt: salt presence/malformed, ledger dir
+    # permissions, findings.json parse, finding existence, already-approved guard.
+    try:
+        salt = load_case_salt(case_dir)
+    except CaseSaltMalformedError as exc:
+        err.print(f"[red]✗[/red] CASE_SALT_MALFORMED: {exc}", highlight=False)
+        return 2
     if salt is None:
         err.print(
             f"[red]✗[/red] CASE_SALT_MISSING: no salt_hex in {case_dir / 'CASE.yaml'}",
@@ -196,7 +230,12 @@ def run(
             console.print(highlight=False)
             return 130
 
-        check = _check_verifier(password, case_dir)
+        try:
+            check = _check_verifier(password, case_dir)
+        except _VerifierCorruptError as exc:
+            err.print(f"[red]✗[/red] VERIFIER_CORRUPT: {exc}", highlight=False)
+            _write_cli_audit(cli_log, finding_id, case_id, examiner, "error_VERIFIER_CORRUPT")
+            return 2
         if check is False:
             attempts_remaining -= 1
             _write_cli_audit(cli_log, finding_id, case_id, examiner, "error_INVALID_PASSWORD")
@@ -210,7 +249,10 @@ def run(
                 return 4
             continue
 
-        # Password passed verifier check (or no verifier stored) — call approve_finding.
+        # Password passed verifier check (or no verifier registered).
+        # Note: approve_finding does NOT re-authenticate — it uses the password
+        # directly as the HMAC key derivation input (via salt_hex, not verifier_salt_hex).
+        # This verifier check is the sole UI authentication gate.
         audit_log = AuditLogger(case_dir, examiner)
         try:
             envelope = approve_finding(
@@ -222,7 +264,14 @@ def run(
                 model_used="cli",
             )
         finally:
-            audit_log.close()
+            try:
+                audit_log.close()
+            except OSError as close_exc:
+                err.print(
+                    f"[yellow]![/yellow] audit-lock release failed: {close_exc} "
+                    "(approval outcome unaffected)",
+                    highlight=False,
+                )
 
         result = envelope.data
         if result is None or not result.success:
@@ -247,11 +296,24 @@ def run(
                         idx2, f2 = loc2
                         refreshed[idx2] = {**f2, "approval_note": note}
                         write_json_atomic(case_dir / "findings.json", refreshed)
-            except (OSError, ValueError):
-                pass  # note write failure does not invalidate the approval
+            except Exception as note_exc:
+                # approval_note is cosmetic; the authoritative record is already on the HMAC ledger.
+                err.print(
+                    f"[yellow]![/yellow] note not saved ({type(note_exc).__name__}: {note_exc}); "
+                    "approval is committed to the ledger",
+                    highlight=False,
+                )
 
         _write_cli_audit(cli_log, finding_id, case_id, examiner, "approved")
-        line_no, hmac_short = _ledger_info(ledger_dir, case_id)
+        try:
+            line_no, hmac_short = _ledger_info(ledger_dir, case_id)
+        except LedgerCorruptionError as lce:
+            err.print(
+                f"[yellow]![/yellow] LEDGER_CORRUPT after approval: {lce}\n"
+                "       Approval was written. Inspect the ledger file manually.",
+                highlight=False,
+            )
+            return 2
         ledger_path = ledger_dir / f"{case_id}.jsonl"
         line_ref = f"#{line_no}" if line_no else ""
         console.print(

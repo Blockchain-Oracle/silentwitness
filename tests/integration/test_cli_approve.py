@@ -199,6 +199,9 @@ def test_approve_sigint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     )
     assert result.exit_code == 130
     assert not (ledger_dir / "mr-ap-sig-001.jsonl").exists()
+    findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    f = next(x for x in findings if isinstance(x, dict) and x.get("finding_id") == "F-001")
+    assert f["status"] == "DRAFT"
 
 
 # ---------------------------------------------------------------------------
@@ -316,3 +319,73 @@ def test_approve_already_approved(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert result.exit_code == 1
     assert "ALREADY_APPROVED" in result.stderr
     assert not (ledger_dir / "mr-ap-aa-001.jsonl").exists()
+
+
+# ---------------------------------------------------------------------------
+# 14. CASE.yaml with invalid YAML → exit 2, CASE_SALT_MALFORMED
+# ---------------------------------------------------------------------------
+
+
+def test_approve_case_salt_malformed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed CASE.yaml exits 2 with CASE_SALT_MALFORMED before any password prompt."""
+    case_dir = init_case(tmp_path, "mr-ap-csm-001", monkeypatch)
+    (case_dir / "CASE.yaml").write_text(": !!invalid yaml [", encoding="utf-8")
+    _write_draft_finding(case_dir)
+    ledger_dir = _make_ledger_dir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-csm-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "CASE_SALT_MALFORMED" in result.stderr
+    assert not (ledger_dir / "mr-ap-csm-001.jsonl").exists()
+
+
+# ---------------------------------------------------------------------------
+# 15. No TTY available → exit 2, error message mentions TTY
+# ---------------------------------------------------------------------------
+
+
+def test_approve_no_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """No TTY exits 2 with a message directing the examiner to use /dev/tty."""
+    from silentwitness_agent.cli_commands.approve import _NoTTYError
+
+    case_dir = init_case(tmp_path, "mr-ap-tty-001", monkeypatch)
+    _write_case_yaml(case_dir)
+    _write_draft_finding(case_dir)
+    ledger_dir = _make_ledger_dir(tmp_path)
+
+    def _raise_no_tty(prompt: str = "examiner password: ") -> str:
+        raise _NoTTYError()
+
+    monkeypatch.setattr("silentwitness_agent.cli_commands.approve._read_password", _raise_no_tty)
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-tty-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "TTY" in result.stderr
+    assert not (ledger_dir / "mr-ap-tty-001.jsonl").exists()
+
+
+# ---------------------------------------------------------------------------
+# 16. findings.json contains invalid JSON → exit 2, parse error on stderr
+# ---------------------------------------------------------------------------
+
+
+def test_approve_findings_json_corrupted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """findings.json with invalid JSON exits 2 before the password prompt."""
+    case_dir = init_case(tmp_path, "mr-ap-fjc-001", monkeypatch)
+    _write_case_yaml(case_dir)
+    (case_dir / "findings.json").write_text("{not valid json", encoding="utf-8")
+    ledger_dir = _make_ledger_dir(tmp_path)
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-fjc-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "parse error" in result.stderr
+    assert not (ledger_dir / "mr-ap-fjc-001.jsonl").exists()

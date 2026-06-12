@@ -131,3 +131,56 @@ def test_approve_note_flag(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
     f = next(x for x in findings if isinstance(x, dict) and x.get("finding_id") == "F-001")
     assert f.get("approval_note") == "matches HKLM reg key"
+
+
+# ---------------------------------------------------------------------------
+# 14. No verifier enrolled → any password proceeds, finding APPROVED
+# ---------------------------------------------------------------------------
+
+
+def test_approve_no_verifier_any_password(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """When no verifier is enrolled in CASE.yaml any password reaches approve_finding."""
+    case_dir = init_case(tmp_path, "mr-ap-nov-001", monkeypatch)
+    _write_case_yaml(case_dir, with_verifier=False)
+    _write_draft_finding(case_dir)
+    ledger_dir = _make_ledger_dir(tmp_path)
+    monkeypatch.setenv("_SILENTWITNESS_TEST_PASSWORD", "any-password-at-all")
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-nov-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+    findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    f = next(x for x in findings if isinstance(x, dict) and x.get("finding_id") == "F-001")
+    assert f["status"] == "APPROVED"
+
+
+# ---------------------------------------------------------------------------
+# 15. Verifier hex fields are malformed → exit 2, VERIFIER_CORRUPT (fail-closed)
+# ---------------------------------------------------------------------------
+
+
+def test_approve_verifier_corrupt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Malformed verifier hex in CASE.yaml exits 2 with VERIFIER_CORRUPT — never proceeds."""
+    case_dir = init_case(tmp_path, "mr-ap-vc-001", monkeypatch)
+    (case_dir / "CASE.yaml").write_text(
+        "salt_hex: deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef\n"
+        "verifier_salt_hex: not-hex\n"
+        "verifier_hex: also-not-hex\n",
+        encoding="utf-8",
+    )
+    _write_draft_finding(case_dir)
+    ledger_dir = _make_ledger_dir(tmp_path)
+    monkeypatch.setenv("_SILENTWITNESS_TEST_PASSWORD", _CORRECT_PW)
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-vc-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 2
+    assert "VERIFIER_CORRUPT" in result.stderr
+    assert not (ledger_dir / "mr-ap-vc-001.jsonl").exists()
+    findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    f = next(x for x in findings if isinstance(x, dict) and x.get("finding_id") == "F-001")
+    assert f["status"] == "DRAFT"
