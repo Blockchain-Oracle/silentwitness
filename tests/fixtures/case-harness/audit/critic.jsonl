@@ -1,0 +1,2 @@
+{"ts": "2026-06-12T10:25:00Z", "type": "agree", "finding_id": "F-001", "reason": "Observation is well-cited against blob content; lsass dump is confirmed by MFT entry.", "examiner": "sansforensics"}
+{"ts": "2026-06-12T10:25:30Z", "type": "challenge", "finding_id": "F-003", "reason": "C2 IP attribution requires corroboration from threat intel — suggested revision: qualify as suspected.", "examiner": "sansforensics"}

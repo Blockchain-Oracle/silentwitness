@@ -1,0 +1,12 @@
+[
+  {"observation_id": "O-001", "text": "lsass.exe memory was dumped to disk", "audit_ids": ["sift-harness-20260612-001"]},
+  {"observation_id": "O-002", "text": "Suspicious PowerShell encoded command executed", "audit_ids": ["sift-harness-20260612-002"]},
+  {"observation_id": "O-003", "text": "Outbound connection to known C2 IP 203.0.113.42:443", "audit_ids": ["sift-harness-20260612-003"]},
+  {"observation_id": "O-004", "text": "Scheduled task created for persistence", "audit_ids": ["sift-harness-20260612-004"]},
+  {"observation_id": "O-005", "text": "Prefetch entry for mimikatz.exe found", "audit_ids": ["sift-harness-20260612-005"]},
+  {"finding_id": "F-001", "observation_id": "O-001", "interpretation_id": "I-001", "status": "DRAFT", "title": "Credential theft via lsass dump"},
+  {"finding_id": "F-002", "observation_id": "O-002", "interpretation_id": "I-002", "status": "DRAFT", "title": "Obfuscated PowerShell execution"},
+  {"finding_id": "F-003", "observation_id": "O-003", "interpretation_id": "I-003", "status": "DRAFT", "title": "C2 beaconing activity"},
+  {"finding_id": "F-004", "observation_id": "O-004", "interpretation_id": "I-004", "status": "APPROVED", "title": "Persistence via scheduled task"},
+  {"finding_id": "F-005", "observation_id": "O-005", "interpretation_id": "I-005", "status": "DRAFT", "title": "Mimikatz execution evidence"}
+]
