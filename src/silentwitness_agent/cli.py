@@ -245,6 +245,38 @@ def review(
     raise typer.Exit(code=code)
 
 
+@app.command("approve")
+def approve(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    finding_id: str = typer.Argument(...),
+    note: str | None = typer.Option(None, "--note"),
+    ledger: Path | None = typer.Option(None, "--ledger"),
+) -> None:
+    from silentwitness_agent.cli_commands.approve import (
+        _DEFAULT_LEDGER_DIR,
+        run as _run,
+    )
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = Console(stderr=True, no_color=cli_ctx.no_color)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    examiner = _read_case_examiner(case_dir, fallback=os.environ.get("USER", "examiner"))
+    code = _run(
+        case_dir,
+        case_id,
+        finding_id,
+        ledger_dir=ledger if ledger is not None else _DEFAULT_LEDGER_DIR,
+        note=note,
+        no_color=cli_ctx.no_color,
+        examiner=examiner,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
