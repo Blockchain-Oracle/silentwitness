@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, HttpUrl
 class EvidenceFileRecord(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    relative_path: str
+    relative_path: Annotated[str, Field(min_length=1)]
     sha256: Annotated[
         str,
         Field(pattern=r"^([a-f0-9]{64}|<computed-on-fetch>|<filled-by-epic-15>)$"),
@@ -39,5 +39,5 @@ class DatasetManifest(BaseModel):
     expected_investigation_path: list[str]
     ground_truth_status: Literal["public_pdf", "public_writeups", "password_gated", "synthetic"]
     LLM_memorization_risk: Literal["low", "medium", "high", "very_high"]
-    memorization_risk_note: str
+    memorization_risk_note: Annotated[str, Field(min_length=20)]
     notes: str | None

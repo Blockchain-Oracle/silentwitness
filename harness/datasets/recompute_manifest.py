@@ -11,10 +11,21 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 
 _CHUNK = 8192
+
+# Allow direct execution without installing the harness package.
+_REPO_ROOT = str(Path(__file__).resolve().parents[2])
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+from pydantic import ValidationError  # noqa: E402
+
+from harness.datasets.schema import DatasetManifest  # noqa: E402
 
 
 def _sha256_file(path: Path) -> tuple[str, int]:
@@ -28,9 +39,13 @@ def _sha256_file(path: Path) -> tuple[str, int]:
 
 
 def _recompute(manifest_path: Path) -> int:
-    base_dir = manifest_path.parent
-    raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    try:
+        raw = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        print(f"  error reading {manifest_path.name}: {exc}", file=sys.stderr)
+        return 1
 
+    base_dir = manifest_path.parent
     changed = False
     primary_sha: str | None = None
     primary_size: int | None = None
@@ -40,7 +55,11 @@ def _recompute(manifest_path: Path) -> int:
         if not file_path.exists():
             print(f"  skip (missing): {ef['relative_path']}", file=sys.stderr)
             continue
-        sha256, size = _sha256_file(file_path)
+        try:
+            sha256, size = _sha256_file(file_path)
+        except OSError as exc:
+            print(f"  error hashing {ef['relative_path']}: {exc}", file=sys.stderr)
+            return 1
         if ef.get("sha256") != sha256 or ef.get("size_bytes") != size:
             print(f"  {ef['relative_path']}: {ef.get('sha256', '?')[:16]}… → {sha256[:16]}…")
             ef["sha256"] = sha256
@@ -52,7 +71,7 @@ def _recompute(manifest_path: Path) -> int:
             primary_sha = sha256
             primary_size = size
 
-    # Sync manifest-level sha256/size_bytes to the primary evidence file
+    # Sync manifest-level sha256/size_bytes to the primary evidence file.
     if primary_sha is not None and (
         raw.get("sha256") != primary_sha or raw.get("size_bytes") != primary_size
     ):
@@ -60,13 +79,35 @@ def _recompute(manifest_path: Path) -> int:
         raw["size_bytes"] = primary_size
         changed = True
 
-    if changed:
-        manifest_path.write_text(
-            json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
-        )
-        print(f"  {manifest_path.name}: written")
-    else:
+    if not changed:
         print(f"  {manifest_path.name}: no changes")
+        return 0
+
+    # Validate before writing — reject semantically invalid JSON.
+    try:
+        DatasetManifest.model_validate(raw)
+    except ValidationError as exc:
+        print(f"  schema validation failed: {exc}", file=sys.stderr)
+        return 1
+
+    # Atomic write: write to a temp file in the same directory, then rename.
+    text = json.dumps(raw, indent=2, ensure_ascii=False) + "\n"
+    fd, tmp_path = tempfile.mkstemp(dir=manifest_path.parent, suffix=".tmp")
+    try:
+        try:
+            os.write(fd, text.encode("utf-8"))
+        finally:
+            os.close(fd)
+        Path(tmp_path).replace(manifest_path)
+    except OSError as exc:
+        print(f"  error writing {manifest_path.name}: {exc}", file=sys.stderr)
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        return 1
+
+    print(f"  {manifest_path.name}: written")
     return 0
 
 

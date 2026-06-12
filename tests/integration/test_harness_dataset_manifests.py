@@ -13,6 +13,7 @@ from harness.datasets.schema import DatasetManifest
 _MANIFEST_DIR = Path(__file__).resolve().parents[2] / "harness" / "datasets"
 _STUB_PCAP = _MANIFEST_DIR / "stubs" / "nitroba-stub.pcap"
 _VERIFY = str(_MANIFEST_DIR / "verify_manifest.py")
+_RECOMPUTE = str(_MANIFEST_DIR / "recompute_manifest.py")
 
 
 def _load(name: str) -> DatasetManifest:
@@ -136,6 +137,7 @@ def test_corrupted_stub_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_nist_hacking_case_memorization_risk_very_high() -> None:
     manifest = _load("nist-hacking-case.manifest.json")
     assert manifest.LLM_memorization_risk == "very_high"
+    assert manifest.ground_truth_status == "public_writeups"
     assert "writeups" in manifest.memorization_risk_note
 
 
@@ -192,3 +194,77 @@ def test_nitroba_sha256_matches_spec() -> None:
     manifest = _load("nitroba.manifest.json")
     assert manifest.sha256 == "2b77a9eaefc1d6af163d1ba793c96dbccacb04e6befdf1a0b01f8c67553ec2fb"
     assert manifest.size_bytes == 56180821
+
+
+# ---------------------------------------------------------------------------
+# 11. recompute_manifest.py — stub manifest round-trips without modification
+# ---------------------------------------------------------------------------
+
+
+def test_recompute_stub_no_changes(tmp_path: Path) -> None:
+    """recompute_manifest.py exits 0 and reports 'no changes' when hashes already match."""
+    import shutil
+
+    # Copy stub manifest + pcap into tmp_path, preserving relative layout.
+    (tmp_path / "stubs").mkdir()
+    shutil.copy2(_STUB_PCAP, tmp_path / "stubs" / "nitroba-stub.pcap")
+    stub_manifest = tmp_path / "nitroba-stub.manifest.json"
+    shutil.copy2(_MANIFEST_DIR / "nitroba-stub.manifest.json", stub_manifest)
+
+    result = subprocess.run(
+        [sys.executable, _RECOMPUTE, str(stub_manifest)],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+    )
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "no changes" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# 12. recompute_manifest.py — updates stale sha256 and writes atomically
+# ---------------------------------------------------------------------------
+
+
+def test_recompute_stub_updates_stale_hash(tmp_path: Path) -> None:
+    """recompute_manifest.py rewrites manifest when sha256 doesn't match the file."""
+    import hashlib
+    import shutil
+
+    (tmp_path / "stubs").mkdir()
+    # Write a modified pcap so the real hash differs from the committed pin.
+    original = _STUB_PCAP.read_bytes()
+    mutated = bytes([original[0] ^ 0x01]) + original[1:]
+    (tmp_path / "stubs" / "nitroba-stub.pcap").write_bytes(mutated)
+
+    stub_manifest = tmp_path / "nitroba-stub.manifest.json"
+    shutil.copy2(_MANIFEST_DIR / "nitroba-stub.manifest.json", stub_manifest)
+
+    result = subprocess.run(
+        [sys.executable, _RECOMPUTE, str(stub_manifest)],
+        capture_output=True,
+        text=True,
+        cwd=str(tmp_path),
+    )
+    assert result.returncode == 0, f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    assert "written" in result.stdout
+
+    # The rewritten manifest must contain the new hash.
+    expected_sha = hashlib.sha256(mutated).hexdigest()
+    updated = DatasetManifest.model_validate_json(stub_manifest.read_text(encoding="utf-8"))
+    assert updated.sha256 == expected_sha
+    assert updated.evidence_files[0].sha256 == expected_sha
+
+
+# ---------------------------------------------------------------------------
+# 13. recompute_manifest.py — exits 2 on missing manifest file
+# ---------------------------------------------------------------------------
+
+
+def test_recompute_missing_manifest_exits_2(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, _RECOMPUTE, str(tmp_path / "nonexistent.json")],
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 2
