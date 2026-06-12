@@ -1,4 +1,6 @@
-"""Read-only case status snapshot — safe during active investigate runs."""
+"""Read-only case status snapshot. Opens files without locks; partial lines from
+concurrent writes to agent.jsonl are silently dropped. Not guaranteed to reflect
+the exact in-flight state, but will never corrupt the case."""
 
 from __future__ import annotations
 
@@ -13,10 +15,11 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
-_PIVOT_GLYPH = "⤷"  # ⤳
+_PIVOT_GLYPH = "⤷"
 _STATUS_APPROVED = "APPROVED"
 _DEFAULT_TOKEN_BUDGET = 800_000
 _DEFAULT_STEP_BUDGET = 200
+_HYP_STATUSES = ("ACTIVE", "CONFIRMED", "PIVOTED", "ABANDONED")
 _HYP_TYPE_MAP = {
     "form": "ACTIVE",
     "dispatch": "ACTIVE",
@@ -40,40 +43,52 @@ def _elapsed_fmt(s: float) -> str:
 
 
 def _read_jsonl(path: Path, strict: bool = False) -> tuple[list[dict[str, Any]], list[int]]:
-    """Parse a JSONL file; bad_lines non-empty only when strict=True."""
+    """Parse a JSONL file. Non-strict (default): bad lines are silently skipped, bad is [].
+    Strict: bad line numbers are collected and returned; caller decides whether to error."""
     events: list[dict[str, Any]] = []
     bad: list[int] = []
     if not path.is_file():
         return events, bad
-    for lineno, raw in enumerate(path.open("r", encoding="utf-8", errors="replace"), 1):
-        line = raw.strip()
-        if not line:
-            continue
-        try:
-            events.append(json.loads(line))
-        except json.JSONDecodeError:
-            if strict:
-                bad.append(lineno)
+    try:
+        fh = path.open("r", encoding="utf-8", errors="replace")
+    except OSError:
+        return events, bad
+    with fh:
+        for lineno, raw in enumerate(fh, 1):
+            line = raw.strip()
+            if not line:
+                continue
+            try:
+                events.append(json.loads(line))
+            except json.JSONDecodeError:
+                if strict:
+                    bad.append(lineno)
     return events, bad
 
 
-def _findings(case_dir: Path) -> tuple[int, int, int]:
+def _findings(case_dir: Path) -> tuple[int, int, int, bool]:
+    """Return (staged, approved, rejected, degraded).
+    degraded=True when findings.json is unreadable."""
     staged = approved = rejected = 0
+    degraded = False
     p = case_dir / "findings.json"
     if p.is_file():
         try:
             for item in json.loads(p.read_text(encoding="utf-8")):
-                if isinstance(item, dict):
-                    approved += item.get("status") == _STATUS_APPROVED
-                    staged += item.get("status") != _STATUS_APPROVED
+                if not isinstance(item, dict):
+                    continue
+                if item.get("status") == _STATUS_APPROVED:
+                    approved += 1
+                elif item.get("status") != "REJECTED":
+                    staged += 1
         except (json.JSONDecodeError, OSError, TypeError):
-            pass
+            degraded = True
     rows, _ = _read_jsonl(case_dir / "audit" / "findings.jsonl")
     for ev in rows:
         rs = ev.get("result_summary") or {}
         if isinstance(rs, dict) and rs.get("success") is False:
             rejected += 1
-    return staged, approved, rejected
+    return staged, approved, rejected, degraded
 
 
 def _case_status(events: list[dict[str, Any]]) -> str:
@@ -116,7 +131,9 @@ def _elapsed(events: list[dict[str, Any]], status: str) -> float:
 
 def _hyp_rows(snap: dict[str, Any]) -> list[tuple[str, str, str]]:
     rows: list[tuple[str, str, str]] = []
-    for h in ([snap.get("active")] if snap.get("active") else []) + list(snap.get("queued") or []):
+    active = snap.get("active")
+    queued = snap.get("queued") or []
+    for h in [active, *queued] if active else queued:
         if isinstance(h, dict):
             rows.append((h.get("id", "?"), "ACTIVE", h.get("statement", "")))
     for h in snap.get("history") or []:
@@ -134,7 +151,7 @@ def _hyp_counts(events: list[dict[str, Any]]) -> dict[str, int]:
         t = str(ev.get("type", "")).lower()
         if hid and t in _HYP_TYPE_MAP:
             last[hid] = _HYP_TYPE_MAP[t]
-    out = {"ACTIVE": 0, "CONFIRMED": 0, "PIVOTED": 0, "ABANDONED": 0}
+    out = dict.fromkeys(_HYP_STATUSES, 0)
     for s in last.values():
         out[s] = out.get(s, 0) + 1
     return out
@@ -160,7 +177,7 @@ def _examiner(case_dir: Path) -> str:
     try:
         with p.open("rb") as fh:
             return str(tomllib.load(fh).get("examiner", "examiner"))
-    except Exception:
+    except (tomllib.TOMLDecodeError, OSError):
         return "examiner"
 
 
@@ -173,10 +190,29 @@ def _render_once(
     agent_evts, _ = _read_jsonl(case_dir / "audit" / "agent.jsonl")
     hyp_evts, bad = _read_jsonl(case_dir / "audit" / "hypothesis.jsonl", strict=True)
     if bad:
-        err.print(f"[red]✗[/red] hypothesis.jsonl parse error at line {bad[0]}", highlight=False)
-        return 2
+        # Only the last non-empty line being bad is a partial concurrent write — skip gracefully.
+        # Bad lines earlier in the file indicate genuine corruption.
+        hyp_path = case_dir / "audit" / "hypothesis.jsonl"
+        try:
+            total_nonempty = sum(
+                1
+                for ln in hyp_path.read_text(encoding="utf-8", errors="replace").splitlines()
+                if ln.strip()
+            )
+        except OSError:
+            total_nonempty = -1
+        if bad != [total_nonempty]:
+            err.print(
+                f"[red]✗[/red] hypothesis.jsonl parse error at line {bad[0]}", highlight=False
+            )
+            return 2
 
-    staged, approved, rejected = _findings(case_dir)
+    staged, approved, rejected, findings_degraded = _findings(case_dir)
+    if findings_degraded:
+        err.print(
+            "[yellow]⚠[/yellow] findings.json unreadable; staged/approved counts may be zero",
+            highlight=False,
+        )
     status = _case_status(agent_evts)
     tokens_consumed, steps_consumed = _tokens_steps(agent_evts)
     elapsed_s = _elapsed(agent_evts, status)
@@ -188,27 +224,25 @@ def _render_once(
         (ev["stack_snapshot"] for ev in reversed(agent_evts) if "stack_snapshot" in ev), None
     )
     rows = _hyp_rows(snap) if snap else []
-    _skeys = ("ACTIVE", "CONFIRMED", "PIVOTED", "ABANDONED")
-    counts = (
-        {s: sum(1 for _, st, _ in rows if st == s) for s in _skeys}
-        if rows
-        else _hyp_counts(hyp_evts)
-    )
+    if rows:
+        counts = {s: sum(1 for _, st, _ in rows if st == s) for s in _HYP_STATUSES}
+    else:
+        counts = _hyp_counts(hyp_evts)
     pivot = _last_pivot(hyp_evts)
 
     if json_out:
+        hypotheses: dict[str, Any] = {
+            k.lower(): [{"id": r[0], "statement": r[2]} for r in rows if r[1] == k]
+            for k in _HYP_STATUSES
+        }
+        # Spec requires lowercase keys in counts dict.
+        hypotheses["counts"] = {k.lower(): v for k, v in counts.items()}
         payload = {
             "case_id": case_id,
             "examiner": examiner,
             "elapsed_seconds": int(elapsed_s),
             "status": status,
-            "hypotheses": {
-                **{
-                    k.lower(): [{"id": r[0], "statement": r[2]} for r in rows if r[1] == k]
-                    for k in ("ACTIVE", "CONFIRMED", "PIVOTED", "ABANDONED")
-                },
-                "counts": counts,
-            },
+            "hypotheses": hypotheses,
             "findings": {"draft": staged, "approved": approved, "rejected": rejected},
             "budget": {
                 "tokens_consumed": tokens_consumed,
@@ -240,11 +274,8 @@ def _render_once(
         tbl.add_column("id", style="cyan", no_wrap=True)
         tbl.add_column("status", no_wrap=True)
         tbl.add_column("statement")
-        show = set(
-            ("ACTIVE", "CONFIRMED", "PIVOTED")
-            if not full
-            else ("ACTIVE", "CONFIRMED", "PIVOTED", "ABANDONED")
-        )
+        # ABANDONED rows are handled by the dedicated tbl2 section (when --full); never in main tbl.
+        show = {"ACTIVE", "CONFIRMED", "PIVOTED"}
         for hid, st, stmt in rows:
             if st not in show:
                 continue
@@ -283,7 +314,9 @@ def _render_once(
 def render(
     case_dir: Path, case_id: str, *, json_out: bool, watch: bool, full: bool, no_color: bool
 ) -> int:
-    """Entry point from cli.py."""
+    """In watch mode, temporarily replaces the process SIGINT handler and returns 130 on
+    interrupt (POSIX convention). Not safe to call from a long-running process that has its
+    own SIGINT handling."""
     if not watch:
         return _render_once(case_dir, case_id, json_out=json_out, full=full, no_color=no_color)
 
@@ -296,7 +329,13 @@ def render(
     try:
         while not _done[0]:
             Console(no_color=no_color).print("\x1b[2J\x1b[H", end="", highlight=False)
-            _render_once(case_dir, case_id, json_out=json_out, full=full, no_color=no_color)
+            try:
+                _render_once(case_dir, case_id, json_out=json_out, full=full, no_color=no_color)
+            except OSError as exc:
+                # Transient I/O errors during active investigations are expected; retry next tick.
+                Console(stderr=True, no_color=no_color).print(
+                    f"[yellow]⚠[/yellow] status read error: {exc}", highlight=False
+                )
             deadline = time.monotonic() + 2.0
             while not _done[0] and time.monotonic() < deadline:
                 time.sleep(0.1)
