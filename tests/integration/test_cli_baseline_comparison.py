@@ -239,8 +239,10 @@ class TestReviewFindings:
         runner = CliRunner()
         result = runner.invoke(app, ["baseline-comparison", _GT_NAME])
         assert result.exit_code == 2
-        # Rich may wrap the message across lines on narrow terminals — collapse first
-        flat = result.output.replace("\n", " ")
+        # Rich may wrap + double-space at line breaks — normalize whitespace
+        import re
+
+        flat = re.sub(r"\s+", " ", result.output)
         assert "top-level must be a JSON object" in flat
 
     def test_baseline_delta_json_schema_round_trip(self, cli_env: Path) -> None:
