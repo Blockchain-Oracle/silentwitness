@@ -325,6 +325,29 @@ def export(
     raise typer.Exit(code=code)
 
 
+@app.command("install")
+def install(
+    claude_code: bool = typer.Option(False, "--claude-code"),
+    cursor: bool = typer.Option(False, "--cursor"),
+    continue_ide: bool = typer.Option(False, "--continue"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+    force: bool = typer.Option(False, "--force"),
+    ctx: typer.Context = typer.Option(typer.Context),
+) -> None:
+    from silentwitness_agent.cli_commands.install import run as _run
+
+    no_color: bool = ctx.obj.no_color if ctx.obj else False
+    code = _run(
+        claude_code=claude_code,
+        cursor=cursor,
+        continue_ide=continue_ide,
+        dry_run=dry_run,
+        force=force,
+        no_color=no_color,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
