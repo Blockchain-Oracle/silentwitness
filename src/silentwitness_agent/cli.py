@@ -189,6 +189,33 @@ def investigate(
     )
 
 
+@app.command("status")
+def status(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    json_out: bool = typer.Option(False, "--json"),
+    watch: bool = typer.Option(False, "--watch"),
+    full: bool = typer.Option(False, "--full"),
+) -> None:
+    from silentwitness_agent.cli_commands.status import render as _render
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = Console(stderr=True, no_color=cli_ctx.no_color)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    code = _render(
+        case_dir,
+        case_id,
+        json_out=json_out,
+        watch=watch,
+        full=full,
+        no_color=cli_ctx.no_color,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
