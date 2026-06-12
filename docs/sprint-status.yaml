@@ -649,11 +649,11 @@ stories:
 
   - id: story-delta-report
     epic: "Epic 14 — Accuracy harness"
-    status: PENDING
+    status: COMPLETE
     depends_on: [scorer]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/74"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/201"
+    merged_at: "2026-06-12T16:43:00Z"
 
   # ─────────────────────────────────────────────────────────────────────
   # Epic 15 — Adversary pair case-trapdoor (CUT for v1 per audit B-PY-3)
