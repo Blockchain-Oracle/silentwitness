@@ -296,6 +296,35 @@ def verify(
     raise typer.Exit(code=code)
 
 
+@app.command("export")
+def export(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    pdf: bool = typer.Option(False, "--pdf"),
+    md: bool = typer.Option(False, "--md"),
+    ioc_format: str = typer.Option("csv", "--ioc-format"),
+    out: Path | None = typer.Option(None, "--out"),
+) -> None:
+    from silentwitness_agent.cli_commands.export import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = _console(cli_ctx.no_color, stderr=True)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    code = _run(
+        case_dir,
+        case_id,
+        pdf=pdf,
+        md=md,
+        out=out,
+        ioc_format=ioc_format,
+        no_color=cli_ctx.no_color,
+    )
+    raise typer.Exit(code=code)
+
+
 @app.command("register-evidence")
 def register_evidence(
     ctx: typer.Context,
