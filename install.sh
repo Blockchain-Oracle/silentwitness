@@ -170,23 +170,44 @@ install_suricata() {
 }
 
 # ---------------------------------------------------------------------------
-# Mermaid CLI (optional, --diagrams flag) — docs-time only.
-# SIFT 2026 ships dotnet 9 + Python but NOT Node.js (context/.raw-design-research/03
-# line 207). We provision Node 20 LTS via nvm and install @mermaid-js/mermaid-cli@^10
-# globally to give docs maintainers `mmdc` for regenerating docs/diagrams/*.png.
-# Pinned major: ^10 (mmdc 10.x stable; v11 introduces breaking flags).
+# Mermaid CLI (optional, --diagrams flag) — DOCS-TIME ONLY, NOT RUNTIME.
+#
+# Why this exists: SIFT 2026 ships dotnet 9 + Python but NOT Node.js
+# (context/.raw-design-research/03 line 207). The CLI never invokes mmdc at
+# runtime; only docs/diagrams/*.mmd regeneration needs it. We gate behind
+# `--diagrams` so the base install path stays fast for judges who only need
+# `silentwitness investigate`.
+#
+# Required by: tests/unit/test_architecture_diagram.py (CI uses the committed
+# PNG so the runner needs no Node; this block is for docs maintainers running
+# `just diagrams` locally before pushing diagram changes).
+#
+# nvm install.sh v0.40.1: pinned by SHA256 (matches verify_sha256 convention
+# at install.sh:15). mmdc pin: @^10 per story-architecture-diagram-png spec.
 # ---------------------------------------------------------------------------
+NVM_INSTALL_SHA256="abdb525ee9f5b48b34d8ed9fc67c6013fb0f659712e401ecd88ab989b3af8f53"  # pragma: allowlist secret
+
 install_mermaid_cli() {
     log "provisioning Node 20 + @mermaid-js/mermaid-cli@^10 (docs-time)"
-    if ! command -v nvm >/dev/null 2>&1; then
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-        export NVM_DIR="$HOME/.nvm"
-        # shellcheck source=/dev/null
-        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    # Probe both `command -v` and the canonical nvm.sh path — fresh non-interactive
+    # shells don't pick up the .bashrc nvm function registration.
+    if [ ! -s "$HOME/.nvm/nvm.sh" ] && ! command -v nvm >/dev/null 2>&1; then
+        local nvm_tmp="$TMPDIR/nvm-install.sh"
+        curl -fsSL -o "$nvm_tmp" https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh \
+            || fail "nvm install.sh download failed"
+        verify_sha256 "$nvm_tmp" "$NVM_INSTALL_SHA256"
+        bash "$nvm_tmp" || fail "nvm v0.40.1 install failed"
     fi
-    nvm install 20
-    nvm use 20
-    npm install -g "@mermaid-js/mermaid-cli@^10"
+    export NVM_DIR="$HOME/.nvm"
+    # nvm.sh references unset vars internally; relax `set -u` while sourcing
+    # (documented nvm gotcha, see nvm README).
+    set +u
+    # shellcheck source=/dev/null
+    [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+    set -u
+    nvm install 20 || fail "nvm install 20 failed"
+    nvm use 20 || fail "nvm use 20 failed"
+    npm install -g "@mermaid-js/mermaid-cli@^10" || fail "npm install @mermaid-js/mermaid-cli failed"
     mmdc --version || fail "mmdc runtime check failed"
 }
 
@@ -197,6 +218,7 @@ DIAGRAMS=0
 for arg in "$@"; do
     case "$arg" in
         --diagrams) DIAGRAMS=1 ;;
+        *) fail "unknown flag: $arg (supported: --diagrams)" ;;
     esac
 done
 

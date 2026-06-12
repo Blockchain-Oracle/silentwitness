@@ -43,8 +43,10 @@ def test_png_exists_and_has_magic_bytes() -> None:
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
 
 
-def test_png_size_under_500kb() -> None:
-    assert _PNG.stat().st_size <= 512_000
+def test_png_size_within_bounds() -> None:
+    """≤500 KiB ceiling; >1 KB floor (catches truncated/corrupt PNG regressions)."""
+    size = _PNG.stat().st_size
+    assert 1024 < size <= 512_000, f"png size {size} outside [1KiB, 500KiB]"
 
 
 @pytest.mark.skipif(
@@ -80,11 +82,23 @@ def test_mmd_renders_via_mmdc(tmp_path: Path) -> None:
 
 
 def test_architecture_md_mermaid_block_matches_mmd() -> None:
-    """The first ```mermaid block in architecture.md must equal the .mmd file."""
+    """The mermaid block under the `canonical-architecture-diagram` sentinel matches .mmd."""
     md_text = _ARCHITECTURE_MD.read_text(encoding="utf-8")
     lines = md_text.splitlines()
-    # Find first ```mermaid fence and matching ```
-    start = next(i for i, ln in enumerate(lines) if ln.strip() == "```mermaid")
+    # Anchor extraction to a sentinel comment so adding diagrams above doesn't
+    # silently break the byte-for-byte sync check.
+    sentinel = "<!-- canonical-architecture-diagram -->"
+    sentinel_idx = next(
+        (i for i, ln in enumerate(lines) if ln.strip() == sentinel),
+        None,
+    )
+    assert sentinel_idx is not None, f"missing sentinel comment {sentinel!r} in architecture.md"
+    # Next ```mermaid fence after the sentinel
+    start = next(
+        i
+        for i, ln in enumerate(lines[sentinel_idx + 1 :], sentinel_idx + 1)
+        if ln.strip() == "```mermaid"
+    )
     end = next(i for i, ln in enumerate(lines[start + 1 :], start + 1) if ln.strip() == "```")
     block = "\n".join(lines[start + 1 : end]) + "\n"
     mmd_text = _MMD.read_text(encoding="utf-8")
@@ -109,16 +123,21 @@ def test_render_script_exists_and_executable() -> None:
 
 
 def test_render_script_fails_when_mmdc_missing(tmp_path: Path) -> None:
-    """When mmdc is not on PATH, the script exits 1 with a helpful pointer."""
+    """PATH excludes mmdc locations (homebrew, npm-global, nvm) → script exits 1.
+
+    Use PATH=/usr/bin:/bin so coreutils (dirname/wc) still work; mmdc is never
+    installed there (it's a Node binary at /usr/local/bin, /opt/homebrew/bin,
+    or ~/.nvm/.../bin). Also unset HOME → nvm.sh sourcing in the script's
+    install advice can't find user dotfiles.
+    """
     script = _REPO / "scripts" / "render_diagrams.sh"
-    # Run with a deliberately-empty PATH (only /usr/bin for bash itself).
-    empty_path_env = {"PATH": "/usr/bin:/bin"}
+    isolated_env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp_path)}
     r = subprocess.run(
         ["/bin/bash", str(script)],
         capture_output=True,
         text=True,
         check=False,
-        env=empty_path_env,
+        env=isolated_env,
     )
     assert r.returncode == 1
     assert "mmdc not installed" in r.stderr
