@@ -83,10 +83,11 @@ def _load_specialist_prompt(slug: str) -> str:
             .joinpath(filename)
             .read_text(encoding="utf-8")
         )
-    except (FileNotFoundError, OSError) as exc:
+    except (FileNotFoundError, OSError, UnicodeDecodeError) as exc:
         raise FileNotFoundError(
-            f"specialist prompt '{filename}' is missing from silentwitness_agent.prompts; "
-            f"ensure src/silentwitness_agent/prompts/{filename} exists."
+            f"specialist prompt '{filename}' is missing or unreadable from "
+            f"silentwitness_agent.prompts; ensure "
+            f"src/silentwitness_agent/prompts/{filename} exists and is valid UTF-8."
         ) from exc
 
 

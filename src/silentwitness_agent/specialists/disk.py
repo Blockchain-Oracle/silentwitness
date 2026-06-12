@@ -1,4 +1,4 @@
-"""Memory forensics specialist subagent (architecture §5.2)."""
+"""Disk / NTFS-artifact forensics specialist subagent (architecture §5.2)."""
 
 from __future__ import annotations
 
@@ -22,17 +22,14 @@ _LOG = logging.getLogger(__name__)
 # Tool allowlist — architecture §5.2
 # ---------------------------------------------------------------------------
 
-MEMORY_TOOL_ALLOWLIST: frozenset[str] = frozenset(
+DISK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "vol_pslist",
-        "vol_pstree",
-        "vol_psscan",
-        "vol_malfind",
-        "vol_netscan",
-        "vol_cmdline",
-        "vol_dlllist",
-        "vol_handles",
-        "vol_lsadump",
+        "parse_mft",
+        "parse_amcache",
+        "parse_shimcache",
+        "parse_prefetch",
+        "parse_shellbags",
+        "regripper_run",
         "record_observation",
         "record_interpretation",
         "register_evidence",
@@ -40,9 +37,9 @@ MEMORY_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     }
 )
 
-_SYSTEM_PROMPT: str = _load_specialist_prompt("memory")
+_SYSTEM_PROMPT: str = _load_specialist_prompt("disk")
 
-_ENV_MODEL_KEY = "SILENTWITNESS_SPECIALIST_MODEL_MEMORY"
+_ENV_MODEL_KEY = "SILENTWITNESS_SPECIALIST_MODEL_DISK"
 _ENV_QUALITY_KEY = "SILENTWITNESS_MODEL_QUALITY"
 _DEFAULT_MODEL = "anthropic:claude-haiku-4-5"
 _HIGH_QUALITY_MODEL = "anthropic:claude-opus-4-7"
@@ -54,7 +51,7 @@ def _resolve_specialist_model(model: str | None) -> Model:
             return infer_model(model)
         except (ValueError, Exception) as exc:
             raise ValueError(
-                f"memory specialist: explicit model={model!r} is not a valid Pydantic AI "
+                f"disk specialist: explicit model={model!r} is not a valid Pydantic AI "
                 f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
             ) from exc
     env_model = os.environ.get(_ENV_MODEL_KEY)
@@ -63,7 +60,7 @@ def _resolve_specialist_model(model: str | None) -> Model:
             return infer_model(env_model)
         except (ValueError, Exception) as exc:
             raise ValueError(
-                f"memory specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
+                f"disk specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
                 f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
             ) from exc
     if os.environ.get(_ENV_QUALITY_KEY, "").lower() == "high":
@@ -71,24 +68,24 @@ def _resolve_specialist_model(model: str | None) -> Model:
     return infer_model(_DEFAULT_MODEL)
 
 
-def build_memory_specialist(
+def build_disk_specialist(
     model: str | None = None,
 ) -> Agent[SpecialistDeps, SpecialistReport]:
-    """Build and return the memory specialist agent.
+    """Build and return the disk specialist agent.
 
-    Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_MEMORY`` env
+    Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_DISK`` env
     → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7) → default (haiku-4-5).
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))
-    _LOG.debug("memory specialist: resolved model=%s", model_name)
+    _LOG.debug("disk specialist: resolved model=%s", model_name)
 
     mcp_server = MCPServerStdio(
         "python",
         ["-m", "silentwitness_mcp"],
         sampling_model=resolved,
     )
-    filtered = mcp_server.filtered(lambda _ctx, td: td.name in MEMORY_TOOL_ALLOWLIST)
+    filtered = mcp_server.filtered(lambda _ctx, td: td.name in DISK_TOOL_ALLOWLIST)
 
     return Agent(
         model=resolved,
@@ -101,17 +98,17 @@ def build_memory_specialist(
 
 def register_as_investigator_tool(
     investigator: Agent[InvestigatorDeps, InvestigatorResult],
-    memory_specialist: Agent[SpecialistDeps, SpecialistReport],
+    disk_specialist: Agent[SpecialistDeps, SpecialistReport],
 ) -> None:
-    """Register ``dispatch_memory_specialist`` as an @investigator.tool.
+    """Register ``dispatch_disk_specialist`` as an @investigator.tool.
 
-    The tool runs the memory specialist in its own context window.
-    usage=ctx.usage ensures memory specialist tokens count against the
+    The tool runs the disk specialist in its own context window.
+    usage=ctx.usage ensures disk specialist tokens count against the
     investigator's per-hypothesis budget, not a separate uncapped pool.
     """
 
     @investigator.tool
-    async def dispatch_memory_specialist(
+    async def dispatch_disk_specialist(
         ctx: RunContext[InvestigatorDeps],
         question: str,
         hypothesis_id: str,
@@ -124,14 +121,14 @@ def register_as_investigator_tool(
             pending_critiques=tuple(ctx.deps.pending_critiques or ()),
         )
         try:
-            result = await memory_specialist.run(
+            result = await disk_specialist.run(
                 question,
                 deps=specialist_deps,
                 usage=ctx.usage,
             )
         except Exception:
             _LOG.error(
-                "dispatch_memory_specialist failed (hypothesis_id=%s, examiner=%s, question=%r)",
+                "dispatch_disk_specialist failed (hypothesis_id=%s, examiner=%s, question=%r)",
                 hypothesis_id,
                 ctx.deps.examiner,
                 question,
@@ -142,7 +139,7 @@ def register_as_investigator_tool(
 
 
 __all__ = [
-    "MEMORY_TOOL_ALLOWLIST",
-    "build_memory_specialist",
+    "DISK_TOOL_ALLOWLIST",
+    "build_disk_specialist",
     "register_as_investigator_tool",
 ]
