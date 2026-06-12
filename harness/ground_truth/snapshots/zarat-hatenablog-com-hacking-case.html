@@ -1,0 +1,2630 @@
+<!DOCTYPE html>
+<html lang="ja" data-admin-domain="//blog.hatena.ne.jp" data-admin-origin="https://blog.hatena.ne.jp" data-author="Zarat" data-avail-langs="ja en" data-blog="zarat.hatenablog.com" data-blog-host="zarat.hatenablog.com" data-blog-is-public="1" data-blog-name="4ensiX" data-blog-owner="Zarat" data-blog-show-ads="1" data-blog-show-sleeping-ads="" data-blog-uri="https://zarat.hatenablog.com/" data-blog-uuid="10257846132644426584" data-blogs-uri-base="https://zarat.hatenablog.com" data-brand="hatenablog" data-data-layer="{&quot;hatenablog&quot;:{&quot;admin&quot;:{},&quot;analytics&quot;:{&quot;brand_property_id&quot;:&quot;&quot;,&quot;measurement_id&quot;:&quot;&quot;,&quot;non_sampling_property_id&quot;:&quot;&quot;,&quot;property_id&quot;:&quot;&quot;,&quot;separated_property_id&quot;:&quot;UA-29716941-23&quot;},&quot;blog&quot;:{&quot;blog_id&quot;:&quot;10257846132644426584&quot;,&quot;content_seems_japanese&quot;:&quot;true&quot;,&quot;disable_ads&quot;:&quot;&quot;,&quot;enable_ads&quot;:&quot;true&quot;,&quot;enable_keyword_link&quot;:&quot;true&quot;,&quot;entry_show_footer_related_entries&quot;:&quot;true&quot;,&quot;force_pc_view&quot;:&quot;false&quot;,&quot;is_public&quot;:&quot;true&quot;,&quot;is_responsive_view&quot;:&quot;false&quot;,&quot;is_sleeping&quot;:&quot;false&quot;,&quot;lang&quot;:&quot;ja&quot;,&quot;name&quot;:&quot;4ensiX&quot;,&quot;owner_name&quot;:&quot;Zarat&quot;,&quot;uri&quot;:&quot;https://zarat.hatenablog.com/&quot;},&quot;brand&quot;:&quot;hatenablog&quot;,&quot;page_id&quot;:&quot;entry&quot;,&quot;permalink_entry&quot;:{&quot;author_name&quot;:&quot;Zarat&quot;,&quot;categories&quot;:&quot;Forensics\tNIST CFReDS&quot;,&quot;character_count&quot;:28481,&quot;date&quot;:&quot;2021-12-19&quot;,&quot;entry_id&quot;:&quot;13574176438040571530&quot;,&quot;first_category&quot;:&quot;Forensics&quot;,&quot;hour&quot;:&quot;22&quot;,&quot;title&quot;:&quot;NIST CFReDS Hacking Case writeup&quot;,&quot;uri&quot;:&quot;https://zarat.hatenablog.com/entry/2021/12/19/223735&quot;},&quot;pro&quot;:&quot;free&quot;,&quot;router_type&quot;:&quot;blogs&quot;}}" data-device="pc" data-dont-recommend-pro="false" data-global-domain="https://hatena.blog" data-globalheader-color="b" data-globalheader-type="pc" data-has-touch-view="1" data-help-url="https://help.hatenablog.com" data-page="entry" data-parts-domain="https://hatenablog-parts.com" data-plus-available="" data-pro="false" data-router-type="blogs" data-sentry-dsn="https://03a33e4781a24cf2885099fed222b56d@sentry.io/1195218" data-sentry-environment="production" data-sentry-sample-rate="0.1" data-static-domain="https://cdn.blog.st-hatena.com" data-version="98326886fe5381d42d67007251ee03" data-initial-state="{}">
+  <head prefix="og: http://ogp.me/ns# fb: http://ogp.me/ns/fb# article: http://ogp.me/ns/article#"><script type="text/javascript" src="https://web-static.archive.org/_static/js/bundle-playback.js?v=2N_sDSC0" charset="utf-8"></script>
+<script type="text/javascript" src="https://web-static.archive.org/_static/js/wombat.js?v=o9P2E1FK" charset="utf-8"></script>
+<script>window.RufflePlayer=window.RufflePlayer||{};window.RufflePlayer.config={"autoplay":"on","unmuteOverlay":"hidden","showSwfDownload":true};</script>
+<script type="text/javascript" src="https://web-static.archive.org/_static/js/ruffle/ruffle.js"></script>
+<script type="text/javascript">
+    __wm.init("https://web.archive.org/web");
+  __wm.wombat("https://zarat.hatenablog.com/entry/2021/12/19/223735","20250420232117","https://web.archive.org/","web","https://web-static.archive.org/_static/",
+	      "1745191277");
+</script>
+<link rel="stylesheet" type="text/css" href="https://web-static.archive.org/_static/css/banner-styles.css?v=1utQkbB3" />
+<link rel="stylesheet" type="text/css" href="https://web-static.archive.org/_static/css/iconochive.css?v=3PDvdIFv" />
+<!-- End Wayback Rewrite JS Include -->
+
+
+
+
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+
+
+
+
+
+
+  <meta name="robots" content="max-image-preview:large"/>
+
+
+  <meta charset="utf-8"/>
+  <meta http-equiv="X-UA-Compatible" content="IE=7; IE=9; IE=10; IE=11"/>
+  <title>NIST CFReDS Hacking Case writeup - 4ensiX</title>
+
+
+  <link rel="canonical" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2021/12/19/223735"/>
+
+
+
+
+
+<meta itemprop="name" content="NIST CFReDS Hacking Case writeup - 4ensiX"/>
+
+  <meta itemprop="image" content="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/scale/594075cfac84b550d0f78d2ff28699645a3d9319/backend=imagemagick;version=1;width=1300/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20211219%2F20211219220740.png"/>
+
+
+  <meta property="og:title" content="NIST CFReDS Hacking Case writeup - 4ensiX"/>
+<meta property="og:type" content="article"/>
+  <meta property="og:url" content="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2021/12/19/223735"/>
+
+  <meta property="og:image" content="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/scale/594075cfac84b550d0f78d2ff28699645a3d9319/backend=imagemagick;version=1;width=1300/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20211219%2F20211219220740.png"/>
+
+<meta property="og:image:alt" content="NIST CFReDS Hacking Case writeup - 4ensiX"/>
+    <meta property="og:description" content="NIST Hacking Case Scenario On 09/20/04 , a Dell CPi notebook computer, serial # VLQLW, was found abandoned along with a wireless PCMCIA card and an external homemade 802.11b antennae. It is suspected that this computer was used for hacking purposes, although cannot be tied to a hacking suspect, G=r=…"/>
+<meta property="og:site_name" content="4ensiX"/>
+
+  <meta property="article:published_time" content="2021-12-19T13:37:35Z"/>
+
+    <meta property="article:tag" content="Forensics"/>
+    <meta property="article:tag" content="NIST CFReDS"/>
+      <meta name="twitter:card" content="summary_large_image"/>
+    <meta name="twitter:image" content="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/scale/594075cfac84b550d0f78d2ff28699645a3d9319/backend=imagemagick;version=1;width=1300/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20211219%2F20211219220740.png"/>  <meta name="twitter:title" content="NIST CFReDS Hacking Case writeup - 4ensiX"/>    <meta name="twitter:description" content="NIST Hacking Case Scenario On 09/20/04 , a Dell CPi notebook computer, serial # VLQLW, was found abandoned along with a wireless PCMCIA card and an external hom…"/>  <meta name="twitter:app:name:iphone" content="はてなブログアプリ"/>
+  <meta name="twitter:app:id:iphone" content="583299321"/>
+  <meta name="twitter:app:url:iphone" content="hatenablog:///open?uri=https%3A%2F%2Fzarat.hatenablog.com%2Fentry%2F2021%2F12%2F19%2F223735"/>  <meta name="twitter:site" content="@4ensiXer"/>
+
+    <meta name="description" content="NIST Hacking Case Scenario On 09/20/04 , a Dell CPi notebook computer, serial # VLQLW, was found abandoned along with a wireless PCMCIA card and an external homemade 802.11b antennae. It is suspected that this computer was used for hacking purposes, although cannot be tied to a hacking suspect, G=r=…"/>
+    <meta name="keywords" content="DFIR,Forensics,Forensic,Autopsy,LetsDefend"/>
+
+
+
+<script id="embed-gtm-data-layer-loader" data-data-layer-page-specific="{&quot;hatenablog&quot;:{&quot;blogs_permalink&quot;:{&quot;blog_afc_issued&quot;:&quot;false&quot;,&quot;has_related_entries_with_elasticsearch&quot;:&quot;true&quot;,&quot;is_blog_sleeping&quot;:&quot;false&quot;,&quot;entry_afc_issued&quot;:&quot;false&quot;,&quot;is_author_pro&quot;:&quot;false&quot;}}}">
+(function() {
+  function loadDataLayer(elem, attrName) {
+    if (!elem) { return {}; }
+    var json = elem.getAttribute(attrName);
+    if (!json) { return {}; }
+    return JSON.parse(json);
+  }
+
+  var globalVariables = loadDataLayer(
+    document.documentElement,
+    'data-data-layer'
+  );
+  var pageSpecificVariables = loadDataLayer(
+    document.getElementById('embed-gtm-data-layer-loader'),
+    'data-data-layer-page-specific'
+  );
+
+  var variables = [globalVariables, pageSpecificVariables];
+
+  if (!window.dataLayer) {
+    window.dataLayer = [];
+  }
+
+  for (var i = 0; i < variables.length; i++) {
+    window.dataLayer.push(variables[i]);
+  }
+})();
+</script>
+
+<!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://web.archive.org/web/20250420232117/https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-P4CXTW');</script>
+<!-- End Google Tag Manager -->
+
+
+
+
+
+
+
+
+  <link rel="shortcut icon" href="https://web.archive.org/web/20250420232117im_/https://zarat.hatenablog.com/icon/favicon">
+<link rel="apple-touch-icon" href="https://web.archive.org/web/20250420232117im_/https://zarat.hatenablog.com/icon/touch">
+<link rel="icon" sizes="192x192" href="https://web.archive.org/web/20250420232117im_/https://zarat.hatenablog.com/icon/link">
+
+
+
+<link rel="alternate" type="application/atom+xml" title="Atom" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/feed"/>
+<link rel="alternate" type="application/rss+xml" title="RSS2.0" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/rss"/>
+
+  <link rel="alternate" type="application/json+oembed" href="https://web.archive.org/web/20250420232117/https://hatena.blog/oembed?url=https%3A%2F%2Fzarat.hatenablog.com%2Fentry%2F2021%2F12%2F19%2F223735&amp;format=json" title="oEmbed Profile of NIST CFReDS Hacking Case writeup"/>
+<link rel="alternate" type="text/xml+oembed" href="https://web.archive.org/web/20250420232117/https://hatena.blog/oembed?url=https%3A%2F%2Fzarat.hatenablog.com%2Fentry%2F2021%2F12%2F19%2F223735&amp;format=xml" title="oEmbed Profile of NIST CFReDS Hacking Case writeup"/>
+
+  <link rel="author" href="http://www.hatena.ne.jp/Zarat/">
+
+
+
+
+
+
+
+
+<link rel="stylesheet" type="text/css" href="https://web.archive.org/web/20250420232117cs_/https://cdn.blog.st-hatena.com/css/blog.css?version=98326886fe5381d42d67007251ee03"/>
+
+
+  <link rel="stylesheet" type="text/css" href="https://web.archive.org/web/20250420232117cs_/https://usercss.blog.st-hatena.com/blog_style/10257846132644426584/fc1553a8515720a61091efc3939c169a977df58d"/>
+
+
+
+
+
+
+<script> </script>
+
+
+<style>
+  div#google_afc_user,
+  div.google-afc-user-container,
+  div.google_afc_image,
+  div.google_afc_blocklink {
+      display: block !important;
+  }
+</style>
+
+
+
+    <script src="https://web.archive.org/web/20250420232117js_/https://cdn.pool.st-hatena.com/valve/valve.js" async></script>
+<script id="test-valve-definition">
+  var valve = window.valve || [];
+
+  valve.push(function(v) {
+
+
+
+    v.config({
+      service: 'blog',
+      content: {
+        result: 'adtrust',
+        documentIds: ["blog:entry:13574176438040571530"]
+      }
+    });
+    v.defineDFPSlot({"lazy":1,"sizes":{"mappings":[[[320,568],[[336,280],[300,250],"fluid"]],[[0,0],[[300,250]]]]},"slotId":"ad-in-entry","unit":"/4374287/blog_pc_entry_sleep_in-article"});    v.defineDFPSlot({"lazy":"","sizes":[[300,250],[336,280],[468,60],"fluid"],"slotId":"google_afc_user_container_0","unit":"/4374287/blog_user"});
+    v.sealDFPSlots();
+  });
+</script>
+
+
+
+
+    <script type="application/ld+json">{"@context":"https://web.archive.org/web/20250420232117/http://schema.org","@type":"Article","dateModified":"2021-12-19T22:38:45+09:00","datePublished":"2021-12-19T22:37:35+09:00","headline":"NIST CFReDS Hacking Case writeup","image":["https://web.archive.org/web/20250420232117/https://cdn-ak.f.st-hatena.com/images/fotolife/Z/Zarat/20211219/20211219220740.png"]}</script>
+
+
+
+  <script type="text/javascript">
+  if( location.href == 'https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/'){
+  location.href='https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive';
+}
+</script>
+<noscript>
+<p><a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive">4ensiX</a></p>
+</noscript>
+</head>
+
+  <body class="page-entry enable-bottom-editarea category-Forensics category-NIST-CFReDS globalheader-ng-enabled">
+
+
+<div id="globalheader-container" data-brand="hatenablog">
+  <iframe id="globalheader" height="37" frameborder="0" allowtransparency="true"></iframe>
+</div>
+
+
+
+
+
+    <nav class="
+      blog-controlls
+
+    ">
+      <div class="blog-controlls-blog-icon">
+        <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/">
+          <img src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/12f3fc6f1cb8bafb212fca1dd97cbbc8d59e30d9/backend=imagemagick;height=128;version=1;width=128/https%3A%2F%2Fcdn.user.blog.st-hatena.com%2Fblog_custom_icon%2F153227589%2F1591171327251736" alt="4ensiX"/>
+        </a>
+      </div>
+      <div class="blog-controlls-title">
+        <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/">4ensiX</a>
+      </div>
+      <a href="https://web.archive.org/web/20250420232117/https://blog.hatena.ne.jp/Zarat/zarat.hatenablog.com/subscribe?utm_medium=button&amp;utm_source=blogs_topright_button&amp;utm_campaign=subscribe_blog" class="blog-controlls-subscribe-btn test-blog-header-controlls-subscribe">
+        読者になる
+      </a>
+    </nav>
+
+
+  <div id="container">
+    <div id="container-inner">
+      <header id="blog-title" data-brand="hatenablog">
+  <div id="blog-title-inner">
+    <div id="blog-title-content">
+      <h1 id="title"><a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/">4ensiX</a></h1>
+
+        <h2 id="blog-description">FPと言ったものはFPを選んだが表示はTPになっていることに気づいた。</h2>
+
+    </div>
+  </div>
+</header>
+
+
+
+
+
+
+
+
+
+<div id="content" class="hfeed">
+  <div id="content-inner">
+    <div id="wrapper">
+      <div id="main">
+        <div id="main-inner">
+
+
+
+
+
+
+
+
+
+
+  <!-- google_ad_section_start -->
+  <!-- rakuten_ad_target_begin -->
+
+
+
+
+
+
+
+
+
+        <article class="entry hentry test-hentry js-entry-article date-first autopagerize_page_element chars-20000 words-3000 mode-markdown entry-odd" id="entry-13574176438040571530" data-keyword-campaign="" data-uuid="13574176438040571530" data-publication-type="entry">
+  <div class="entry-inner">
+    <header class="entry-header">
+
+    <div class="date entry-date first">
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021/12/19" rel="nofollow">
+      <time datetime="2021-12-19T13:37:35Z" title="2021-12-19T13:37:35Z">
+        <span class="date-year">2021</span><span class="hyphen">-</span><span class="date-month">12</span><span class="hyphen">-</span><span class="date-day">19</span>
+      </time>
+    </a>
+      </div>
+  <h1 class="entry-title">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2021/12/19/223735" class="entry-title-link bookmark">NIST CFReDS Hacking Case writeup</a>
+</h1>
+
+
+
+
+  <div class="entry-categories categories">
+
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Forensics" class="entry-category-link category-Forensics">Forensics</a>
+
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/NIST%20CFReDS" class="entry-category-link category-NIST-CFReDS">NIST CFReDS</a>
+
+  </div>
+
+
+
+
+
+
+</header>
+
+
+
+
+    <div class="entry-content hatenablog-entry">
+
+    <h1><a href="https://web.archive.org/web/20250420232117/https://cfreds-archive.nist.gov/Hacking_Case.html">NIST Hacking Case</a></h1>
+
+<h2>Scenario</h2>
+
+<blockquote><p>On 09/20/04 , a <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Dell">Dell</a> CPi notebook computer, serial # VLQLW, was found abandoned along with a wireless PCMCIA card and an external homemade <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/802.11b">802.11b</a> antennae. It is suspected that this computer was used for hacking purposes, although cannot be tied to a hacking suspect, G=r=e=g S=c=h=a=r=d=t. (The equal signs are just to prevent web crawlers from indexing this name; there are no equal signs in the image files.)  Schardt also goes by the online nickname of “Mr. Evil” and some of his associates have said that he would park his vehicle within range of Wireless <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Access">Access</a> Points (like <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Starbucks">Starbucks</a> and other <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/T-Mobile">T-Mobile</a> Hotspots) where he would then intercept internet traffic, attempting to get credit card numbers, usernames &amp; passwords.</p>
+
+<p>Find any hacking software, evidence of their use, and any data that might have been generated. Attempt to tie the computer to the suspect, G=r=e=g S=c=h=a=r=d=t.</p>
+
+<p> A DD image (in seven parts: 1, 2, 3, 4, 5, 6, 7, 8, and notes) and a EnCase image (second part) of the abandoned computer have already been made.</p></blockquote>
+
+<h2>Downloads</h2>
+
+<pre class="code" data-lang="" data-unlink># file *
+4Dell Latitude CPi.E01: EWF/Expert Witness/EnCase image file format
+4Dell Latitude CPi.E02: EWF/Expert Witness/EnCase image file format
+SCHARDT.001:            DOS/MBR boot sector MS-MBR XP english at offset 0x12c &#34;Invalid partition table&#34; at offset 0x144 &#34;Error loading operating system&#34; at offset 0x163 &#34;Missing operating system&#34;, disk signature 0xec5dec5d; partition 1 : ID=0x7, active, start-CHS (0x0,1,1), end-CHS (0x24f,254,63), startsector 63, 9510417 sectors
+SCHARDT.002:            data
+SCHARDT.003:            data
+SCHARDT.004:            data
+SCHARDT.005:            data
+SCHARDT.006:            data
+SCHARDT.007:            data
+SCHARDT.008:            data
+SCHARDT.LOG:            ASCII text, with CRLF line terminators</pre>
+
+
+<h3>Preparation</h3>
+
+<pre class="code" data-lang="" data-unlink>$ sudo apt install afflib-tools ewf-tools </pre>
+
+
+
+
+<pre class="code" data-lang="" data-unlink># mkdir ewfmnt
+# ewfmount 4Dell\ Latitude\ CPi.E01 ewfmnt
+# fdisk -l ewfmnt/ewf1
+Disk ewfmnt/ewf1: 4.54 GiB, 4871301120 bytes, 9514260 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xec5dec5d
+
+Device        Boot Start     End Sectors  Size Id Type
+ewfmnt/ewf1p1 *       63 9510479 9510417  4.5G  7 HPFS/NTFS/exFAT</pre>
+
+
+
+
+<pre class="code" data-lang="" data-unlink># mkdir ddmnt
+# affuse SCHARDT.001 ddmnt
+# fdisk -l ddmnt/SCHARDT.001.raw
+Disk ddmnt/SCHARDT.001.raw: 4.54 GiB, 4871301120 bytes, 9514260 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xec5dec5d
+
+Device                 Boot Start     End Sectors  Size Id Type
+ddmnt/SCHARDT.001.raw1 *       63 9510479 9510417  4.5G  7 HPFS/NTFS/exFAT</pre>
+
+
+<h2>Questions</h2>
+
+<h3>1. What is the image hash? Does the acquisition and verification hash match?</h3>
+
+<pre class="code" data-lang="" data-unlink># md5sum ewfmnt/ewf1 ddmnt/SCHARDT.001.raw
+aee4fcd9301c03b3b054623ca261959a  ewfmnt/ewf1
+aee4fcd9301c03b3b054623ca261959a  ddmnt/SCHARDT.001.raw</pre>
+
+
+<p>OK<br>
+Answer: <strong>aee4fcd9301c03b3b054623ca261959a</strong></p>
+
+<pre class="code" data-lang="" data-unlink>$ umount ewfmnt
+$ umount ddmnt</pre>
+
+
+<h3>2. What operating system was used on the computer?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ mkdir winxp_mnt/
+$ sudo mkdir /mnt/ewfmnt
+$ sudo ewfmount 4Dell_Latitude_CPi.E01 /mnt/ewfmnt/
+ewfmount 20140807
+$ sudo fdisk -l /mnt/ewfmnt/ewf1
+Disk /mnt/ewfmnt/ewf1: 4.54 GiB, 4871301120 bytes, 9514260 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+I/O size (minimum/optimal): 512 bytes / 512 bytes
+Disklabel type: dos
+Disk identifier: 0xec5dec5d
+
+Device             Boot Start     End Sectors  Size Id Type
+/mnt/ewfmnt/ewf1p1 *       63 9510479 9510417  4.5G  7 HPFS/NTFS/exFAT
+$ sudo mount -o ro,noload,loop,noexec,offset=$((512*63)),show_sys_files,streams_interface=windows /mnt/ewfmnt/ewf1 winxp_mnt/
+$ ls winxp_mnt/
+$AttrDef                   AUTOEXEC.BAT               hiberfil.sys               RECYCLER/
+$BadClus                   boot.ini                   IO.SYS                     SETUPLOG.TXT
+$Bitmap                    BOOTLOG.PRV                MSDOS.---                  SUHDLOG.DAT
+$Boot                      BOOTLOG.TXT                MSDOS.SYS                  SYSTEM.1ST
+$Extend/                   BOOTSECT.DOS               My Documents/              System Volume Information/
+$LogFile                   COMMAND.COM                NETLOG.TXT                 Temp/
+$MFTMirr                   CONFIG.SYS                 ntdetect.com               VIDEOROM.BIN
+$Secure                    DETLOG.TXT                 ntldr                      WIN98/
+$UpCase                    Documents and Settings/    pagefile.sys               WINDOWS/
+$Volume                    FRUNLOG.TXT                Program Files/</pre>
+
+
+
+
+<pre class="code" data-lang="" data-unlink>$ cp ../winxp_mnt/WINDOWS/system32/config/system .
+$ cp ../winxp_mnt/WINDOWS/system32/config/software .
+$ cp ../winxp_mnt/WINDOWS/system32/config/SAM .</pre>
+
+
+
+
+<pre class="code" data-lang="" data-unlink>$ sudo apt install libhivex-bin</pre>
+
+
+<p><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Windows">Windows</a> OS version( XP ): <code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion</code></p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion&#34;
+&#34;CurrentBuild&#34;=&#34;1.511.1 () (Obsolete data - do not use)&#34;
+&#34;InstallDate&#34;=dword:41252e3b
+&#34;ProductName&#34;=&#34;Microsoft Windows XP&#34;
+(snip)
+&#34;CurrentVersion&#34;=&#34;5.1&#34;
+&#34;CurrentBuildNumber&#34;=&#34;2600&#34;
+&#34;BuildLab&#34;=&#34;2600.xpclient.010817-1148&#34;
+(snip)</pre>
+
+
+<p>Answer: <strong><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Microsoft">Microsoft</a> <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Windows%20XP">Windows XP</a></strong></p>
+
+<h3>3. When was the install date?</h3>
+
+<p>From Q2</p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion&#34;
+&#34;CurrentBuild&#34;=&#34;1.511.1 () (Obsolete data - do not use)&#34;
+&#34;InstallDate&#34;=dword:41252e3b
+(snip)</pre>
+
+
+<p><a href="https://web.archive.org/web/20250420232117/https://www.epochconverter.com/hex?q=41252e3b">https://www.epochconverter.com/hex?q=41252e3b</a><br>
+Answer: <strong><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/GMT">GMT</a>: 2004年8月19日 Thursday 22:48:27</strong></p>
+
+<h3>4. What is the timezone settings?</h3>
+
+<p>Check: <a href="https://web.archive.org/web/20250420232117/https://kb.digital-detective.net/display/BF/Identification+of+Time+Zone+Settings+on+Suspect+Computer">Identification of Time Zone Settings on Suspect Computer - Digital Detective Knowledge Base - Browser Forensics</a><br></p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget system &#34;ControlSet001\Control\TimeZoneInformation&#34;
+&#34;Bias&#34;=dword:00000168
+&#34;StandardName&#34;=&#34;Central Standard Time&#34;
+&#34;StandardBias&#34;=dword:00000000
+&#34;StandardStart&#34;=hex(3):00,00,0a,00,05,00,02,00,00,00,00,00,00,00,00,00
+&#34;DaylightName&#34;=&#34;Central Daylight Time&#34;
+&#34;DaylightBias&#34;=dword:ffffffc4
+&#34;DaylightStart&#34;=hex(3):00,00,04,00,01,00,02,00,00,00,00,00,00,00,00,00
+&#34;ActiveTimeBias&#34;=dword:0000012c</pre>
+
+
+<p>Answer: <strong>Central Standard Time,Central Daylight Time</strong></p>
+
+<h3>5. Who is the registered owner?</h3>
+
+<p>From Q2</p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion&#34;
+(snip)
+&#34;RegisteredOwner&#34;=&#34;Greg Schardt&#34;
+(snip)</pre>
+
+
+<p>Answer: <strong>Greg Schardt</strong></p>
+
+<h3>6. What is the computer account name?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget system &#34;ControlSet001\Control\ComputerName\ComputerName&#34;
+&#34;ComputerName&#34;=&#34;N-1A9ODN6ZXK4LQ&#34;</pre>
+
+
+<p>Answer: <strong>N-1A9ODN6ZXK4LQ</strong></p>
+
+<h3>7. What is the primary domain name?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion\Winlogon&#34;
+&#34;AutoRestartShell&#34;=dword:00000001
+&#34;DefaultDomainName&#34;=&#34;N-1A9ODN6ZXK4LQ&#34;
+&#34;DefaultUserName&#34;=&#34;Mr. Evil&#34;
+(snip)
+&#34;AltDefaultUserName&#34;=&#34;Mr. Evil&#34;
+&#34;AltDefaultDomainName&#34;=&#34;N-1A9ODN6ZXK4LQ&#34;</pre>
+
+
+<p>Answer: <strong>N-1A9ODN6ZXK4LQ</strong><br>
+<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Official">Official</a> Answer?: <strong>Evil</strong></p>
+
+<h3>8. When was the last recorded computer shutdown date/time?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget system &#34;ControlSet001\Control\Windows&#34;
+(snip)
+&#34;ShutdownTime&#34;=hex(3):c4,fc,00,07,4d,8c,c4,01</pre>
+
+
+<p>Cyberchef:<a href="https://web.archive.org/web/20250420232117/https://gchq.github.io/CyberChef/#recipe=Split(',','')Windows_Filetime_to_UNIX_Timestamp('Seconds%20(s)','Hex%20(little%20endian)')From_UNIX_Timestamp('Seconds%20(s)')&amp;input=YzQsZmMsMDAsMDcsNGQsOGMsYzQsMDE">https://gchq.github.io/CyberChef/#recipe=Split(',','')Windows_Filetime_to_UNIX_Timestamp('Seconds%20(s)','Hex%20(little%20endian)')From_UNIX_Timestamp('Seconds%20(s)')&input;=YzQsZmMsMDAsMDcsNGQsOGMsYzQsMDE</a><br></p>
+
+<p>Answer: <strong>Fri 27 August 2004 15:46:33 <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/UTC">UTC</a></strong></p>
+
+<h3>9. How many accounts are recorded (total number)?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ hivexsh SAM
+
+Welcome to hivexsh, the hivex interactive shell for examining
+Windows Registry binary hive files.
+
+Type: &#39;help&#39; for help summary
+      &#39;quit&#39; to quit the shell
+
+SAM\&gt; cd \SAM\Domains\Account\Users\Names
+SAM\SAM\Domains\Account\Users\Names&gt; ls
+Administrator
+Guest
+HelpAssistant
+Mr. Evil
+SUPPORT_388945a0</pre>
+
+
+<p>Answer: <strong> 5 accounts </strong></p>
+
+<h3>10. What is the account name of the user who mostly uses the computer?</h3>
+
+<p>regripperのソースを眺めて<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%B7%A5%A7%A5%EB%A5%B9%A5%AF%A5%EA%A5%D7%A5%C8">シェルスクリプト</a>を作成した。<br>
+<a href="https://web.archive.org/web/20250420232117/https://github.com/keydet89/RegRipper3.0/blob/16e0744473ac66ef821f562a23feabb9489a4922/plugins/samparse.pl#L164">https://github.com/keydet89/RegRipper3.0/blob/16e0744473ac66ef821f562a23feabb9489a4922/plugins/samparse.pl#L164</a><br>
+<a href="https://web.archive.org/web/20250420232117/https://github.com/keydet89/RegRipper3.0/blob/16e0744473ac66ef821f562a23feabb9489a4922/plugins/samparse.pl#L256">https://github.com/keydet89/RegRipper3.0/blob/16e0744473ac66ef821f562a23feabb9489a4922/plugins/samparse.pl#L256</a></p>
+
+<pre class="code" data-lang="" data-unlink>$ cat login-count.sh
+sed -ie s/,/&#39; &#39;/g $1
+F_array=(`sed -e s/,/&#39; &#39;/g $1`)
+printf %d\\n 0x${F_array[67]}${F_array[66]}</pre>
+
+
+<p>rid &amp; user</p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexsh SAM
+(snip)
+SAM\&gt; cd \SAM\Domains\Account\Users
+SAM\SAM\Domains\Account\Users&gt; ls
+000001F4  #-&gt; to dex 500 -&gt; Admin
+000001F5
+000003E8
+000003EA
+000003EB #-&gt; to dex 1003(rid) -&gt; Mr.Evil
+Names
+SAM\SAM\Domains\Account\Users&gt; cd Names\Mr. Evil
+SAM\SAM\Domains\Account\Users\Names\Mr. Evil&gt; lsval
+&#34;@&#34;=hex(1003):</pre>
+
+
+<p>check F key</p>
+
+<pre class="code" data-lang="" data-unlink>sam\SAM\Domains\Account\Users\000003EB&gt; lsval
+&#34;F&#34;=hex(3):02,00,01,00,00,00,00,00,a0,73,46,b2,47,8c,c4,01,00,00,00,00,00,00,00,00,50,5e,ea,cc,40,86,c4,01,ff,ff,ff,ff,ff,ff,ff,7f,00,00,00,00,00,00,00,00,eb,03,00,00,01,02,00,00,10,02,00,00,00,00,00,00,00,00,0f,00,01,00,00,00,00,00,08,00,c0,f6,06,00
+(snip)</pre>
+
+
+<p>check login count</p>
+
+<pre class="code" data-lang="" data-unlink>$ cat Mr.Evil
+02,00,01,00,00,00,00,00,a0,73,46,b2,47,8c,c4,01,00,00,00,00,00,00,00,00,50,5e,ea,cc,40,86,c4,01,ff,ff,ff,ff,ff,ff,ff,7f,00,00,00,00,00,00,00,00,eb,03,00,00,01,02,00,00,10,02,00,00,00,00,00,00,00,00,0f,00,01,00,00,00,00,00,08,00,c0,f6,06,00
+$ bash login-count.sh Mr.Evil
+15
+$ bash login-count.sh Admin
+0
+$ bash login-count.sh Guest
+0
+$ bash login-count.sh HelpAssistant
+0
+$ bash login-count.sh SUPPORT_388945a0
+0  </pre>
+
+
+<p>Mr.Evilと同様に他のユーザに対しても試すと他のユーザはログイン回数が0であることが分かった。</p>
+
+<p>Answer:<strong>Mr.Evil</strong></p>
+
+<h3>11. Who was the last user to logon to the computer?</h3>
+
+<p>最後にログインしたユーザは"Software\<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Microsoft">Microsoft</a>\<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Windows">Windows</a> NT\CurrentVersion\Winlogon"にリストされる。
+また、Q.10で全てのユーザのログイン回数を確認したところMr.Evilしかログインが確認できなかった。</p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion\Winlogon&#34;
+(snip)
+&#34;DefaultUserName&#34;=&#34;Mr. Evil&#34;
+(snip)</pre>
+
+
+<p>Answer:<strong>Mr.Evil</strong></p>
+
+<h3>12. A search for the name of “G=r=e=g S=c=h=a=r=d=t” reveals multiple hits. One of these proves that G=r=e=g S=c=h=a=r=d=t is Mr. Evil and is also the administrator of this computer. What file is it? What software program does this file relate to?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ grep -iR &#34;Greg Schardt&#34; winxp_mnt/
+winxp_mnt/Program Files/Look@LAN/irunin.ini:%REGOWNER%=Greg Schardt
+winxp_mnt/Program Files/Look@LAN/irunin.ini:%USERNAME%=Greg Schardt
+winxp_mnt/WINDOWS/Look@LAN Setup Log.txt:Value data = Greg Schardt
+grep: winxp_mnt/$Extend/$ObjId: No such file or directory
+grep: winxp_mnt/$Extend/$Quota: No such file or directory
+grep: winxp_mnt/$Extend/$Reparse: No such file or directory
+grep: winxp_mnt/$Secure: No such file or directory
+$ cat &#34;winxp_mnt/Program Files/Look@LAN/irunin.ini&#34; | grep &#34;Mr. Evil&#34;
+%LANUSER%=Mr. Evil
+%DESKTOP%=C:\Documents and Settings\Mr. Evil\Desktop
+%STARTMENU%=C:\Documents and Settings\Mr. Evil\Start Menu
+%STARTMENUPROGRAMS%=C:\Documents and Settings\Mr. Evil\Start Menu\Programs
+%STARTUP%=C:\Documents and Settings\Mr. Evil\Start Menu\Programs\Startup
+%MYDOCUMENTSDIR%=C:\Documents and Settings\Mr. Evil\My Documents
+%SRCFILE%=C:\Documents and Settings\Mr. Evil\Desktop\lalsetup250.exe
+%SRCDIR%=C:\Documents and Settings\Mr. Evil\Desktop
+$ cat &#34;winxp_mnt/WINDOWS/Look@LAN Setup Log.txt&#34; | grep &#34;Mr. Evil&#34;
+C:\Documents and Settings\Mr. Evil\Desktop\Look@LAN.lnk
+C:\Documents and Settings\Mr. Evil\Desktop\Look@Host.lnk</pre>
+
+
+<h4>Answers</h4>
+
+<p>What file is it? -&gt; <strong>Program\ Files/Look@LAN/irunin.ini</strong> <br>
+What software program does this file relate to? -&gt; <strong>Look@LAN</strong><br>
+<a href="https://web.archive.org/web/20250420232117/https://m.majorgeeks.com/files/details/looklan.html">look@lan</a></p>
+
+<h3>13.  List <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/the%20network">the network</a> cards used by this computer</h3>
+
+<p>check: <code>HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\NetworkCards</code></p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexsh software
+(snip)
+software\&gt; cd Microsoft\Windows NT\CurrentVersion\NetworkCards
+software\Microsoft\Windows NT\CurrentVersion\NetworkCards&gt; ls
+11
+2</pre>
+
+
+
+
+<pre class="code" data-lang="" data-unlink>$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion\NetworkCards\11&#34;
+&#34;ServiceName&#34;=&#34;{86FC0C96-3FF2-4D59-9ABA-C602F213B5D2}&#34;
+&#34;Description&#34;=&#34;Compaq WL110 Wireless LAN PC Card&#34;
+$ hivexget software &#34;Microsoft\Windows NT\CurrentVersion\NetworkCards\2&#34;
+&#34;ServiceName&#34;=&#34;{6E4090C2-FAEF-489A-8575-505D21FC1049}&#34;
+&#34;Description&#34;=&#34;Xircom CardBus Ethernet 100 + Modem 56 (Ethernet Interface)&#34;</pre>
+
+
+<h4>Answers</h4>
+
+<ul>
+<li><strong><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Compaq">Compaq</a> WL110 Wireless LAN PC Card</strong></li>
+<li><strong>Xircom CardBus <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Ethernet">Ethernet</a> 100 + Modem 56 (<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Ethernet">Ethernet</a> Interface)</strong></li>
+</ul>
+
+
+<h3>14. This same file reports the IP address and <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/MAC">MAC</a> address of the computer. What are they?</h3>
+
+<p>分かりづらいが「This same file」は Q.12のことらしい。</p>
+
+<pre class="code" data-lang="" data-unlink>$ cat winxp_mnt/Program\ Files/Look@LAN/irunin.ini | egrep &#34;IP|NIC&#34;
+%LANIP%=192.168.1.111
+%LANNIC%=0010a4933e09
+(snip)</pre>
+
+
+<h4>Answers</h4>
+
+<ul>
+<li>IP addr: <strong>192.168.1.111</strong></li>
+<li><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/MAC">MAC</a> addr: <strong>0010a4933e09</strong></li>
+</ul>
+
+
+<h3>15. An internet search for vendor name/model of <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/NIC">NIC</a> cards by <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/MAC">MAC</a> address can be used to find out which network interface was used. In the above answer, the first 3 hex characters of the <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/MAC">MAC</a> address report the vendor of the card. Which <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/NIC">NIC</a> card was used during the installation and set-up for LOOK@LAN?</h3>
+
+<p>check 0010a4933e09
+-&gt; <a href="https://web.archive.org/web/20250420232117/https://uic.jp/mac/address/0010a4/">https://uic.jp/mac/address/0010a4/</a></p>
+
+<p>Answer: <strong>Xircom CardBus <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Ethernet">Ethernet</a> 100 + Modem 56</strong></p>
+
+<h3>16. Find 6 installed programs that may be used for hacking.</h3>
+
+<p>check: <code>HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall</code></p>
+
+<pre class="code" data-lang="" data-unlink>$ hivexsh software
+(snip)
+software\&gt; cd \Microsoft\Windows\CurrentVersion\Uninstall
+software\Microsoft\Windows\CurrentVersion\Uninstall&gt; ls
+123 Write All Stored Passwords
+AddressBook
+Anonymizer
+Branding
+Cain &amp; Abel v2.5 beta45
+Connection Manager
+CuteFTP
+CuteHTML
+DirectAnimation
+DirectDrawEx
+Ethereal
+Faber Toys_is1
+Fontcore
+Forte Agent
+ICW
+IE40
+IE4Data
+IE5BAKEX
+IEData
+Look@LAN_1.0
+Microsoft NetShow Player 2.0
+mIRC
+MobileOptionPack
+MPlayer2
+NetMeeting
+Network Stumbler
+OutlookExpress
+PCHealth
+SchedulingAgent
+WinPcapInst
+{350C97B0-3D7C-4EE8-BAA9-00BCB3D54227}
+{6C31E111-96BB-4ADC-9C81-E6D3EEDDD8D3}</pre>
+
+
+<p>ぶっちゃけどれが悪用されたかはここまででは分からないので、ツールの機能で推測する以上の根拠は無さそうだ。</p>
+
+<h4>Answers</h4>
+
+<ul>
+<li>Cain &amp; Abel v2.5 beta45 (password <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/sniffer">sniffer</a> &amp; cracker)</li>
+<li><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Ethereal">Ethereal</a> (packet <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/sniffer">sniffer</a>)</li>
+<li>123 Write All Stored Passwords (finds passwords in registry)</li>
+<li>Anonymizer (hides IP tracks when browsing)</li>
+<li>CuteFTP (<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/FTP">FTP</a> software)</li>
+<li>Look&amp;LAN_1.0 (network discovery tool)</li>
+<li>NetStumbler (wireless <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/access">access</a> point discovery tool)</li>
+</ul>
+
+
+<h3>17. What is the <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/SMTP">SMTP</a> email address for Mr. Evil?</h3>
+
+<p>from the list installed programs in Q.16</p>
+
+<pre class="code" data-lang="" data-unlink>OutlookExpress
+Forte Agent</pre>
+
+
+<h4>OutlookExpress</h4>
+
+<p><a href="https://web.archive.org/web/20250420232117/https://userweb.pep.ne.jp/nonopep/MsgAddrsFileName.htm">++ OutlookExpressのメッセージとアドレス帳の保存場所 ++</a>より
+Default: C:\Documents and Settings\[user]\Local Settings\Application Data\Identities\{strings?}\<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Microsoft">Microsoft</a>\<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Outlook%20Express">Outlook Express</a><br>
+mailaddress: Not found?</p>
+
+<h4>Forte Agent</h4>
+
+<p><a href="https://web.archive.org/web/20250420232117/https://www.forteinc.com/agent/faq.php">Agent Newsreader FAQ</a>より</p>
+
+<blockquote><p>How do I specify the directory for Agent's database?</p>
+
+<p>There are a couple of ways, depending on your setup.
+The first and preferred way is via the Start In parameter of the shortcut you use to start Agent. Right-click on the shortcut and select Properties. In the Start In field, enter the path to the directory that contains the agent.ini file. This is how you would set up Agent for multiple servers.</p>
+
+<p>The second way is by using a command line parameter, also in the shortuct. For this method, make sure the Start In field is blank, and add the path to your agent.ini file to the Target field, like this:
+"\Agent\Agent.exe" "\Agent\Data\agent.ini"</p>
+
+<p>This is handy if you use the same database from multiple locations, like on a laptop with two or more connection types, depending on where you are physically, and it would allow you to specify different connection setups.</p>
+
+<p>AGENT.INI is config file.</p></blockquote>
+
+<pre class="code" data-lang="" data-unlink>$ cat winxp_mnt/Program\ Files/Agent/Data/AGENT.INI | grep -i email
+EMailAddress=&#34;whoknowsme@sbcglobal.net&#34;
+(snip)</pre>
+
+
+<p>Answer:<strong>whoknowsme[@]sbcglobal[.]net</strong></p>
+
+<h3>18. What are the NNTP (news server) settings for Mr. Evil?</h3>
+
+<p>インストール中にnews serverの設定があるのを見かけたので、config fileにありそうだと考えた。</p>
+
+<pre class="code" data-lang="" data-unlink>$ cat &#34;winxp_mnt/Program\ Files/Agent/Data/AGENT.INI&#34; | grep -i newsserver
+NewsServer=&#34;news.dallas.sbcglobal.net&#34;</pre>
+
+
+<p>Answer:<strong>news.dallas.sbcglobal.ne</strong></p>
+
+<h3>19. What two installed programs show this information?</h3>
+
+<p>From Q.17</p>
+
+<h4>Answers</h4>
+
+<ul>
+<li><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Outlook">Outlook</a></li>
+<li>Forte Agent</li>
+</ul>
+
+
+<h3>20. List 5 newsgroups that Mr. Evil has subscribed to?</h3>
+
+<p>ここでは全てリストする。</p>
+
+<pre class="code" data-lang="" data-unlink>$ ls &#34;Documents and Settings/Mr. Evil/Local Settings/Application Data/Identities/{EF086998-1115-4ECD-9B13-9ADC067B4929}/Microsoft/Outlook Express&#34;
+ alt.2600.cardz.dbx                   alt.stupidity.hackers.malicious.dbx
+ alt.2600.codez.dbx                   cleanup.log
+ alt.2600.crackz.dbx                 &#39;Deleted Items.dbx&#39;
+ alt.2600.dbx                         Folders.dbx
+ alt.2600.hackerz.dbx                 free.binaries.hackers.malicious.dbx
+ alt.2600.moderated.dbx               free.binaries.hacking.beginner.dbx
+ alt.2600.phreakz.dbx                 free.binaries.hacking.computers.dbx
+ alt.2600.programz.dbx                free.binaries.hacking.talentless.troll-haven.dbx
+ alt.binaries.hacking.beginner.dbx    free.binaries.hacking.talentless.troll_haven.dbx
+ alt.binaries.hacking.computers.dbx   free.binaries.hacking.utilities.dbx
+ alt.binaries.hacking.utilities.dbx   free.binaries.hacking.websites.dbx
+ alt.binaries.hacking.websites.dbx    Inbox.dbx
+ alt.dss.hack.dbx                     Offline.dbx
+ alt.hacking.dbx                      Outbox.dbx
+ alt.nl.binaries.hack.dbx</pre>
+
+
+<h4>Answers</h4>
+
+<pre class="code" data-lang="" data-unlink>alt.2600.cardz, alt.2600.codez, alt.2600.crackz, alt.2600, alt.2600.hackerz,
+alt.2600.moderated, alt.2600.phreakz, alt.2600.programz, alt.binaries.hacking.beginner,
+alt.binaries.hacking.computers, alt.binaries.hacking.utilities, alt.binaries.hacking.websites,
+alt.dss.hack, alt.hacking, alt.nl.binaries.hack, alt.stupidity.hackers.malicious,
+free.binaries.hackers.malicious, free.binaries.hacking.beginner,
+free.binaries.hacking.computers, free.binaries.hacking.talentless.troll-haven,
+free.binaries.hacking.talentless.troll_haven, free.binaries.hacking.utilities</pre>
+
+
+<h3>21. A popular <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/IRC">IRC</a> (Internet Relay Chat) program called MIRC was installed.  What are the user settings that was shown when the user was online and in a chat channel?</h3>
+
+<p>問いが曖昧である。</p>
+
+<h4>Answers</h4>
+
+<pre class="code" data-lang="" data-unlink>$ cat &#34;Program Files/mIRC/mirc.ini&#34;
+(snip)
+[mirc]
+user=Mini Me
+email=none@of.ya
+nick=Mr
+anick=mrevilrulez
+host=Undernet: US, CA, LosAngelesSERVER:losangeles.ca.us.undernet.org:6660GROUP:Undernet
+(snip)</pre>
+
+
+<h3>22. This <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/IRC">IRC</a> program has the capability to log chat sessions. List 3 <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/IRC">IRC</a> channels that the user of this computer accessed.</h3>
+
+<pre class="code" data-lang="" data-unlink>$ ls &#34;Program Files/mIRC/logs&#34;
+&#39;#Chataholics.UnderNet.log&#39;    &#39;#evilfork.EFnet.log&#39;    &#39;#ISO-WAREZ.EFnet.log&#39;    &#39;#mp3xserv.UnderNet.log&#39;
+&#39;#CyberCafe.UnderNet.log&#39;      &#39;#funny.UnderNet.log&#39;    &#39;#LuxShell.UnderNet.log&#39;  &#39;#thedarktower.AfterNET.log&#39;
+&#39;#Elite.Hackers.UnderNet.log&#39;  &#39;#houston.UnderNet.log&#39;   m5tar.UnderNet.log       &#39;#ushells.UnderNet.log&#39;</pre>
+
+
+<h4>Answers</h4>
+
+<pre class="code" data-lang="" data-unlink>#Chataholics.UnderNet, #CyberCafe.UnderNet.log, #Elite.Hackers.UnderNet
+#evilfork.EFnet, #funny.UnderNet, #houston.UnderNet,
+#ISO-WAREZ.EFnet, #LuxShell.UnderNet, m5tar.UnderNet,
+#mp3xserv.UnderNet.log, #thedarktower.AfterNET, #ushells.UnderNet</pre>
+
+
+<h3>23. <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Ethereal">Ethereal</a>, a popular “<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/sniffing">sniffing</a>” program that can be used to intercept wired and wireless internet packets was also found to be installed. When <a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/TCP">TCP</a> packets are collected and re-assembled, the default save directory is that users \My Documents directory. What is the name of the file that contains the intercepted data?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ ls Documents\ and\ Settings/Mr.\ Evil/
+&#39;Application Data&#39;   Favorites        &#39;My Documents&#39;   ntuser.dat.LOG   Recent        Templates
+ Cookies             interception      NetHood         ntuser.ini       SendTo
+ Desktop            &#39;Local Settings&#39;   NTUSER.DAT      PrintHood       &#39;Start Menu&#39;
+$ file Documents\ and\ Settings/Mr.\ Evil/interception
+Documents and Settings/Mr. Evil/interception: pcap capture file, microsecond ts (little-endian) - version 2.4 (Ethernet, capture length 65535)</pre>
+
+
+<p>Answer: <strong>Documents\ and\ Settings/Mr.\ Evil/interception</strong></p>
+
+<h3>24. Viewing the file in a text format reveals much information about who and what was intercepted. What type of wireless computer was the victim (person who had his internet surfing recorded) using?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ tshark -q -r interception -z conv,ip
+================================================================================
+IPv4 Conversations
+Filter:&lt;No Filter&gt;
+                                               |       &lt;-      | |       -&gt;      | |     Total     |    Relative    |   Duration   |
+                                               | Frames  Bytes | | Frames  Bytes | | Frames  Bytes |      Start     |              |
+192.168.254.2        &lt;-&gt; 207.68.174.248           117     68178     145     29226     262     97404     0.000000000       231.6677
+192.168.254.254      &lt;-&gt; 239.255.255.250            0         0      80     27728      80     27728     8.157222000       203.6836
+65.54.179.195        &lt;-&gt; 192.168.254.2             37      5756      23     22523      60     28279   220.589546000         6.4585
+65.54.179.230        &lt;-&gt; 192.168.254.2             25      4282      17      3586      42      7868    81.737500000       148.4987
+65.54.183.198        &lt;-&gt; 192.168.254.2              7      1406       4      2881      11      4287   220.082099000         0.3187
+192.168.254.3        &lt;-&gt; 192.168.254.255            0         0       1       258       1       258   216.396178000         0.0000
+================================================================================</pre>
+
+
+<p>the victim: <strong>192.168.254.2</strong></p>
+
+<blockquote><ul>
+<li><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/DHCP">DHCP</a><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%C8%A5%E9%A5%D5%A5%A3%A5%C3%A5%AF">トラフィック</a>からのホスト情報</li>
+<li>NetBIOSネームサービス（NBNS）<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%C8%A5%E9%A5%D5%A5%A3%A5%C3%A5%AF">トラフィック</a>からのホスト情報</li>
+<li>HTTP<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%C8%A5%E9%A5%D5%A5%A3%A5%C3%A5%AF">トラフィック</a>からのデ<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%D0%A5%A4%A5%B9">バイス</a>モデルと<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%AA%A5%DA%A5%EC%A1%BC%A5%C6%A5%A3%A5%F3%A5%B0%A5%B7%A5%B9%A5%C6%A5%E0">オペレーティングシステム</a></li>
+<li>Kerberos<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/%A5%C8%A5%E9%A5%D5%A5%A3%A5%C3%A5%AF">トラフィック</a>からの<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Windows">Windows</a>ユーザーアカウント</li>
+</ul>
+</blockquote>
+
+<p> <a href="https://web.archive.org/web/20250420232117/https://unit42.paloaltonetworks.jp/using-wireshark-identifying-hosts-and-users/">Wireshark によるパケット解析講座 3: ホストとユーザーを特定する</a>より</p>
+
+<p>どれかを見つければ良い。今回はhttpがあったので。</p>
+
+<pre class="code" data-lang="" data-unlink>$ tshark -r interception -z follow,http,ascii,1 -q
+
+===================================================================
+Follow: http,ascii
+Filter: tcp.stream eq 1
+Node 0: 192.168.254.2:1338
+Node 1: 207.68.174.248:80
+883
+GET /content/images/img_ppc_sharkfin_MSNLogo.gif HTTP/1.1
+Accept: */*
+UA-OS: Windows CE (Pocket PC) - Version 4.20
+UA-color: color16
+UA-pixels: 240x320
+UA-CPU: Intel(R) PXA255
+UA-Voice: FALSE
+Referer: http://mobile.msn.com/hm/folder.aspx?ts=1093601294&amp;fts=1093566459&amp;folder=ACTIVE&amp;msg=0
+UA-Language: JavaScript
+Accept-Encoding: gzip, deflate
+If-Modified-Since: Wed, 19 May 2004 18:47:04 GMT
+If-None-Match: &#34;4098f2add13dc41:8e4&#34;
+User-Agent: Mozilla/4.0 (compatible; MSIE 4.01; Windows CE; PPC; 240x320)
+Host: mobile.msn.com
+Connection: Keep-Alive
+Cookie: lc=en-US; cr=1; MSPAuth=5vuMneQNFDh0sFVrAbKrt*q6edOGfSSmKzi3lT1CIh6FdbNqQyPyqubrB97DYRuoTwoA5kp1iTd3eTZ3TUiZ45LQ$$; MSPProf=5ynNj8z2mEi3KQzUnhBOK5dmrXWUam5W2H3bXqJgZE5uFZ7OFVIdTd8rwZLZfLhhQB8q*Sto5O8d!UJp8ulXjB5g4RJME!*WBUVqwsUvAh8UuflyJMTMQt*6C4vjOyvqgDT5F!XAMjAg0!vkXYwzhbCkVlAO1b2zXMjlXnmPnOpETgsIPX0coWMQ$$
+
+
+        218
+HTTP/1.1 304 Not Modified
+Server: Microsoft-IIS/5.0
+Date: Fri, 27 Aug 2004 15:36:35 GMT
+X-Powered-By: ASP.NET
+P3P:CP=&#34;BUS CUR CONo FIN IVDo ONL OUR PHY SAMo TELo&#34;
+ETag: &#34;4098f2add13dc41:8e5&#34;
+Content-Length: 0
+
+
+===================================================================</pre>
+
+
+<p>Answer: <strong><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/Windows%20CE">Windows CE</a> (Pocket PC) - Version 4.20</strong></p>
+
+<h3>25. What websites was the victim accessing?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ tshark -r interception -Y &#34;ip.src==192.168.254.2&#34; -Tfields -e http.host | sort -u
+
+login.passport.com
+login.passport.net
+mobile.msn.com
+www.passportimages.com</pre>
+
+
+<h4>Answers</h4>
+
+<ul>
+<li>login.passport.com</li>
+<li>login.passport.net</li>
+<li>mobile.msn.com</li>
+<li>www.passportimages.com</li>
+</ul>
+
+
+<h3>26. Search for the main users web based email address. What is it?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ find . -name &#34;index.dat&#34;
+./Documents and Settings/Default User/Cookies/index.dat
+./Documents and Settings/Default User/Local Settings/History/History.IE5/index.dat
+./Documents and Settings/Default User/Local Settings/Temporary Internet Files/Content.IE5/index.dat
+./Documents and Settings/LocalService/Cookies/index.dat
+./Documents and Settings/LocalService/Local Settings/History/History.IE5/index.dat
+./Documents and Settings/LocalService/Local Settings/Temporary Internet Files/Content.IE5/index.dat
+./Documents and Settings/Mr. Evil/Cookies/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/History/History.IE5/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/History/History.IE5/MSHist012004081620040823/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/History/History.IE5/MSHist012004082520040826/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/History/History.IE5/MSHist012004082620040827/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/History/History.IE5/MSHist012004082720040828/index.dat
+./Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/index.dat
+./WINDOWS/PCHEALTH/HELPCTR/OfflineCache/index.dat
+./WINDOWS/system32/config/systemprofile/Cookies/index.dat
+./WINDOWS/system32/config/systemprofile/Local Settings/History/History.IE5/index.dat
+./WINDOWS/system32/config/systemprofile/Local Settings/History/History.IE5/MSHist012004081920040820/index.dat
+./WINDOWS/system32/config/systemprofile/Local Settings/Temporary Internet Files/Content.IE5/index.dat</pre>
+
+
+<p><a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/linux">linux</a>だと良さそうなindex.dat用のツールが見つからなかったので<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/windows">windows</a>環境のツールを使用
+<a href="https://web.archive.org/web/20250420232117/https://www.nirsoft.net/utils/iehv.html">IE HistoryView: Freeware Internet Explorer History Viewer</a>
+<span itemscope itemtype="http://schema.org/Photograph"><img src="https://web.archive.org/web/20250420232117im_/https://cdn-ak.f.st-hatena.com/images/fotolife/Z/Zarat/20211219/20211219220740.png" alt="f:id:Zarat:20211219220740p:plain" width="1200" height="109" loading="lazy" title="" class="hatena-fotolife" itemprop="image"></span></p>
+
+<pre class="code" data-lang="" data-unlink>http://us.f613.mail.yahoo.com/ym/login?.rand=7lrrdoi00fl1k&amp;.first=1   Yahoo! Mail - mrevilrulez@yahoo.com</pre>
+
+
+<p>Answer:<strong>mrevilrulez@yahoo.com</strong><br></p>
+
+<p>ページタイトルでメールアドレス取得か...。</p>
+
+<h3>27. Yahoo mail, a popular web based email service, saves copies of the email under what file name?</h3>
+
+<p>ページを読み込んだときのキャッシュを探すということ？</p>
+
+<pre class="code" data-lang="" data-unlink>$ strings &#34;Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/index.dat&#34;
+(snip)
+URL
+http://us.f613.mail.yahoo.com/ym/ShowLetter?MsgId=6284_1110_22_443_55_0_1_-1_0&amp;Idx=0&amp;YY=60138&amp;.first=1&amp;inc=25&amp;order=down&amp;sort=date&amp;pos=0&amp;view=&amp;head=&amp;box=Inbox
+ShowLetter[1]
+HTTP/1.1 200 OK
+P3P: policyref=&#34;http://p3p.yahoo.com/w3c/p3p.xml&#34;, CP=&#34;CAO DSP COR CUR ADM DEV TAI PSA PSD IVAi IVDi CONi TELo OTPi OUR DELi SAMi OTRi UNRi PUBi IND PHY ONL UNI PUR FIN COM NAV INT DEM CNT STA POL HEA PRE GOV&#34;
+Transfer-Encoding: chunked
+Content-Type: text/html
+Content-Encoding: gzip
+~U:mr. evil
+URL
+http://us.f613.mail.yahoo.com/ym/ShowLetter?MsgId=6284_1110_22_443_55_0_1_-1_0&amp;Idx=0&amp;YY=60138&amp;.htm
+ShowLetter[1].htm
+HTTP/1.0 200 OK
+Content-Length: 42277
+Content-Type: text/html
+(snip)</pre>
+
+
+<p>ここら辺が怪しいか。</p>
+
+<pre class="code" data-lang="" data-unlink>$ find . -name &#34;ShowLetter*&#34;
+./Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/HYU1BON0/ShowLetter[1]
+./Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/HYU1BON0/ShowLetter[1].htm
+./Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/PN0J7OQM/ShowLetter[1].htm
+$ cat &#34;./Documents and Settings/Mr. Evil/Local Settings/Temporary Internet Files/Content.IE5/HYU1BON0/ShowLetter[1].htm&#34; |html2text
+(snip)
+bank_of_america/020204_checkbook.gif]                      Welcome to Yahoo! Mail.                                                                                                                            
+Free_Checking_w/
+Direct_Deposit                                              Dear mrevilrulez@yahoo.com,                                                                                     [http://
+[http://us.a1.yimg.com/us.yimg.com/a/ra/                                                                                                                                    us.i1.yimg.com/
+ratemymortgage/                                             Welcome to Yahoo! Mail, a smarter way of keeping in touch. With a whopping 100MB of email storage, message      us.yimg.com/i/us/
+282153_021004ratemymortgage21_25x25.gif]                    size up to 10MB, and great virus and spam protection, it&#39;s hard to believe it&#39;s free! Start using your new      pim/pr/trap/
+Get_2.9%*_at                                                address right away: mrevilrulez@yahoo.com                                                                       template1_girl.jpg]
+RateMyMortgage
+[http://us.a1.yimg.com/us.yimg.com/a/re/                    Tell the world.                                                                                                  QUICK WAYS
+realtytrac/25x25_0709804.gif]                               You have a new Yahoo! Mail address, so spread the word to family and friends. Send_an_email_now.                 TO GET STARTED:
+1/2_price_homes
+Click_here_now.                                             Set up your Address Book.                                                                                        Announce your new
+                                                            Now&#39;s the time to organize your contacts in one place. Enter_addresses_now and make it easy to get in touch.     Yahoo! Mail
+                                                                                                                                                                             address. Compose
+                                                            Get smart about spam.                                                                                            a_message.
+                                                            Our Anti-Spam_Resource_Center can help you keep spam from reaching your inbox. Learn how to use filters
+                                                            effectively, block mail from specific addresses and domains, and much more.                                      Make Yahoo! Mail
+                                                                                                                                                                             your everyday
+                                                            Personalize your email experience.                                                                               email. Set_as
+                                                            Create_your_own_signature, and choose_colors_and_fonts for your messages.                                        default for easy
+                                                                                                                                                                             access.
+                                                            Need even more? You got it.
+                                                            When you&#39;re ready for more, move up to Yahoo! Mail Plus. It provides virus cleaning powered by Norton            Put your contacts
+                                                            AntiVirus*, more powerful spam protection, a virtually unlimited 2GB of email storage, no graphical ads, and   within easy
+                                                            much more. Learn_more.                                                                                           reach. Set_up
+                                                                                                                                                                             your_Address
+                                                            Have fun using your Yahoo! Mail account!                                                                         Book.
+
+                                                            Sincerely,
+                                          [http://          The Yahoo! Mail Team                                                                                                                       [http://
+                                          us.i1.yimg.com/                                                                                                                                       us.i1.yimg.com/
+                                          us.yimg.com/i/                                                                                                                                         us.yimg.com/i/
+                                          us/pim/pr/trap/                                                                                                                                       us/pim/pr/trap/
+                                          em2_cr3.gif]                                                                                                                                            em2_cr4.gif]
+
+                                          *Not all viruses can be detected and cleaned. Please be aware that there is a risk involved whenever downloading
+                                          email attachments to your computer or sending email attachments to others and that, as provided in the Terms of
+                                          Service, neither Yahoo! nor its licensors are responsible for any damages caused by your decision to do so.
+
+
+                                          Please do not reply to this message. This is a service email related to your use of Yahoo! Mail. To learn more about
+                                          Yahoo!&#39;s use of personal information, including the use ofweb_beaconsin HTML-based email, please read our Privacy
+                                          Policy. Yahoo! Mail is located at 701 First Avenue, Sunnyvale, CA 94089.
+
+                                          Copyright © 2004 Yahoo! Inc. All rights reserved. Terms_of_Service
+                                          The HTML graphics in this message have been displayed. [Edit_Preferences - What&#39;s_This?]
+
+(snip)</pre>
+
+
+<p>Answer: <strong>ShowLetter[1].htm</strong></p>
+
+<h3>28. How many executable files are in the recycle bin?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ ls RECYCLER/S-1-5-21-2000478354-688789844-1708537768-1003/
+Dc1.exe  Dc2.exe  Dc3.exe  Dc4.exe  desktop.ini  INFO2</pre>
+
+
+<p>Answer:<strong>4</strong></p>
+
+<h3>29. Are these files really deleted?</h3>
+
+<p>Answer:<strong>ごみ箱に移動しただけで削除されていない</strong></p>
+
+<h3>30. How many files are actually reported to be deleted by the file system?</h3>
+
+<pre class="code" data-lang="" data-unlink>$ strings RECYCLER/S-1-5-21-2000478354-688789844-1708537768-1003/INFO2
+C:\Documents and Settings\Mr. Evil\Desktop\lalsetup250.exe
+C:\Documents and Settings\Mr. Evil\Desktop\netstumblerinstaller_0_4_0.exe
+C:\Documents and Settings\Mr. Evil\Desktop\WinPcap_3_01_a.exe
+C:\Documents and Settings\Mr. Evil\Desktop\ethereal-setup-0.10.6.exe</pre>
+
+
+<p>Answer:<strong>4</strong><br><br>
+しかし......
+INFO2には4つのファイルがリストされている。<br>
+Autopsyはfilesystemから365のDeletedFileを発見した。<br>
+<a class="keyword" href="https://web.archive.org/web/20250420232117/http://d.hatena.ne.jp/keyword/official">official</a> answer is 3???????????<br>
+Help me...........<br><br></p>
+
+<p>check <a href="https://web.archive.org/web/20250420232117/https://www.ntfs.com/disk-scan.htm">MFT</a>?</p>
+
+<h3>31. Perform a Anti-Virus check. Are there any viruses on the computer?</h3>
+
+<p>install <a href="https://web.archive.org/web/20250420232117/http://www.clamav.net/downloads">clamAV</a></p>
+
+<pre class="code" data-lang="" data-unlink>$ sudo clamscan -ir --quiet --log=../scan.log .
+(snip)
+$ cat scan.log
+(snip)
+----------- SCAN SUMMARY -----------
+Known viruses: 8580277
+Engine version: 0.103.3
+Scanned directories: 767
+Scanned files: 11311
+Infected files: 22
+Data scanned: 1864.52 MB
+Data read: 1794.54 MB (ratio 1.04:1)
+Time: 2406.458 sec (40 m 6 s)
+Start Date: 2021:11:28 06:04:29
+End Date:   2021:11:28 06:44:36</pre>
+
+
+<p>Answer: <strong>Known viruses: 8580277</strong><br>
+WOW</p>
+
+
+
+
+
+
+
+
+
+</div>
+
+
+  <footer class="entry-footer">
+
+    <div class="entry-tags-wrapper">
+  <div class="entry-tags">
+      <span class="entry-tag">
+        <a href="https://web.archive.org/web/20250420232117/https://d.hatena.ne.jp/keyword/Digital%20Forensics" class="entry-tag-link">
+
+
+          <span class="entry-tag-icon">#</span><span class="entry-tag-label">Digital Forensics</span>
+        </a>
+      </span>
+
+      <span class="entry-tag">
+        <a href="https://web.archive.org/web/20250420232117/https://d.hatena.ne.jp/keyword/NIST" class="entry-tag-link">
+
+
+          <span class="entry-tag-icon">#</span><span class="entry-tag-label">NIST</span>
+        </a>
+      </span>
+
+      <span class="entry-tag">
+        <a href="https://web.archive.org/web/20250420232117/https://d.hatena.ne.jp/keyword/CFReDS" class="entry-tag-link">
+
+
+          <span class="entry-tag-icon">#</span><span class="entry-tag-label">CFReDS</span>
+        </a>
+      </span>
+      </div>
+</div>
+
+    <p class="entry-footer-section track-inview-by-gtm" data-gtm-track-json="{&quot;area&quot;: &quot;finish_reading&quot;}">
+  <span class="author vcard"><span class="fn" data-load-nickname="1" data-user-name="Zarat">Zarat</span></span>
+  <span class="entry-footer-time"><a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2021/12/19/223735"><time data-relative datetime="2021-12-19T13:37:35Z" title="2021-12-19T13:37:35Z" class="updated">2021-12-19 22:37</time></a></span>
+
+
+
+    <span class="
+      entry-footer-subscribe
+
+    " data-test-blog-controlls-subscribe>
+      <a href="https://web.archive.org/web/20250420232117/https://blog.hatena.ne.jp/Zarat/zarat.hatenablog.com/subscribe?utm_campaign=subscribe_blog&amp;utm_source=blogs_entry_footer&amp;utm_medium=button">
+        読者になる
+      </a>
+    </span>
+
+</p>
+
+
+  <div class="hatena-star-container" data-hatena-star-container data-hatena-star-url="https://zarat.hatenablog.com/entry/2021/12/19/223735" data-hatena-star-title="NIST CFReDS Hacking Case writeup" data-hatena-star-variant="profile-icon" data-hatena-star-profile-url-template="https://blog.hatena.ne.jp/{username}/"></div>
+
+
+
+<div class="social-buttons">
+
+
+    <div class="social-button-item">
+      <a href="https://web.archive.org/web/20250420232117/https://b.hatena.ne.jp/entry/s/zarat.hatenablog.com/entry/2021/12/19/223735" class="hatena-bookmark-button" data-hatena-bookmark-url="https://zarat.hatenablog.com/entry/2021/12/19/223735" data-hatena-bookmark-layout="vertical-balloon" data-hatena-bookmark-lang="ja" title="この記事をはてなブックマークに追加"><img src="https://web.archive.org/web/20250420232117im_/https://b.st-hatena.com/images/entry-button/button-only.gif" alt="この記事をはてなブックマークに追加" width="20" height="20" style="border: none;"/></a>
+    </div>
+
+
+    <div class="social-button-item">
+      <div class="fb-share-button" data-layout="box_count" data-href="https://zarat.hatenablog.com/entry/2021/12/19/223735"></div>
+    </div>
+
+
+    <div class="social-button-item">
+      <a class="entry-share-button entry-share-button-twitter test-share-button-twitter" href="https://web.archive.org/web/20250420232117/https://x.com/intent/tweet?hashtags=Digital+Forensics&amp;hashtags=NIST&amp;hashtags=CFReDS&amp;text=NIST+CFReDS+Hacking+Case+writeup+-+4ensiX&amp;url=https%3A%2F%2Fzarat.hatenablog.com%2Fentry%2F2021%2F12%2F19%2F223735" title="X（Twitter）で投稿する"></a>
+    </div>
+
+
+
+    <span>
+      <div class="line-it-button" style="display: none;" data-type="share-e" data-lang="ja"></div>
+      <script src="//web.archive.org/web/20250420232117js_/https://scdn.line-apps.com/n/line_it/thirdparty/loader.min.js" async="async" defer="defer"></script>
+    </span>
+
+
+
+
+
+</div>
+
+
+
+
+
+    <div class="google-afc-image test-google-rectangle-ads">
+
+      <div id="google_afc_user_container_0" class="google-afc-user-container google_afc_blocklink2_5 google_afc_boder" data-test-unit="/4374287/blog_user"></div>
+
+        <a href="https://web.archive.org/web/20250420232117/http://blog.hatena.ne.jp/guide/pro" class="open-pro-modal" data-guide-pro-modal-ad-url="https://hatena.blog/guide/pro/modal/ad">広告を非表示にする</a>
+
+    </div>
+
+
+
+
+    <div class="customized-footer">
+
+
+
+
+          <div class="entry-footer-modules" id="entry-footer-secondary-modules">
+<div class="hatena-module hatena-module-related-entries">
+
+  <!-- Hatena-Epic-has-related-entries-with-elasticsearch:true -->
+  <div class="hatena-module-title">
+    関連記事
+  </div>
+  <div class="hatena-module-body">
+    <ul class="related-entries hatena-urllist urllist-with-thumbnails">
+
+
+
+    <li class="urllist-item related-entries-item">
+      <div class="urllist-item-inner related-entries-item-inner">
+
+
+                      <a class="urllist-image-link related-entries-image-link" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2022/01/17/200000">
+  <img alt="LetsDefend level 1 alert SOC134 - Suspicious WMI Activity event-id 71" src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/04fc937930f67d0f1a84b1ca09ad23d710d64da5/backend=imagemagick;height=100;version=1;width=100/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20220116%2F20220116154040.png" class="urllist-image related-entries-image" title="LetsDefend level 1 alert SOC134 - Suspicious WMI Activity event-id 71" width="100" height="100" loading="lazy">
+</a>
+            <div class="urllist-date-link related-entries-date-link">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/01/17" rel="nofollow">
+    <time datetime="2022-01-17T11:00:00Z" title="2022年1月17日">
+      2022-01-17
+    </time>
+  </a>
+</div>
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2022/01/17/200000" class="urllist-title-link related-entries-title-link  urllist-title related-entries-title">LetsDefend level 1 alert SOC134 - Suspicious WMI A…</a>
+
+
+
+
+
+                      <div class="urllist-entry-body related-entries-entry-body">Details Playbook Define Threat Indicator Check if the malwa…</div>
+      </div>
+    </li>
+
+
+    <li class="urllist-item related-entries-item">
+      <div class="urllist-item-inner related-entries-item-inner">
+
+
+                      <a class="urllist-image-link related-entries-image-link" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/07/25/221335">
+  <img alt="Technical - ENISA を読んだ覚書" src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/d19c032d59dbcce2f09b984c02e42828c9862954/backend=imagemagick;height=100;version=1;width=100/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20200721%2F20200721161852.png" class="urllist-image related-entries-image" title="Technical - ENISA を読んだ覚書" width="100" height="100" loading="lazy">
+</a>
+            <div class="urllist-date-link related-entries-date-link">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/07/25" rel="nofollow">
+    <time datetime="2020-07-25T13:13:35Z" title="2020年7月25日">
+      2020-07-25
+    </time>
+  </a>
+</div>
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/07/25/221335" class="urllist-title-link related-entries-title-link  urllist-title related-entries-title">Technical - ENISA を読んだ覚書</a>
+
+
+
+
+
+                      <div class="urllist-entry-body related-entries-entry-body">以前に、Forensics学ぶならTechnical - ENISAが良いというよう…</div>
+      </div>
+    </li>
+
+
+    <li class="urllist-item related-entries-item">
+      <div class="urllist-item-inner related-entries-item-inner">
+
+
+                      <a class="urllist-image-link related-entries-image-link" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/05/01/200031">
+  <img alt="riftCTF2020 Forensic writeup" src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/0218eb42740ea041acf2c6bb4d376f8d479f0586/backend=imagemagick;height=100;version=1;width=100/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20200501%2F20200501190944.png" class="urllist-image related-entries-image" title="riftCTF2020 Forensic writeup" width="100" height="100" loading="lazy">
+</a>
+            <div class="urllist-date-link related-entries-date-link">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/05/01" rel="nofollow">
+    <time datetime="2020-05-01T11:00:31Z" title="2020年5月1日">
+      2020-05-01
+    </time>
+  </a>
+</div>
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/05/01/200031" class="urllist-title-link related-entries-title-link  urllist-title related-entries-title">riftCTF2020 Forensic writeup</a>
+
+
+
+
+
+                      <div class="urllist-entry-body related-entries-entry-body">3月が終わっていないのに、5月になってしまったヤバい。 焦りつ…</div>
+      </div>
+    </li>
+
+
+    <li class="urllist-item related-entries-item">
+      <div class="urllist-item-inner related-entries-item-inner">
+
+
+                      <div class="urllist-date-link related-entries-date-link">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/04/06" rel="nofollow">
+    <time datetime="2020-04-06T06:38:33Z" title="2020年4月6日">
+      2020-04-06
+    </time>
+  </a>
+</div>
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/04/06/153833" class="urllist-title-link related-entries-title-link  urllist-title related-entries-title">Locked KitKat - zer0ops CTF 2020 Forensics writeup</a>
+
+
+
+
+
+                      <div class="urllist-entry-body related-entries-entry-body">世間様は4月ですが、自分は3月を振り返っています。 2020/03/07…</div>
+      </div>
+    </li>
+
+
+    <li class="urllist-item related-entries-item">
+      <div class="urllist-item-inner related-entries-item-inner">
+
+
+                      <a class="urllist-image-link related-entries-image-link" href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/03/04/235649">
+  <img alt="NeverLAN CTF 2020 PCAP/Forensic writeup" src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/7fa2c514f7e26cd75007d4696c612248c58cd4ed/backend=imagemagick;height=100;version=1;width=100/https%3A%2F%2Fcdn-ak.f.st-hatena.com%2Fimages%2Ffotolife%2FZ%2FZarat%2F20200304%2F20200304231451.png" class="urllist-image related-entries-image" title="NeverLAN CTF 2020 PCAP/Forensic writeup" width="100" height="100" loading="lazy">
+</a>
+            <div class="urllist-date-link related-entries-date-link">
+  <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/03/04" rel="nofollow">
+    <time datetime="2020-03-04T14:56:49Z" title="2020年3月4日">
+      2020-03-04
+    </time>
+  </a>
+</div>
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2020/03/04/235649" class="urllist-title-link related-entries-title-link  urllist-title related-entries-title">NeverLAN CTF 2020 PCAP/Forensic writeup</a>
+
+
+
+
+
+                      <div class="urllist-entry-body related-entries-entry-body">今回は、2020/02/09 00:00 JST — 2020/02/12 08:00 JSTに行われ…</div>
+      </div>
+    </li>
+
+</ul>
+
+  </div>
+</div>
+  </div>
+
+
+
+    </div>
+
+  <div class="comment-box js-comment-box">
+
+    <ul class="comment js-comment">
+      <li class="read-more-comments" style="display: none;"><a>もっと読む</a></li>
+    </ul>
+
+      <a class="leave-comment-title js-leave-comment-title">コメントを書く</a>
+
+  </div>
+
+  </footer>
+
+  </div>
+</article>
+
+
+
+
+
+
+
+  <!-- rakuten_ad_target_end -->
+  <!-- google_ad_section_end -->
+
+
+
+  <div class="pager pager-permalink permalink">
+
+
+      <span class="pager-prev">
+        <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2022/01/09/024824" rel="prev">
+          <span class="pager-arrow">&laquo; </span>
+          SecurityAnalystっぽいことができる!今一…
+        </a>
+      </span>
+
+
+
+      <span class="pager-next">
+        <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2021/12/01/013235" rel="next">
+          docker buildのlayerごとに作成されたファ…
+          <span class="pager-arrow"> &raquo;</span>
+        </a>
+      </span>
+
+  </div>
+
+
+
+
+
+
+        </div>
+      </div>
+
+      <aside id="box1">
+  <div id="box1-inner">
+  </div>
+</aside>
+
+    </div><!-- #wrapper -->
+
+
+<aside id="box2">
+
+  <div id="box2-inner">
+
+      <div class="hatena-module hatena-module-search-box">
+  <div class="hatena-module-title">
+    検索
+  </div>
+  <div class="hatena-module-body">
+    <form class="search-form" role="search" action="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/search" method="get">
+  <input type="text" name="q" class="search-module-input" value="" placeholder="記事を検索" required>
+  <input type="submit" value="検索" class="search-module-button"/>
+</form>
+
+  </div>
+</div>
+
+
+
+
+<div class="hatena-module hatena-module-profile">
+  <div class="hatena-module-title">
+    プロフィール
+  </div>
+  <div class="hatena-module-body">
+
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/about" class="profile-icon-link">
+      <img src="https://web.archive.org/web/20250420232117im_/https://cdn.profile-image.st-hatena.com/users/Zarat/profile.png?1579369615" alt="id:Zarat" class="profile-icon"/>
+    </a>
+
+
+
+    <span class="id">
+      <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/about" class="hatena-id-link"><span data-load-nickname="1" data-user-name="Zarat">id:Zarat</span></a>
+
+
+
+
+
+    </span>
+
+
+
+      <div class="profile-activities">
+
+        最終更新:
+        <time datetime="2025-01-29T15:58:55Z" data-relative data-epoch="1738166335000" class="updated">2025-01-30 00:58</time>
+
+    </div>
+
+
+
+    <div class="profile-description">
+      <p>主に情報セキュリティ、CTF関係のこと、ときどき情報系で気になったことを記す。誤字脱字報告求む。</p>
+
+    </div>
+
+
+
+      <div class="hatena-follow-button-box btn-subscribe js-hatena-follow-button-box">
+
+  <a href="#" class="hatena-follow-button js-hatena-follow-button">
+    <span class="subscribing">
+      <span class="foreground">読者です</span>
+      <span class="background">読者をやめる</span>
+    </span>
+    <span class="unsubscribing" data-track-name="profile-widget-subscribe-button" data-track-once>
+      <span class="foreground">読者になる</span>
+      <span class="background">読者になる</span>
+    </span>
+  </a>
+  <div class="subscription-count-box js-subscription-count-box">
+    <i></i>
+    <u></u>
+    <span class="subscription-count js-subscription-count">
+    </span>
+  </div>
+</div>
+
+
+
+
+
+    <div class="profile-about">
+      <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/about">このブログについて</a>
+    </div>
+
+  </div>
+</div>
+
+
+      <div class="hatena-module hatena-module-recent-entries ">
+  <div class="hatena-module-title">
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive">
+      最新記事
+    </a>
+  </div>
+  <div class="hatena-module-body">
+    <ul class="recent-entries hatena-urllist ">
+
+
+
+    <li class="urllist-item recent-entries-item">
+      <div class="urllist-item-inner recent-entries-item-inner">
+
+
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2025/01/30/005855" class="urllist-title-link recent-entries-title-link  urllist-title recent-entries-title">CVE-2024-55591の解説の解説</a>
+
+
+
+
+
+                </div>
+    </li>
+
+
+    <li class="urllist-item recent-entries-item">
+      <div class="urllist-item-inner recent-entries-item-inner">
+
+
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2023/06/10/201914" class="urllist-title-link recent-entries-title-link  urllist-title recent-entries-title">redhat系Linuxのvolatility3プロファイルの作成　rocky linuxでの作業例</a>
+
+
+
+
+
+                </div>
+    </li>
+
+
+    <li class="urllist-item recent-entries-item">
+      <div class="urllist-item-inner recent-entries-item-inner">
+
+
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2023/06/10/200848" class="urllist-title-link recent-entries-title-link  urllist-title recent-entries-title">volatility3 ubuntu 22.04.2 LTS へのインストール</a>
+
+
+
+
+
+                </div>
+    </li>
+
+
+    <li class="urllist-item recent-entries-item">
+      <div class="urllist-item-inner recent-entries-item-inner">
+
+
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2023/02/19/100000" class="urllist-title-link recent-entries-title-link  urllist-title recent-entries-title">LetsDefend Challenge Malware Analysis: Malicious Doc</a>
+
+
+
+
+
+                </div>
+    </li>
+
+
+    <li class="urllist-item recent-entries-item">
+      <div class="urllist-item-inner recent-entries-item-inner">
+
+
+
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/entry/2023/02/18/100000" class="urllist-title-link recent-entries-title-link  urllist-title recent-entries-title">LetsDefend Challenge Malware Analysis: Malicious VBA</a>
+
+
+
+
+
+                </div>
+    </li>
+
+</ul>
+
+      </div>
+</div>
+
+
+
+<div class="hatena-module hatena-module-entries-access-ranking" data-count="5" data-source="access" data-enable_customize_format="0" data-display_entry_image_size_width="100" data-display_entry_image_size_height="100" data-display_entry_category="0" data-display_entry_image="1" data-display_entry_image_size_width="100" data-display_entry_image_size_height="100" data-display_entry_body_length="0" data-display_entry_date="0" data-display_entry_title_length="20" data-restrict_entry_title_length="0" data-display_bookmark_count="0">
+  <div class="hatena-module-title">
+
+      ランキング
+
+  </div>
+  <div class="hatena-module-body">
+
+  </div>
+</div>
+
+
+
+
+<div class="hatena-module hatena-module-archive" data-archive-type="default" data-archive-url="https://zarat.hatenablog.com/archive">
+  <div class="hatena-module-title">
+    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive">月別アーカイブ</a>
+  </div>
+  <div class="hatena-module-body">
+
+
+        <ul class="hatena-urllist">
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2025">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2025" class="archive-module-year-title archive-module-year-2025">
+                2025
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2025/01" class="archive-module-month-title archive-module-month-2025-1">
+                      2025 / 1
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2023">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2023" class="archive-module-year-title archive-module-year-2023">
+                2023
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2023/06" class="archive-module-month-title archive-module-month-2023-6">
+                      2023 / 6
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2023/02" class="archive-module-month-title archive-module-month-2023-2">
+                      2023 / 2
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2023/01" class="archive-module-month-title archive-module-month-2023-1">
+                      2023 / 1
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2022">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022" class="archive-module-year-title archive-module-year-2022">
+                2022
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/12" class="archive-module-month-title archive-module-month-2022-12">
+                      2022 / 12
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/06" class="archive-module-month-title archive-module-month-2022-6">
+                      2022 / 6
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/04" class="archive-module-month-title archive-module-month-2022-4">
+                      2022 / 4
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/03" class="archive-module-month-title archive-module-month-2022-3">
+                      2022 / 3
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/02" class="archive-module-month-title archive-module-month-2022-2">
+                      2022 / 2
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2022/01" class="archive-module-month-title archive-module-month-2022-1">
+                      2022 / 1
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2021">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021" class="archive-module-year-title archive-module-year-2021">
+                2021
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021/12" class="archive-module-month-title archive-module-month-2021-12">
+                      2021 / 12
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021/10" class="archive-module-month-title archive-module-month-2021-10">
+                      2021 / 10
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021/09" class="archive-module-month-title archive-module-month-2021-9">
+                      2021 / 9
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2021/05" class="archive-module-month-title archive-module-month-2021-5">
+                      2021 / 5
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2020">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020" class="archive-module-year-title archive-module-year-2020">
+                2020
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/07" class="archive-module-month-title archive-module-month-2020-7">
+                      2020 / 7
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/06" class="archive-module-month-title archive-module-month-2020-6">
+                      2020 / 6
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/05" class="archive-module-month-title archive-module-month-2020-5">
+                      2020 / 5
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/04" class="archive-module-month-title archive-module-month-2020-4">
+                      2020 / 4
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/03" class="archive-module-month-title archive-module-month-2020-3">
+                      2020 / 3
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/02" class="archive-module-month-title archive-module-month-2020-2">
+                      2020 / 2
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2020/01" class="archive-module-month-title archive-module-month-2020-1">
+                      2020 / 1
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2019">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019" class="archive-module-year-title archive-module-year-2019">
+                2019
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/12" class="archive-module-month-title archive-module-month-2019-12">
+                      2019 / 12
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/11" class="archive-module-month-title archive-module-month-2019-11">
+                      2019 / 11
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/10" class="archive-module-month-title archive-module-month-2019-10">
+                      2019 / 10
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/09" class="archive-module-month-title archive-module-month-2019-9">
+                      2019 / 9
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/07" class="archive-module-month-title archive-module-month-2019-7">
+                      2019 / 7
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/06" class="archive-module-month-title archive-module-month-2019-6">
+                      2019 / 6
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/05" class="archive-module-month-title archive-module-month-2019-5">
+                      2019 / 5
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/04" class="archive-module-month-title archive-module-month-2019-4">
+                      2019 / 4
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/03" class="archive-module-month-title archive-module-month-2019-3">
+                      2019 / 3
+                    </a>
+                  </li>
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2019/02" class="archive-module-month-title archive-module-month-2019-2">
+                      2019 / 2
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+            <li class="archive-module-year archive-module-year-hidden" data-year="2018">
+              <div class="archive-module-button">
+                <span class="archive-module-hide-button">▼</span>
+                <span class="archive-module-show-button">▶</span>
+              </div>
+              <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2018" class="archive-module-year-title archive-module-year-2018">
+                2018
+              </a>
+              <ul class="archive-module-months">
+
+                  <li class="archive-module-month">
+                    <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/2018/10" class="archive-module-month-title archive-module-month-2018-10">
+                      2018 / 10
+                    </a>
+                  </li>
+
+              </ul>
+            </li>
+
+        </ul>
+
+
+  </div>
+</div>
+
+
+
+
+<div class="hatena-module hatena-module-category">
+  <div class="hatena-module-title">
+    カテゴリー
+  </div>
+  <div class="hatena-module-body">
+    <ul class="hatena-urllist">
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/CVE" class="category-CVE">
+            CVE (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Forensics" class="category-Forensics">
+            Forensics (32)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/memory" class="category-memory">
+            memory (11)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/volatility" class="category-volatility">
+            volatility (5)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/LetsDefend" class="category-LetsDefend">
+            LetsDefend (66)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Malware" class="category-Malware">
+            Malware (25)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/webshell" class="category-webshell">
+            webshell (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/packet" class="category-packet">
+            packet (5)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Misc" class="category-Misc">
+            Misc (9)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/BTLO" class="category-BTLO">
+            BTLO (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Phishing%20Mail" class="category-Phishing-Mail">
+            Phishing Mail (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/NIST%20CFReDS" class="category-NIST-CFReDS">
+            NIST CFReDS (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Docker" class="category-Docker">
+            Docker (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/THM" class="category-THM">
+            THM (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Windows" class="category-Windows">
+            Windows (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/diskimage" class="category-diskimage">
+            diskimage (6)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/adb" class="category-adb">
+            adb (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Autopsy" class="category-Autopsy">
+            Autopsy (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/apktool" class="category-apktool">
+            apktool (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/android" class="category-android">
+            android (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/qemu" class="category-qemu">
+            qemu (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/proxmox" class="category-proxmox">
+            proxmox (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Stegano" class="category-Stegano">
+            Stegano (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/riftCTF" class="category-riftCTF">
+            riftCTF (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/CTF" class="category-CTF">
+            CTF (21)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/SecurinetsCTF" class="category-SecurinetsCTF">
+            SecurinetsCTF (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/SuSeC" class="category-SuSeC">
+            SuSeC (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/The%20Sleuth%20Kit" class="category-The-Sleuth-Kit">
+            The Sleuth Kit (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/zer0ops" class="category-zer0ops">
+            zer0ops (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Forensics%20tool" class="category-Forensics-tool">
+            Forensics tool (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/morse_sound" class="category-morse_sound">
+            morse_sound (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/NeverLANCTF" class="category-NeverLANCTF">
+            NeverLANCTF (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/HackTM" class="category-HackTM">
+            HackTM (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/KeePass" class="category-KeePass">
+            KeePass (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/usb_packet" class="category-usb_packet">
+            usb_packet (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Windows%20registry" class="category-Windows-registry">
+            Windows registry (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/arn" class="category-arn">
+            arn (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/browser_db" class="category-browser_db">
+            browser_db (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/binary" class="category-binary">
+            binary (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/RAID" class="category-RAID">
+            RAID (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/hivex" class="category-hivex">
+            hivex (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/contrailctf" class="category-contrailctf">
+            contrailctf (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/X-MASCTF" class="category-X-MASCTF">
+            X-MASCTF (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/TUCTF" class="category-TUCTF">
+            TUCTF (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/RITSEC" class="category-RITSEC">
+            RITSEC (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/NewbieCTF" class="category-NewbieCTF">
+            NewbieCTF (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/HackTheBox" class="category-HackTheBox">
+            HackTheBox (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Plaso" class="category-Plaso">
+            Plaso (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/psort" class="category-psort">
+            psort (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/log2timeline" class="category-log2timeline">
+            log2timeline (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/VirtualBox" class="category-VirtualBox">
+            VirtualBox (4)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Z80" class="category-Z80">
+            Z80 (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Anbox" class="category-Anbox">
+            Anbox (1)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/Kali%20Linux" class="category-Kali-Linux">
+            Kali Linux (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/writeup" class="category-writeup">
+            writeup (3)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/SECCON%20Beginners" class="category-SECCON-Beginners">
+            SECCON Beginners (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/TAMUctf" class="category-TAMUctf">
+            TAMUctf (2)
+          </a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/archive/category/%E5%8F%82%E5%8A%A0%E8%A8%98" class="category-参加記">
+            参加記 (1)
+          </a>
+        </li>
+
+    </ul>
+  </div>
+</div>
+
+
+      <div class="hatena-module hatena-module-links">
+  <div class="hatena-module-title">
+    リンク
+  </div>
+  <div class="hatena-module-body">
+    <ul class="hatena-urllist">
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://hatena.blog/">はてなブログ</a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://hatena.blog/guide?via=200109">ブログをはじめる</a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/http://blog.hatenablog.com/">週刊はてなブログ</a>
+        </li>
+
+        <li>
+          <a href="https://web.archive.org/web/20250420232117/https://hatena.blog/guide/pro">はてなブログPro</a>
+        </li>
+
+    </ul>
+  </div>
+</div>
+
+
+
+  </div>
+</aside>
+
+
+  </div>
+</div>
+
+
+
+
+
+
+
+  <div id="bottom-editarea">
+    <script src="https://web.archive.org/web/20250420232117js_/https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js"></script>
+<script type="text/javascript">
+  $('#main-inner').ready(function(){
+    "use strict";
+    var pc_width = 600;
+    var device = window.screen.width < pc_width ? 'sp' : 'pc';
+    device = (device == 'pc' && $(window).width() > pc_width) ? 'pc' : 'sp';
+    var view_sec_num = 5; <!-- ここに1回あたりの表示記事数を設定 -->
+    var sections = $('#main-inner > div.archive-entries > section');
+    if((sections.length > view_sec_num) && device == 'sp') {
+      var page_index = 0;
+      var $entries_archive = null;
+      var archive_num = 0;
+      $entries_archive = $('<div id="entries-archive-' + archive_num + '"></div>');
+      $entries_archive.insertBefore(sections[0]);
+      for(var i=0; i < view_sec_num; i++) {
+        $(sections[i]).appendTo($entries_archive);
+        page_index += 1;
+      }
+      archive_num += 1;
+      for(var i=view_sec_num; i < sections.length; i++) {
+        if(page_index==view_sec_num) {
+          var $read_more_link = $('<p style="text-align:center;background:#ddd"><a href="javascript:void(0)" style="line-height:3;font-size:80%:">もっと表示する</a></p>');
+          $read_more_link.on('click',{archive_num: archive_num},function(e){
+            $(e.target).hide();
+            $('#entries-archive-' + e.data.archive_num).fadeIn("slow");
+          });
+          var $before_archive = $('#entries-archive-' + (archive_num-1));
+          $before_archive.append($read_more_link);
+
+          $entries_archive = $('<div id="entries-archive-' + archive_num + '"></div>');
+          $entries_archive.hide();
+          $entries_archive.insertAfter($before_archive);
+          page_index = 0;
+          archive_num += 1;
+        }
+        $(sections[i]).appendTo($entries_archive);
+        page_index += 1;
+      }
+      $entries_archive.hide();
+    }
+});
+</script>
+  </div>
+
+
+    </div>
+  </div>
+
+<footer id="footer" data-brand="hatenablog">
+  <div id="footer-inner">
+
+      <div style="display:none !important" class="guest-footer js-guide-register test-blogs-register-guide" data-action="guide-register">
+  <div class="guest-footer-content">
+    <h3>はてなブログをはじめよう！</h3>
+    <p>Zaratさんは、はてなブログを使っています。あなたもはてなブログをはじめてみませんか？</p>
+    <div class="guest-footer-btn-container">
+      <div class="guest-footer-btn">
+        <a class="btn btn-register js-inherit-ga" href="https://web.archive.org/web/20250420232117/https://blog.hatena.ne.jp/register?via=200227" target="_blank">はてなブログをはじめる（無料）</a>
+      </div>
+      <div class="guest-footer-btn">
+        <a href="https://web.archive.org/web/20250420232117/https://hatena.blog/guide" target="_blank">はてなブログとは</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+    <address class="footer-address">
+      <a href="https://web.archive.org/web/20250420232117/https://zarat.hatenablog.com/">
+        <img src="https://web.archive.org/web/20250420232117im_/https://cdn.image.st-hatena.com/image/square/12f3fc6f1cb8bafb212fca1dd97cbbc8d59e30d9/backend=imagemagick;height=128;version=1;width=128/https%3A%2F%2Fcdn.user.blog.st-hatena.com%2Fblog_custom_icon%2F153227589%2F1591171327251736" width="16" height="16" alt="4ensiX"/>
+        <span class="footer-address-name">4ensiX</span>
+      </a>
+    </address>
+    <p class="services">
+      Powered by <a href="https://web.archive.org/web/20250420232117/https://hatena.blog/">Hatena Blog</a>
+      |
+        <a href="https://web.archive.org/web/20250420232117/https://blog.hatena.ne.jp/-/abuse_report?target_url=https%3A%2F%2Fzarat.hatenablog.com%2Fentry%2F2021%2F12%2F19%2F223735" class="report-abuse-link test-report-abuse-link" target="_blank">ブログを報告する</a>
+    </p>
+  </div>
+</footer>
+
+
+
+
+
+  <script async src="https://web.archive.org/web/20250420232117js_/https://s.hatena.ne.jp/js/widget/star.js"></script>
+
+
+  <script>
+    if (typeof window.Hatena === 'undefined') {
+      window.Hatena = {};
+    }
+    if (!Hatena.hasOwnProperty('Star')) {
+      Hatena.Star = {
+        VERSION: 2,
+      };
+    }
+  </script>
+
+
+
+    <div id="fb-root"></div>
+<script>(function(d, s, id) {
+  var js, fjs = d.getElementsByTagName(s)[0];
+  if (d.getElementById(id)) return;
+  js = d.createElement(s); js.id = id;
+  js.src = "//web.archive.org/web/20250420232117/https://connect.facebook.net/ja_JP/sdk.js#xfbml=1&appId=719729204785177&version=v17.0";
+  fjs.parentNode.insertBefore(js, fjs);
+}(document, 'script', 'facebook-jssdk'));</script>
+
+
+
+
+<div class="quote-box">
+  <div class="tooltip-quote tooltip-quote-stock">
+    <i class="blogicon-quote" title="引用をストック"></i>
+  </div>
+  <div class="tooltip-quote tooltip-quote-tweet js-tooltip-quote-tweet">
+    <a class="js-tweet-quote" target="_blank" data-track-name="quote-tweet" data-track-once>
+      <img src="https://web.archive.org/web/20250420232117im_/https://cdn.blog.st-hatena.com/images/admin/quote/quote-x-icon.svg?version=98326886fe5381d42d67007251ee03" title="引用して投稿する">
+    </a>
+  </div>
+</div>
+
+<div class="quote-stock-panel" id="quote-stock-message-box" style="position: absolute; z-index: 3000">
+  <div class="message-box" id="quote-stock-succeeded-message" style="display: none">
+    <p>引用をストックしました</p>
+    <button class="btn btn-primary" id="quote-stock-show-editor-button" data-track-name="curation-quote-edit-button">ストック一覧を見る</button>
+    <button class="btn quote-stock-close-message-button">閉じる</button>
+  </div>
+
+  <div class="message-box" id="quote-login-required-message" style="display: none">
+    <p>引用するにはまずログインしてください</p>
+    <button class="btn btn-primary" id="quote-login-button">ログイン</button>
+    <button class="btn quote-stock-close-message-button">閉じる</button>
+  </div>
+
+  <div class="error-box" id="quote-stock-failed-message" style="display: none">
+    <p>引用をストックできませんでした。再度お試しください</p>
+    <button class="btn quote-stock-close-message-button">閉じる</button>
+  </div>
+
+  <div class="error-box" id="unstockable-quote-message-box" style="display: none; position: absolute; z-index: 3000;">
+    <p>限定公開記事のため引用できません。</p>
+  </div>
+</div>
+
+<script type="x-underscore-template" id="js-requote-button-template">
+  <div class="requote-button js-requote-button">
+    <button class="requote-button-btn tipsy-top" title="引用する"><i class="blogicon-quote"></i></button>
+  </div>
+</script>
+
+
+
+
+  <div id="hidden-subscribe-button" style="display: none;">
+    <div class="hatena-follow-button-box btn-subscribe js-hatena-follow-button-box">
+
+  <a href="#" class="hatena-follow-button js-hatena-follow-button">
+    <span class="subscribing">
+      <span class="foreground">読者です</span>
+      <span class="background">読者をやめる</span>
+    </span>
+    <span class="unsubscribing" data-track-name="profile-widget-subscribe-button" data-track-once>
+      <span class="foreground">読者になる</span>
+      <span class="background">読者になる</span>
+    </span>
+  </a>
+  <div class="subscription-count-box js-subscription-count-box">
+    <i></i>
+    <u></u>
+    <span class="subscription-count js-subscription-count">
+    </span>
+  </div>
+</div>
+
+  </div>
+
+
+
+
+
+
+
+
+  <script async src="https://web.archive.org/web/20250420232117js_/https://platform.twitter.com/widgets.js" charset="utf-8"></script>
+
+<script src="https://web.archive.org/web/20250420232117js_/https://b.st-hatena.com/js/bookmark_button.js" charset="utf-8" async="async"></script>
+
+
+<script type="text/javascript" src="https://web.archive.org/web/20250420232117js_/https://cdn.blog.st-hatena.com/js/external/jquery.min.js?v=1.12.4&amp;version=98326886fe5381d42d67007251ee03"></script>
+
+
+
+
+
+
+
+<script src="https://web.archive.org/web/20250420232117js_/https://cdn.blog.st-hatena.com/js/texts-ja.js?version=98326886fe5381d42d67007251ee03"></script>
+
+
+
+  <script id="vendors-js" data-env="production" src="https://web.archive.org/web/20250420232117js_/https://cdn.blog.st-hatena.com/js/vendors.js?version=98326886fe5381d42d67007251ee03" crossorigin="anonymous"></script>
+
+<script id="hatenablog-js" data-env="production" src="https://web.archive.org/web/20250420232117js_/https://cdn.blog.st-hatena.com/js/hatenablog.js?version=98326886fe5381d42d67007251ee03" crossorigin="anonymous" data-page-id="entry"></script>
+
+
+  <script>Hatena.Diary.GlobalHeader.init()</script>
+
+
+
+
+
+
+
+
+  <script id="valve-dmp" data-service="blog" src="https://web.archive.org/web/20250420232117js_/https://cdn.pool.st-hatena.com/valve/dmp.js" data-test-id="dmpjs" async></script>
+
+
+
+
+
+
+
+
+  </body>
+</html>
+
+<!--
+     FILE ARCHIVED ON 23:21:17 Apr 20, 2025 AND RETRIEVED FROM THE
+     INTERNET ARCHIVE ON 09:15:23 Jun 12, 2026.
+     JAVASCRIPT APPENDED BY WAYBACK MACHINE, COPYRIGHT INTERNET ARCHIVE.
+
+     ALL OTHER CONTENT MAY ALSO BE PROTECTED BY COPYRIGHT (17 U.S.C.
+     SECTION 108(a)(3)).
+-->
+<!--
+playback timings (ms):
+  captures_list: 0.37
+  exclusion.robots: 0.049
+  exclusion.robots.policy: 0.042
+  esindex: 0.006
+  cdx.remote: 35.446
+  LoadShardBlock: 117.45 (3)
+  PetaboxLoader3.datanode: 113.453 (4)
+  PetaboxLoader3.resolve: 270.945 (2)
+  load_resource: 1156.616
+-->

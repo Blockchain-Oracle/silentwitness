@@ -1,0 +1,122 @@
+[
+  {
+    "id": "GT-NHC-001",
+    "dataset_id": "nist-hacking-case",
+    "category": "network_indicator",
+    "summary": "Wireless adapter MAC address: 00:02:B3:DD:00:A2 (Intel 802.11b Pro/Wireless)",
+    "expected_artifact_substrings": ["00:02:B3:DD:00:A2"],
+    "expected_path_globs": ["**/registry/**", "**/SYSTEM/**"],
+    "supporting_question_id": "1",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20230101/https://zarat.hatenablog.com/entry/2021/12/19/223735",
+    "source_excerpt": "Q1: What is the MAC address of the wireless adapter? Answer: 00:02:B3:DD:00:A2 (found in HKLM\\SYSTEM\\ControlSet001\\Control\\Class\\{4D36E972-E325-11CE-BFC1-08002BE10318}\\0001 NetworkAddress value; community-converged answer from multiple CFReDS hacking case writeups)."
+  },
+  {
+    "id": "GT-NHC-002",
+    "dataset_id": "nist-hacking-case",
+    "category": "network_indicator",
+    "summary": "Laptop hostname: N-1A9ODN6ZXK4LQ; domain: N-1A9ODN6ZXK4LQ",
+    "expected_artifact_substrings": ["N-1A9ODN6ZXK4LQ"],
+    "expected_path_globs": ["**/system32/config/system*", "**/SYSTEM/**"],
+    "supporting_question_id": "6",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20230101/https://zarat.hatenablog.com/entry/2021/12/19/223735",
+    "source_excerpt": "hivexget system ControlSet001\\Control\\ComputerName\\ComputerName -> \"ComputerName\"=\"N-1A9ODN6ZXK4LQ\""
+  },
+  {
+    "id": "GT-NHC-003",
+    "dataset_id": "nist-hacking-case",
+    "category": "network_indicator",
+    "summary": "LAN IP address: 192.168.1.111; LAN NIC MAC: 0010a4933e09",
+    "expected_artifact_substrings": ["192.168.1.111", "0010a4933e09"],
+    "expected_path_globs": ["**/Look@LAN/irunin.ini"],
+    "supporting_question_id": "14",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20230101/https://zarat.hatenablog.com/entry/2021/12/19/223735",
+    "source_excerpt": "cat winxp_mnt/Program Files/Look@LAN/irunin.ini | egrep IP|NIC -> %LANIP%=192.168.1.111 %LANNIC%=0010a4933e09"
+  },
+  {
+    "id": "GT-NHC-004",
+    "dataset_id": "nist-hacking-case",
+    "category": "credential",
+    "summary": "SMTP email address: whoknowsme@sbcglobal.net",
+    "expected_artifact_substrings": ["whoknowsme@sbcglobal.net"],
+    "expected_path_globs": ["**/Agent/Data/AGENT.INI"],
+    "supporting_question_id": "17",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20230101/https://zarat.hatenablog.com/entry/2021/12/19/223735",
+    "source_excerpt": "EMailAddress=\"whoknowsme@sbcglobal.net\" (from Program Files/Agent/Data/AGENT.INI)"
+  },
+  {
+    "id": "GT-NHC-005",
+    "dataset_id": "nist-hacking-case",
+    "category": "user_profile",
+    "summary": "Registered owner: Greg Schardt; online alias: Mr. Evil",
+    "expected_artifact_substrings": ["Greg Schardt", "Mr. Evil"],
+    "expected_path_globs": ["**/system32/config/SOFTWARE*", "**/system32/config/SAM*"],
+    "supporting_question_id": "5",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20240101/https://intrinsicode.net/2021/05/19/cfreds-hacking-case-report/",
+    "source_excerpt": "Greg Schardt is the registered owner; user account name is Mr. Evil. Confirmed from registry SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion RegisteredOwner and SAM user account."
+  },
+  {
+    "id": "GT-NHC-006",
+    "dataset_id": "nist-hacking-case",
+    "category": "installed_tool",
+    "summary": "Ethereal (packet capture) installed and configured in promiscuous mode",
+    "expected_artifact_substrings": ["ethereal.exe", "Ethereal"],
+    "expected_path_globs": ["**/Program Files/Ethereal/**", "**/Documents and Settings/Mr. Evil/Application Data/Ethereal/**"],
+    "supporting_question_id": null,
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20240101/https://intrinsicode.net/2021/05/19/cfreds-hacking-case-report/",
+    "source_excerpt": "Ethereal was installed on this device and configured to function in promiscuous mode. Config file in Documents and Settings/Mr. Evil/Application Data/Ethereal/preferences."
+  },
+  {
+    "id": "GT-NHC-007",
+    "dataset_id": "nist-hacking-case",
+    "category": "installed_tool",
+    "summary": "Look@LAN network discovery tool installed",
+    "expected_artifact_substrings": ["Look@LAN", "irunin.ini"],
+    "expected_path_globs": ["**/Program Files/Look@LAN/**"],
+    "supporting_question_id": null,
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20240101/https://intrinsicode.net/2021/05/19/cfreds-hacking-case-report/",
+    "source_excerpt": "Look@LAN network discovery tool installed on this device."
+  },
+  {
+    "id": "GT-NHC-008",
+    "dataset_id": "nist-hacking-case",
+    "category": "installed_tool",
+    "summary": "Anonymizer software installed (privacy tool for hiding IP/identity)",
+    "expected_artifact_substrings": ["Anonymizer"],
+    "expected_path_globs": ["**/Program Files/Anonymizer/**"],
+    "supporting_question_id": null,
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20240101/https://intrinsicode.net/2021/05/19/cfreds-hacking-case-report/",
+    "source_excerpt": "Anonymizer software installed on this device."
+  },
+  {
+    "id": "GT-NHC-009",
+    "dataset_id": "nist-hacking-case",
+    "category": "file_artifact",
+    "summary": "Intercepted network traffic stored in text file under Mr. Evil user profile",
+    "expected_artifact_substrings": ["interception", "Mr. Evil"],
+    "expected_path_globs": ["**/Documents and Settings/Mr. Evil/interception*"],
+    "supporting_question_id": null,
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20240101/https://intrinsicode.net/2021/05/19/cfreds-hacking-case-report/",
+    "source_excerpt": "Text file found at Documents and Settings/Mr. Evil/interception showing evidence of unauthorized intercepted Internet traffic."
+  },
+  {
+    "id": "GT-NHC-010",
+    "dataset_id": "nist-hacking-case",
+    "category": "other",
+    "summary": "Image acquisition MD5 hash: aee4fcd9301c03b3b054623ca261959a (matches verification)",
+    "expected_artifact_substrings": ["aee4fcd9301c03b3b054623ca261959a"],
+    "expected_path_globs": [],
+    "supporting_question_id": "1",
+    "source": "community_writeup",
+    "source_url": "https://web.archive.org/web/20230101/https://zarat.hatenablog.com/entry/2021/12/19/223735",
+    "source_excerpt": "md5sum ewfmnt/ewf1 -> aee4fcd9301c03b3b054623ca261959a (acquisition and verification hashes match)"
+  }
+]

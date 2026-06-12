@@ -61,8 +61,11 @@ dev = [
     "cyclonedx-bom>=7",
     "pip-licenses>=5",
     "python-semantic-release>=9",
-    # PDF integration tests — text and annotation extraction from rendered PDFs
-    "pypdf>=4",
+    # PDF parsing (ground-truth harness + integration tests)
+    "pypdf>=5.1",
+    # HTML snapshot parsing for NIST Hacking Case ground-truth harness
+    "beautifulsoup4>=4.12",
+    "lxml>=5.3",
 ]
 
 [project.scripts]
@@ -94,7 +97,7 @@ required-version = "==0.11.18"
 # Coverage — gates per CICD_SPEC §8
 # ----------------------------------------------------------------------
 [tool.coverage.run]
-source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common", "harness/datasets"]
+source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common", "harness/datasets", "harness/ground_truth"]
 branch = true
 parallel = true
 data_file = ".coverage"
