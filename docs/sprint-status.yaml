@@ -733,11 +733,11 @@ stories:
 
   - id: story-third-party-notices
     epic: "Epic 16 — Documentation polish + submission"
-    status: PENDING
+    status: COMPLETE
     depends_on: [readme-polish]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/83"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/204"
+    merged_at: "2026-06-12T22:30:00Z"
 
   - id: story-devpost-submission
     epic: "Epic 16 — Documentation polish + submission"
