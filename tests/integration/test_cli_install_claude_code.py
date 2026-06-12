@@ -24,22 +24,6 @@ def _invoke(*args: str) -> object:
     return _runner.invoke(app, list(args), catch_exceptions=False)
 
 
-def _has_claude(tmp_path: Path) -> Path:
-    """Create a fake claude binary and return its path."""
-    claude = tmp_path / "claude"
-    claude.write_text("#!/bin/sh\nexec true\n")
-    claude.chmod(0o755)
-    return claude
-
-
-def _patch_claude_found() -> object:
-    """Patch binary detection so tests don't depend on /usr/local/bin/claude."""
-    return patch(
-        "silentwitness_agent.cli_commands.install._SIFT_CLAUDE_PATH",
-        new_callable=lambda: property(lambda _: Path("/usr/local/bin/claude")),
-    )
-
-
 # ---------------------------------------------------------------------------
 # 1. Happy-path install: files copied to $HOME/.claude/silentwitness/
 # ---------------------------------------------------------------------------

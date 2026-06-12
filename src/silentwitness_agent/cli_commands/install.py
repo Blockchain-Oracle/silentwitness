@@ -2,33 +2,37 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Final
 
 from rich.console import Console
 
 # SIFT 2026 pre-installed Claude Code path — context/.raw-design-research/03 line 31
-_SIFT_CLAUDE_PATH = Path("/usr/local/bin/claude")
-_TARGET_DIR_NAME = Path(".claude") / "silentwitness"
-_CONFIG_DIR_NAME = "claude-code-config"
+_SIFT_CLAUDE_PATH: Final = Path("/usr/local/bin/claude")
+_TARGET_DIR_NAME: Final = Path(".claude") / "silentwitness"
+_CONFIG_DIR_NAME: Final = "claude-code-config"
 
-_REQUIRED_FILES = ("CLAUDE.md", "settings.json")
+_REQUIRED_FILES: Final = ("CLAUDE.md", "settings.json")
 
-_REQUIRED_MCP_BLOCK = {
+_REQUIRED_MCP_BLOCK: Final[dict[str, object]] = {
     "type": "stdio",
     "command": "python",
     "args": ["-m", "silentwitness_mcp"],
 }
 
-_REQUIRED_DENY_ENTRIES = {
-    "Bash(silentwitness approve*)",
-    "Edit(cases/*/audit/*.jsonl)",
-    "Edit(cases/*/evidence.json)",
-    "Edit(/var/lib/silentwitness/**)",
-}
+_REQUIRED_DENY_ENTRIES: Final = frozenset(
+    {
+        "Bash(silentwitness approve*)",
+        "Edit(cases/*/audit/*.jsonl)",
+        "Edit(cases/*/evidence.json)",
+        "Edit(/var/lib/silentwitness/**)",
+    }
+)
 
 
 def _find_repo_root(start: Path) -> Path | None:
@@ -45,7 +49,11 @@ def _find_repo_root(start: Path) -> Path | None:
 
 
 def _strip_jsonc_comments(text: str) -> str:
-    """Strip // line comments from JSONC, leaving content unchanged."""
+    """Strip // line comments from JSONC text.
+
+    Caveat: the regex also strips // sequences that appear inside quoted strings.
+    This is acceptable because our bundled settings.json has no // inside values.
+    """
     return re.sub(r"//[^\n]*", "", text)
 
 
@@ -54,7 +62,7 @@ def _verify_settings_structure(settings_path: Path, *, err: Console) -> bool:
     try:
         raw = settings_path.read_text(encoding="utf-8")
         parsed = json.loads(_strip_jsonc_comments(raw))
-    except Exception as exc:
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         err.print(f"[red]✗[/red] settings.json parse error: {exc}", highlight=False)
         return False
 
@@ -87,8 +95,6 @@ def _verify_settings_structure(settings_path: Path, *, err: Console) -> bool:
 
 
 def _sha256_content(path: Path) -> str:
-    import hashlib
-
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -146,6 +152,10 @@ def run(
             "Install Claude Code v2.0.61 first.",
             highlight=False,
         )
+        return 2
+
+    # Verify source settings.json is well-formed before writing anything to disk
+    if not _verify_settings_structure(config_src / "settings.json", err=err):
         return 2
 
     target_dir = Path.home() / _TARGET_DIR_NAME

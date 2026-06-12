@@ -327,25 +327,38 @@ def export(
 
 @app.command("install")
 def install(
+    ctx: typer.Context,
     claude_code: bool = typer.Option(False, "--claude-code"),
     cursor: bool = typer.Option(False, "--cursor"),
     continue_ide: bool = typer.Option(False, "--continue"),
     dry_run: bool = typer.Option(False, "--dry-run"),
     force: bool = typer.Option(False, "--force"),
-    ctx: typer.Context = typer.Option(typer.Context),
 ) -> None:
     from silentwitness_agent.cli_commands.install import run as _run
 
-    no_color: bool = ctx.obj.no_color if ctx.obj else False
+    cli_ctx: _CliCtx = ctx.obj
     code = _run(
         claude_code=claude_code,
         cursor=cursor,
         continue_ide=continue_ide,
         dry_run=dry_run,
         force=force,
-        no_color=no_color,
+        no_color=cli_ctx.no_color,
     )
     raise typer.Exit(code=code)
+
+
+@app.command("audit-hook", hidden=True)
+def audit_hook() -> None:
+    """PostToolUse hook called by Claude Code after every Bash invocation.
+
+    Reads the hook payload from stdin. Full provenance logging (writing to
+    cases/<id>/audit/claude-code.jsonl) is implemented in story-cli-audit-hook.
+    This stub ensures the hook exits 0 so Claude Code does not abort Bash calls.
+    """
+    import sys
+
+    sys.stdin.read()
 
 
 @app.command("register-evidence")
