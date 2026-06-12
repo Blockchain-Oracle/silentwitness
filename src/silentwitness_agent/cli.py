@@ -125,14 +125,14 @@ def init(
         raise typer.Exit(code=2) from exc
     finally:
         audit_log.close()
-    tree = (
+    out.print(
         f"[green]✓[/green] case '{case_id}' initialized at {case_dir}\n"
         "       ├─ audit/        (JSONL tool-call ledger)\n"
         "       ├─ evidence/     (registered symlinks — ro,noexec,nosuid mount)\n"
         "       ├─ report.md     (DRAFT — frontmatter only)\n"
-        "       └─ .silentwitness/case.toml"
+        "       └─ .silentwitness/case.toml",
+        highlight=False,
     )
-    out.print(tree, highlight=False)
 
 
 def _read_case_examiner(case_dir: Path, fallback: str) -> str:
@@ -388,3 +388,23 @@ def register_evidence(
         no_color=cli_ctx.no_color,
     )
     raise typer.Exit(code=code)
+
+
+@app.command("baseline-comparison")
+def baseline_comparison(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    baseline: str = typer.Option("protocol-sift", "--baseline"),
+    out: Path | None = typer.Option(None, "--out"),
+    metrics: str = typer.Option("time,pivots,provenance,hallucinations,epistemic", "--metrics"),
+    results_dir: Path | None = typer.Option(None, "--results-dir"),
+) -> None:
+    from silentwitness_agent.cli_commands.baseline_comparison import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    # fmt: off
+    raise typer.Exit(code=_run(
+        _resolve_case_dir(case_id), case_id, baseline_mode=baseline, out=out,
+        metrics_arg=metrics, no_color=cli_ctx.no_color, results_dir=results_dir,
+    ))
+    # fmt: on
