@@ -693,11 +693,11 @@ stories:
 
   - id: story-architecture-diagram-png
     epic: "Epic 16 — Documentation polish + submission"
-    status: PENDING
+    status: COMPLETE
     depends_on: []
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/78"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/205"
+    merged_at: "2026-06-12T22:48:00Z"
 
   - id: story-accuracy-report-writeup
     epic: "Epic 16 — Documentation polish + submission"
