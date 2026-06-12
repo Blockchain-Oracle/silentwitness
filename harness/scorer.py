@@ -19,6 +19,14 @@ from pathlib import Path
 from typing import Any, Literal
 
 from harness.ground_truth.schema import GroundTruthFinding
+from harness.scorer_helpers import (
+    build_metrics,
+    check_mount_writable,
+    get_commit_sha,
+    mk_classification,
+    safe_findings,
+    top_hallucination_examples,
+)
 from harness.scorer_models import (
     FindingClassification,
     HallucinationExample,
@@ -47,43 +55,17 @@ _GT_MODULES: dict[str, str] = {
 _RESULTS_DIR = Path(__file__).resolve().parent / "results"
 
 
-def _get_commit_sha() -> str:
-    try:
-        r = subprocess.run(
-            ["git", "rev-parse", "HEAD"],  # noqa: S607
-            capture_output=True,
-            text=True,
-            timeout=10,
-            cwd=str(Path(__file__).resolve().parents[1]),
-        )
-        return r.stdout.strip() if r.returncode == 0 else f"unknown (git exit {r.returncode})"
-    except FileNotFoundError:
-        return "unknown (git not found on PATH)"
-    except subprocess.TimeoutExpired:
-        return "unknown (git rev-parse timed out)"
-
-
-def _check_mount_writable(evidence_root: Path, notes: list[str]) -> None:
-    try:
-        flags = os.statvfs(str(evidence_root)).f_flag
-        if not (flags & os.ST_RDONLY):
-            notes.append(
-                f"warning: evidence mount at {evidence_root} appears writable "
-                "(expected ro,noexec,nosuid per PRD §6 NFR; proceeding)"
-            )
-    except OSError:
-        pass
-
-
 def verify_artifact_present_in_evidence(
     cited_substring: str, evidence_root: Path
 ) -> tuple[bool, list[str], int]:
     """Shell `find <root> -iname <basename>` or `grep -r -F` for glob chars.
 
     Returns (found, argv, hit_count). hit_count == -1 on timeout (indeterminate).
+    Rejects basenames starting with '-' (find/grep flag injection per CWE-88) or
+    containing NUL, and caps to 512 bytes.
     """
     basename = cited_substring.replace("\\", "/").rsplit("/", 1)[-1]
-    if not basename:
+    if not basename or basename.startswith("-") or "\x00" in basename or len(basename) > 512:
         return False, [], 0
 
     if re.search(r"[*?\[\]]", basename):
@@ -120,67 +102,58 @@ def classify_finding(
     cited_paths: list[str] = list(finding.get("cited_artifact_paths", []))
 
     if not cited_paths:
-        return FindingClassification(
-            finding_id=finding_id,
-            side=side,  # type: ignore[arg-type]
-            classification="HALLUCINATION",
-            matched_ground_truth_id=None,
-            reason="CITED_ARTIFACT_NOT_PRESENT",
-            evidence_shellout_argv=None,
+        return mk_classification(finding_id, side, "HALLUCINATION", "CITED_ARTIFACT_NOT_PRESENT")
+
+    probes = [verify_artifact_present_in_evidence(cp, evidence_root) for cp in cited_paths]
+    any_hit = any(h > 0 for _, _, h in probes)
+    any_timeout = any(h == -1 for _, _, h in probes)
+    notes: list[str] = []
+    if any_timeout:
+        timed_out = [cp for cp, (_, _, h) in zip(cited_paths, probes, strict=True) if h == -1]
+        notes.append(f"finding {finding_id}: shellout timed out on cited path(s): {timed_out}")
+
+    hit_idx = next((i for i, (_, _, h) in enumerate(probes) if h > 0), None)
+    timeout_idx = next((i for i, (_, _, h) in enumerate(probes) if h == -1), None)
+    best_idx = hit_idx if hit_idx is not None else (timeout_idx if timeout_idx is not None else 0)
+    best_argv = probes[best_idx][1] or None
+    best_hits = probes[best_idx][2]
+    evidence_kw = {
+        "evidence_shellout_argv": best_argv,
+        "evidence_shellout_hits": best_hits,
+        "notes": notes,
+    }
+
+    if not any_hit and not any_timeout:
+        return mk_classification(
+            finding_id,
+            side,
+            "HALLUCINATION",
+            "CITED_ARTIFACT_NOT_PRESENT",
+            evidence_shellout_argv=best_argv,
             evidence_shellout_hits=0,
+            notes=notes,
         )
 
-    # Step 1: ALL cited paths return 0 hits → HALLUCINATION
-    all_zero = True
-    last_argv: list[str] | None = None
-    last_hits: int | None = None
-    for cp in cited_paths:
-        _found, argv, hits = verify_artifact_present_in_evidence(cp, evidence_root)
-        last_argv = argv or last_argv
-        if hits == -1:
-            all_zero = False
-            last_hits = -1
-        else:
-            last_hits = hits
-            if hits > 0:
-                all_zero = False
-
-    if all_zero:
-        return FindingClassification(
-            finding_id=finding_id,
-            side=side,  # type: ignore[arg-type]
-            classification="HALLUCINATION",
-            matched_ground_truth_id=None,
-            reason="CITED_ARTIFACT_NOT_PRESENT",
-            evidence_shellout_argv=last_argv,
-            evidence_shellout_hits=last_hits or 0,
-        )
-
-    # Step 2: GT match via expected_artifact_substrings
     text = str(finding.get("text", finding.get("title", "")))
     combined = " ".join([text, *cited_paths]).lower()
     for gt in ground_truth:
         for substring in gt.expected_artifact_substrings:
             if substring.lower() in combined:
-                return FindingClassification(
-                    finding_id=finding_id,
-                    side=side,  # type: ignore[arg-type]
-                    classification="TRUE_POSITIVE",
+                return mk_classification(
+                    finding_id,
+                    side,
+                    "TRUE_POSITIVE",
+                    "CITED_ARTIFACT_PRESENT_AND_MATCHED",
                     matched_ground_truth_id=gt.id,
-                    reason="CITED_ARTIFACT_PRESENT_AND_MATCHED",
-                    evidence_shellout_argv=last_argv,
-                    evidence_shellout_hits=last_hits,
+                    **evidence_kw,
                 )
 
-    # Step 3: artifact present but no GT match → FALSE_POSITIVE
-    return FindingClassification(
-        finding_id=finding_id,
-        side=side,  # type: ignore[arg-type]
-        classification="FALSE_POSITIVE",
-        matched_ground_truth_id=None,
-        reason="CITED_ARTIFACT_PRESENT_BUT_GT_MISS",
-        evidence_shellout_argv=last_argv,
-        evidence_shellout_hits=last_hits,
+    return mk_classification(
+        finding_id,
+        side,
+        "FALSE_POSITIVE",
+        "CITED_ARTIFACT_PRESENT_BUT_GT_MISS",
+        **evidence_kw,
     )
 
 
@@ -201,69 +174,17 @@ def compute_false_negatives(
                     covered.add(gt.id)
 
     return [
-        FindingClassification(
-            finding_id=f"FN-{gt.id}",
-            side=side,  # type: ignore[arg-type]
-            classification="FALSE_NEGATIVE",
+        mk_classification(
+            f"FN-{gt.id}",
+            side,
+            "FALSE_NEGATIVE",
+            "NO_FINDING_FOR_GT",
             matched_ground_truth_id=gt.id,
-            reason="NO_FINDING_FOR_GT",
-            evidence_shellout_argv=None,
             evidence_shellout_hits=None,
         )
         for gt in ground_truth
         if gt.id not in covered
     ]
-
-
-def _build_metrics(
-    dataset_id: str,
-    side: str,
-    classifications: list[FindingClassification],
-    fn_rows: list[FindingClassification],
-    result: dict[str, Any],
-    total_findings: int,
-) -> ScoringMetrics:
-    tp = sum(1 for c in classifications if c.classification == "TRUE_POSITIVE")
-    fp = sum(1 for c in classifications if c.classification == "FALSE_POSITIVE")
-    hall = sum(1 for c in classifications if c.classification == "HALLUCINATION")
-    return ScoringMetrics(
-        dataset_id=dataset_id,
-        side=side,  # type: ignore[arg-type]
-        true_positives=tp,
-        false_positives=fp,
-        hallucinations=hall,
-        false_negatives=len(fn_rows),
-        time_to_first_finding_seconds=result.get("time_to_first_finding_seconds"),
-        time_to_handoff_ready_report_seconds=result.get("time_to_handoff_ready_report_seconds"),
-        total_findings_emitted=total_findings,
-    )
-
-
-def _top_hallucination_examples(
-    classifications: list[FindingClassification],
-    side: str,
-) -> list[HallucinationExample]:
-    halls = [
-        c
-        for c in classifications
-        if c.classification == "HALLUCINATION" and c.evidence_shellout_argv is not None
-    ]
-    halls.sort(key=lambda c: len((c.evidence_shellout_argv or [""])[-1]), reverse=True)
-    examples = []
-    for c in halls[:10]:
-        argv = c.evidence_shellout_argv or []
-        cited = argv[-1] if argv else ""
-        examples.append(
-            HallucinationExample(
-                side=side,  # type: ignore[arg-type]
-                finding_id=c.finding_id,
-                cited_artifact_path=cited,
-                evidence_shellout_argv=argv,
-                evidence_shellout_hits=c.evidence_shellout_hits or 0,
-                excerpt=cited[:200],
-            )
-        )
-    return examples
 
 
 def score_run(
@@ -274,7 +195,10 @@ def score_run(
 ) -> ScoringReport:
     """Load both result JSONs, classify findings, compute metrics, return ScoringReport."""
     notes: list[str] = []
-    _check_mount_writable(evidence_root, notes)
+    check_mount_writable(evidence_root, notes)
+
+    if dataset_id not in _GT_MODULES:
+        raise ValueError(f"unknown dataset_id={dataset_id!r}")
 
     baseline_result: dict[str, Any] = json.loads(baseline_result_path.read_text())
     sw_result: dict[str, Any] = json.loads(silentwitness_result_path.read_text())
@@ -284,8 +208,8 @@ def score_run(
     if not ground_truth:
         raise ValueError(f"ground truth returned empty for dataset_id={dataset_id!r}")
 
-    b_findings: list[dict[str, Any]] = baseline_result.get("findings", [])
-    sw_findings: list[dict[str, Any]] = sw_result.get("findings", [])
+    b_findings = safe_findings(baseline_result.get("findings", []), notes, "baseline")
+    sw_findings = safe_findings(sw_result.get("findings", []), notes, "silentwitness")
 
     b_classifications = [
         classify_finding(f, ground_truth, evidence_root, "baseline") for f in b_findings
@@ -297,23 +221,25 @@ def score_run(
     sw_fn = compute_false_negatives(ground_truth, sw_findings, "silentwitness")
 
     all_classifications = b_classifications + sw_classifications + b_fn + sw_fn
+    for c in all_classifications:
+        notes.extend(c.notes)
 
-    b_metrics = _build_metrics(
-        dataset_id, "baseline", b_classifications, b_fn, baseline_result, len(b_findings)
+    b_metrics = build_metrics(
+        dataset_id, "baseline", b_classifications, len(b_fn), baseline_result, len(b_findings)
     )
-    sw_metrics = _build_metrics(
-        dataset_id, "silentwitness", sw_classifications, sw_fn, sw_result, len(sw_findings)
+    sw_metrics = build_metrics(
+        dataset_id, "silentwitness", sw_classifications, len(sw_fn), sw_result, len(sw_findings)
     )
 
-    hall_examples = _top_hallucination_examples(
+    hall_examples = top_hallucination_examples(
         b_classifications, "baseline"
-    ) + _top_hallucination_examples(sw_classifications, "silentwitness")
+    ) + top_hallucination_examples(sw_classifications, "silentwitness")
     hall_examples.sort(key=lambda e: len(e.cited_artifact_path), reverse=True)
     hall_examples = hall_examples[:10]
 
     return ScoringReport(
         dataset_id=dataset_id,
-        commit_sha=_get_commit_sha(),
+        commit_sha=get_commit_sha(),
         scored_at=datetime.now(UTC),
         baseline=b_metrics,
         silentwitness=sw_metrics,
@@ -337,6 +263,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.dataset not in _GT_MODULES:
         print(f"config/validation error: unknown dataset {args.dataset!r}", file=sys.stderr)
         return 2
+    if not args.evidence.exists():
+        print(f"missing input: evidence_root {args.evidence} does not exist", file=sys.stderr)
+        return 3
     for label, path in [("baseline", args.baseline), ("silentwitness", args.silentwitness)]:
         if not path.exists():
             print(f"missing input file: {label} result not found at {path}", file=sys.stderr)
@@ -344,6 +273,9 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         report = score_run(args.baseline, args.silentwitness, args.dataset, args.evidence)
+    except json.JSONDecodeError as exc:
+        print(f"malformed result file: {exc}", file=sys.stderr)
+        return 3
     except ValueError as exc:
         if "ground truth returned empty" in str(exc):
             print(str(exc), file=sys.stderr)
@@ -365,8 +297,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"failed to write result: {exc}", file=sys.stderr)
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            print(f"warning: failed to remove temp file {tmp}: {cleanup_exc}", file=sys.stderr)
         return 2
 
     print(f"scoring report written to {out_path}", file=sys.stderr)

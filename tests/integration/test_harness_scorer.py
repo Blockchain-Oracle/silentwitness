@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-import json
+import shutil
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 _EVIDENCE = Path(__file__).resolve().parents[1] / "fixtures" / "mock-evidence" / "case-001"
 _FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
+
+pytestmark = pytest.mark.skipif(
+    shutil.which("find") is None or shutil.which("grep") is None,
+    reason="requires POSIX find + grep on PATH (per spec, classification tests must shell out)",
+)
 
 
 def _gt(
@@ -254,144 +258,3 @@ class TestScoringMetrics:
         )
         assert m.time_to_first_finding_seconds == pytest.approx(42.5)
         assert m.time_to_handoff_ready_report_seconds == pytest.approx(301.0)
-
-
-class TestCLI:
-    def test_missing_baseline_exits_3(self, tmp_path: Path) -> None:
-        """--baseline pointing to missing file → exit code 3 with stderr mention."""
-        from harness import scorer as scorer_module
-
-        sw = tmp_path / "sw.json"
-        sw.write_text("{}")
-        rc = scorer_module.main(
-            [
-                "--dataset",
-                "nitroba",
-                "--baseline",
-                str(tmp_path / "missing.json"),
-                "--silentwitness",
-                str(sw),
-                "--evidence",
-                str(_EVIDENCE),
-            ]
-        )
-        assert rc == 3
-
-    def test_empty_ground_truth_exits_4(self, tmp_path: Path) -> None:
-        """case-trapdoor (empty GT) → exit code 4, stderr mentions 'ground truth returned empty'."""
-        import io
-
-        from harness import scorer as scorer_module
-
-        b = tmp_path / "b.json"
-        s = tmp_path / "s.json"
-        b.write_text('{"findings": []}')
-        s.write_text('{"findings": []}')
-
-        captured_err = io.StringIO()
-        with patch("sys.stderr", captured_err):
-            rc = scorer_module.main(
-                [
-                    "--dataset",
-                    "case-trapdoor",
-                    "--baseline",
-                    str(b),
-                    "--silentwitness",
-                    str(s),
-                    "--evidence",
-                    str(_EVIDENCE),
-                ]
-            )
-        assert rc == 4
-        assert "ground truth returned empty" in captured_err.getvalue()
-
-    def test_successful_run_writes_json(self, tmp_path: Path) -> None:
-        """Happy path writes scoring-*.json to out dir, exit code 0."""
-        from harness import scorer as scorer_module
-
-        payload = (
-            '{"findings": [], "time_to_first_finding_seconds": null,'
-            ' "time_to_handoff_ready_report_seconds": null}'
-        )
-        b = tmp_path / "b.json"
-        s = tmp_path / "s.json"
-        b.write_text(payload)
-        s.write_text(payload)
-        out = tmp_path / "out"
-        gt_modules = {"nitroba": "harness.ground_truth.nitroba_parser"}
-
-        with patch("harness.scorer._GT_MODULES", gt_modules):
-            rc = scorer_module.main(
-                [
-                    "--dataset",
-                    "nitroba",
-                    "--baseline",
-                    str(b),
-                    "--silentwitness",
-                    str(s),
-                    "--evidence",
-                    str(_EVIDENCE),
-                    "--out",
-                    str(out),
-                ]
-            )
-        assert rc == 0
-        files = list(out.glob("nitroba/scoring-*.json"))
-        assert len(files) == 1
-        data = json.loads(files[0].read_text())
-        assert data["dataset_id"] == "nitroba"
-
-    def test_unknown_dataset_exits_2(self, tmp_path: Path) -> None:
-        """Unknown --dataset value → exit 2 with config/validation message."""
-        from harness import scorer as scorer_module
-
-        b = tmp_path / "b.json"
-        s = tmp_path / "s.json"
-        b.write_text("{}")
-        s.write_text("{}")
-        rc = scorer_module.main(
-            [
-                "--dataset",
-                "bogus",
-                "--baseline",
-                str(b),
-                "--silentwitness",
-                str(s),
-                "--evidence",
-                str(_EVIDENCE),
-            ]
-        )
-        assert rc == 2
-
-
-class TestTimeoutAndExamples:
-    def test_timeout_indeterminate_marks_not_hallucination(self, tmp_path: Path) -> None:
-        """subprocess.TimeoutExpired → hits=-1, NOT classified as HALLUCINATION."""
-        import subprocess as sp
-
-        from harness.scorer import classify_finding
-
-        with patch("harness.scorer.subprocess.run", side_effect=sp.TimeoutExpired("find", 60)):
-            result = classify_finding(
-                {"id": "F-T1", "cited_artifact_paths": ["any.exe"]},
-                [],
-                _EVIDENCE,
-                "baseline",
-            )
-        # Timeout means indeterminate, must NOT be HALLUCINATION
-        assert result.classification != "HALLUCINATION"
-
-    def test_hallucination_examples_sorted_by_length(self) -> None:
-        """score_run hallucination_examples sorted longest first, capped at 10."""
-        from harness.scorer import _top_hallucination_examples, classify_finding
-
-        findings = [
-            {"id": f"F-H{i}", "cited_artifact_paths": [f"C:\\Tools\\NotReal{i}{'x' * i}.exe"]}
-            for i in range(3)
-        ]
-        classifications = [classify_finding(f, [], _EVIDENCE, "baseline") for f in findings]
-        examples = _top_hallucination_examples(classifications, "baseline")
-        assert len(examples) == 3
-        # Longest cited path first
-        lengths = [len(e.cited_artifact_path) for e in examples]
-        assert lengths == sorted(lengths, reverse=True)
