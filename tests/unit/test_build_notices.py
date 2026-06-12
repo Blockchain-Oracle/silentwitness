@@ -9,6 +9,16 @@ from pathlib import Path
 import pytest
 
 _SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "build_notices.py"
+_REQUIRED_BINARIES = (
+    "Hayabusa",
+    "Chainsaw",
+    "Velociraptor",
+    "Zeek",
+    "Suricata",
+    "Volatility 3",
+    "MFTECmd",
+)
+_REQUIRED_PY_DEPS = ("Pydantic AI", "MCP", "WeasyPrint", "matplotlib")
 
 
 def _run(out: Path, *extra: str) -> subprocess.CompletedProcess[str]:
@@ -20,135 +30,135 @@ def _run(out: Path, *extra: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+@pytest.fixture
+def built(tmp_path: Path) -> str:
+    """Run the script once per test and return the generated NOTICES.md text."""
+    out = tmp_path / "NOTICES.md"
+    r = _run(out)
+    assert r.returncode == 0, r.stderr
+    return out.read_text()
+
+
 class TestHappyPath:
-    def test_writes_notices_md_with_header(self, tmp_path: Path) -> None:
-        """build_notices writes a NOTICES.md with the SilentWitness MIT header."""
-        out = tmp_path / "NOTICES.md"
-        r = _run(out)
-        assert r.returncode == 0, r.stderr
-        assert out.exists()
-        text = out.read_text()
-        assert "SilentWitness is licensed under MIT" in text
-        assert "aggregates third-party attributions" in text
+    def test_writes_notices_md_with_header(self, built: str) -> None:
+        assert "SilentWitness is licensed under MIT" in built
+        assert "aggregates third-party attributions" in built
 
-    def test_contains_required_binaries(self, tmp_path: Path) -> None:
-        """NOTICES.md has H2 headers for each install.sh binary."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        for name in (
-            "Hayabusa",
-            "Chainsaw",
-            "Velociraptor",
-            "Zeek",
-            "Suricata",
-            "Volatility 3",
-            "MFTECmd",
-        ):
-            assert f"## {name}" in text, f"missing H2 for {name}"
+    def test_about_this_file_section_present(self, built: str) -> None:
+        """Auditor-facing 'About this file' section explains linkage and grant-clause caveat."""
+        assert "## About this file" in built
+        assert "Linkage analysis" in built
+        assert "paraphrased summaries" in built
+        assert "subprocess-invoked" in built
 
-    def test_contains_required_python_deps(self, tmp_path: Path) -> None:
-        """NOTICES.md has entries for the major Python deps."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        for name in ("Pydantic AI", "MCP", "WeasyPrint", "matplotlib"):
-            assert f"## {name}" in text, f"missing H2 for {name}"
+    def test_contains_required_binaries(self, built: str) -> None:
+        for name in _REQUIRED_BINARIES:
+            assert f"## {name}" in built, f"missing H2 for {name}"
 
-    def test_components_sorted_alphabetically(self, tmp_path: Path) -> None:
-        """The H2 component sections appear in alphabetical order."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        h2_lines = [
-            line[3:].strip()
-            for line in text.splitlines()
-            if line.startswith("## ") and not line.startswith("## License-grant")
-        ]
-        # Skip the intro/header H2s before component entries
+    def test_contains_required_python_deps(self, built: str) -> None:
+        for name in _REQUIRED_PY_DEPS:
+            assert f"## {name}" in built, f"missing H2 for {name}"
+
+    def test_components_sorted_alphabetically(self, built: str) -> None:
+        h2_lines = [line[3:].strip() for line in built.splitlines() if line.startswith("## ")]
         component_h2s = [h for h in h2_lines if not h.startswith("About")]
         assert component_h2s == sorted(component_h2s, key=str.lower)
 
-    def test_every_entry_has_required_fields(self, tmp_path: Path) -> None:
-        """Each component entry includes name, version, SPDX, URL, copyright."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        # Spot-check one canonical entry
-        chainsaw_idx = text.index("## Chainsaw")
-        next_h2 = text.index("\n## ", chainsaw_idx + 1)
-        section = text[chainsaw_idx:next_h2]
-        assert "Version:" in section
-        assert "SPDX:" in section
-        assert "Source:" in section
-        assert "Copyright:" in section
+    def test_every_component_has_required_fields(self, built: str) -> None:
+        """BDD AC #3 — EVERY entry has Version/SPDX/Source/Copyright (not just spot-check)."""
+        # Split by H2 component headers
+        component_names = (
+            "Chainsaw",
+            "Hayabusa",
+            "Jinja2",
+            "MCP",
+            "MFTECmd",
+            "Mistune",
+            "Pydantic AI",
+            "Pydantic",
+            "Rich",
+            "Suricata",
+            "Typer",
+            "Velociraptor",
+            "Volatility 3",
+            "WeasyPrint",
+            "Zeek",
+            "en_core_web_lg",
+            "httpx",
+            "matplotlib",
+            "spaCy",
+            "uv",
+        )
+        for name in component_names:
+            idx = built.index(f"## {name}\n")
+            # Find next H2 after this one (or EOF)
+            next_idx = built.find("\n## ", idx + 1)
+            section = built[idx:] if next_idx == -1 else built[idx:next_idx]
+            assert "Version:" in section, f"{name}: missing Version"
+            assert "SPDX:" in section, f"{name}: missing SPDX"
+            assert "Source:" in section, f"{name}: missing Source"
+            assert "Copyright:" in section, f"{name}: missing Copyright"
 
 
-class TestGPLLicenseGrants:
-    def test_gpl_component_includes_grant_clause(self, tmp_path: Path) -> None:
-        """GPL-3.0 components include a verbatim license-grant snippet."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        # Hayabusa is GPL-3.0; spec requires the verbatim grant clause
-        assert "GPL-3.0" in text
-        assert "License-grant" in text or "This program is free software" in text
-
-    def test_agpl_component_includes_grant_clause(self, tmp_path: Path) -> None:
-        """AGPL-3.0 components (Velociraptor) include their grant clause."""
-        out = tmp_path / "NOTICES.md"
-        _run(out)
-        text = out.read_text()
-        assert "AGPL-3.0" in text
+class TestGrantClauses:
+    @pytest.mark.parametrize(
+        "component,spdx,grant_marker",
+        [
+            ("Chainsaw", "GPL-3.0-only", "Summary grant clause (GPL-3.0-only"),
+            ("Hayabusa", "GPL-3.0-only", "Summary grant clause (GPL-3.0-only"),
+            ("Suricata", "GPL-2.0-only", "Summary grant clause (GPL-2.0-only"),
+            ("Velociraptor", "AGPL-3.0-only", "Summary grant clause (AGPL-3.0-only"),
+        ],
+    )
+    def test_grant_clause_per_license(
+        self, built: str, component: str, spdx: str, grant_marker: str
+    ) -> None:
+        """Each GPL/AGPL component has its license-specific summary grant clause."""
+        idx = built.index(f"## {component}\n")
+        next_idx = built.find("\n## ", idx + 1)
+        section = built[idx:] if next_idx == -1 else built[idx:next_idx]
+        assert f"SPDX: {spdx}" in section
+        assert grant_marker in section
 
 
 class TestErrors:
     def test_unknown_license_exits_1(self, tmp_path: Path) -> None:
-        """Injecting an unknown-license component → exit 1 with `UNKNOWN_LICENSE:`."""
         out = tmp_path / "NOTICES.md"
         r = _run(out, "--inject-unknown", "MysteryLib")
         assert r.returncode == 1
         assert "UNKNOWN_LICENSE: MysteryLib" in r.stderr
 
 
-class TestMain:
-    def test_default_out_writes_to_repo_root(self, tmp_path: Path) -> None:
-        """--out NOTICES.md (default) writes relative to CWD."""
-        # Just verify the script runs without errors when explicit out provided
-        out = tmp_path / "OUT.md"
-        r = _run(out)
-        assert r.returncode == 0
-        assert out.exists()
+class TestDeterminism:
+    def test_two_builds_byte_equal(self, tmp_path: Path) -> None:
+        """Same catalog → byte-identical output across runs (no dict-iteration drift)."""
+        a = tmp_path / "a.md"
+        b = tmp_path / "b.md"
+        _run(a)
+        _run(b)
+        assert a.read_bytes() == b.read_bytes()
 
 
-def test_real_build_produces_valid_notices() -> None:
-    """End-to-end: run with no args (default --out NOTICES.md) in repo root."""
-    import tempfile
+class TestCriticalAttributions:
+    def test_vol3_uses_licenseref_not_osl(self, built: str) -> None:
+        """Vol3 uses VSL (LicenseRef-Volatility-VSL-1.0), NOT OSL-3.0 (reviewer C1 fix)."""
+        idx = built.index("## Volatility 3\n")
+        next_idx = built.find("\n## ", idx + 1)
+        section = built[idx:next_idx]
+        assert "LicenseRef-Volatility-VSL-1.0" in section
+        assert "OSL-3.0" not in section
 
-    with tempfile.TemporaryDirectory() as td:
-        out_path = Path(td) / "NOTICES.md"
-        r = subprocess.run(
-            [sys.executable, str(_SCRIPT), "--out", str(out_path)],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        assert r.returncode == 0, r.stderr
-        text = out_path.read_text()
-        # Spec verification: ≥9 H2 entries for required components
-        required = (
-            "Hayabusa",
-            "Chainsaw",
-            "Velociraptor",
-            "Zeek",
-            "Suricata",
-            "Volatility 3",
-            "MFTECmd",
-            "Pydantic AI",
-            "MCP",
-        )
-        found = sum(1 for name in required if f"## {name}" in text)
-        assert found >= 9, f"only {found}/9 required H2s present"
+    def test_spacy_lg_model_is_mit_not_ccbysa(self, built: str) -> None:
+        """en_core_web_lg is MIT per upstream meta.json (reviewer C2 fix)."""
+        idx = built.index("## en_core_web_lg\n")
+        next_idx = built.find("\n## ", idx + 1)
+        section = built[idx:next_idx]
+        assert "SPDX: MIT" in section
+        assert "CC-BY-SA" not in section
+
+    def test_no_redundant_fastmcp_entry(self, built: str) -> None:
+        """We use mcp.server.fastmcp (sub-module of MCP), not standalone FastMCP."""
+        assert "## FastMCP" not in built
 
 
 @pytest.mark.parametrize(
@@ -166,7 +176,6 @@ def test_real_build_produces_valid_notices() -> None:
     ],
 )
 def test_supported_spdx_ids(spdx: str) -> None:
-    """Script knows the supported SPDX IDs from the story spec."""
-    from scripts.build_notices import _SUPPORTED_SPDX
+    from scripts._notices_catalog import SUPPORTED_SPDX
 
-    assert spdx in _SUPPORTED_SPDX
+    assert spdx in SUPPORTED_SPDX
