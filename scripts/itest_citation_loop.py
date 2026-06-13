@@ -77,10 +77,42 @@ async def _run() -> int:
             )
             print("[itest] record_observation ->", json.dumps(obs))
 
+            # Negative case: a span that is NOT in the cited output must REJECT,
+            # and the rejection envelope must carry the read_tool_output fix-hint
+            # (the strongest-lever, at-failure guidance).
+            bad = _payload(
+                await session.call_tool(
+                    "record_observation",
+                    {
+                        "text": "The host 10.0.0.5 did something.",
+                        "audit_ids": [rd["audit_id"]],
+                        "cited_spans": [
+                            {
+                                "audit_id": rd["audit_id"],
+                                "sha256_of_normalized_output": rd["sha256_of_normalized_output"],
+                                "line_start": 1,
+                                "line_end": 2,
+                                "span_text": "this text is definitely not in the log",
+                            }
+                        ],
+                    },
+                )
+            )
+            bad_advisories = " ".join(str(a) for a in (bad.get("advisories") or []))
+            bad_data = bad.get("data") if isinstance(bad.get("data"), dict) else {}
+            rejected = bad_data.get("success") is False
+            hint_present = "read_tool_output" in bad_advisories
+            print(f"[itest] bad-citation rejected={rejected} fix-hint-in-advisories={hint_present}")
+
     data = obs.get("data")
     if not isinstance(data, dict):
         data = {}
-    ok = data.get("success") is True and isinstance(data.get("observation_id"), str)
+    ok = (
+        data.get("success") is True
+        and isinstance(data.get("observation_id"), str)
+        and rejected
+        and hint_present
+    )
     print(
         "[itest]",
         f"PASS — observation {data.get('observation_id')} accepted via read_tool_output citation"

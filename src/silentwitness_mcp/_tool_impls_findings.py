@@ -15,7 +15,7 @@ from mcp.server.session import ServerSession
 from pydantic import ValidationError
 
 from silentwitness_mcp._lifecycle import AppContext
-from silentwitness_mcp._tool_impls import _case_deps, _GuardFn
+from silentwitness_mcp._tool_impls import _augment_advisories, _case_deps, _GuardFn
 from silentwitness_mcp.findings._audit_index import build_audit_index
 from silentwitness_mcp.findings.interpretation import (
     InterpretationInput,
@@ -33,6 +33,25 @@ from silentwitness_mcp.findings.pivot import PivotInput, record_pivot as _impl_r
 
 FINDING_TOOLS: frozenset[str] = frozenset(
     {"record_observation", "record_interpretation", "record_narrative", "record_pivot"}
+)
+
+# record_observation rejection reasons where re-reading the cited output via
+# read_tool_output is the fix. Surfacing the hint in the REJECTION envelope is the
+# strongest guidance: it is read at the moment of failure, coupled to enforcement.
+_CITATION_FIX_REASONS: frozenset[str] = frozenset(
+    {
+        "SPAN_NOT_IN_LINES",
+        "LINE_RANGE_OUT_OF_BOUNDS",
+        "HALLUCINATED_ENTITIES",
+        "AUDIT_ID_NOT_FOUND",
+        "OUTPUT_HASH_MISMATCH",
+    }
+)
+_CITATION_FIX_HINT = (
+    "To fix: call read_tool_output(output_path=...) on the output whose audit_id you "
+    "cited, locate the exact line containing your claim, and re-submit with that line "
+    "quoted verbatim as span_text, the returned sha256_of_normalized_output, and the "
+    "0-based half-open line range that contains it."
 )
 
 
@@ -66,7 +85,12 @@ def register_finding_recorders(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             audit_logger=audit,
             model_used=model,
         )
-        return resp.model_dump(mode="json")
+        dumped = resp.model_dump(mode="json")
+        data = dumped.get("data")
+        reason = data.get("reason") if isinstance(data, dict) else None
+        if reason in _CITATION_FIX_REASONS:
+            return _augment_advisories(dumped, _CITATION_FIX_HINT)
+        return dumped
 
     @mcp.tool()
     async def record_interpretation(

@@ -131,24 +131,30 @@ def _collect_output_paths(obj: Any) -> list[str]:
     return found
 
 
-def _with_citation_next_step(dumped: dict[str, Any]) -> dict[str, Any]:
-    """Attach a structured next-step telling the agent how to cite the output
-    files this tool produced.
-
-    This is the ENFORCEMENT-aligned alternative to a system-prompt plea: the
-    guidance rides in the tool's own response, which the agent always reads, so
-    it does not depend on the agent having internalised a prompt instruction. The
-    citation gate still does the hard enforcement (a finding must quote verbatim
-    content) — this just removes the discovery friction every single call."""
-    paths = _collect_output_paths(dumped)
-    if paths:
-        dumped["citation_next_step"] = (
-            "The fields above are an INVENTORY of output files, not their content. "
-            "To cite a specific event in record_observation, call "
-            "read_tool_output(output_path=<one of these paths>) and quote the exact "
-            f"line verbatim. Readable output files: {paths}"
-        )
+def _augment_advisories(dumped: dict[str, Any], *extra: str | None) -> dict[str, Any]:
+    """Append guidance to the response's TYPED ``advisories`` field (the same
+    channel as ZEEK_CAVEATS) — never an ad-hoc dict key. The agent always reads a
+    tool's advisories; the gate still does the hard enforcement. ``None`` entries
+    are dropped so callers can pass an optional hint inline."""
+    extras = [e for e in extra if e]
+    if extras:
+        adv = list(dumped.get("advisories") or [])
+        adv.extend(extras)
+        dumped["advisories"] = adv
     return dumped
+
+
+def _read_to_cite_advisory(dumped: dict[str, Any]) -> str | None:
+    """Advisory pointing the agent at read_tool_output for the output files this
+    tool produced. ``None`` when the response carries no file paths."""
+    paths = _collect_output_paths(dumped)
+    if not paths:
+        return None
+    return (
+        "These fields are an INVENTORY of output files, not their content. To cite a "
+        "specific event in record_observation, call read_tool_output(output_path="
+        f"<one of these>) and quote the exact line verbatim: {paths}"
+    )
 
 
 def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
@@ -237,7 +243,8 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             model_used=model,
             timeout_s=timeout_s,
         )
-        return _with_citation_next_step(resp.model_dump(mode="json"))
+        dumped = resp.model_dump(mode="json")
+        return _augment_advisories(dumped, _read_to_cite_advisory(dumped))
 
     @mcp.tool()
     async def read_tool_output(
