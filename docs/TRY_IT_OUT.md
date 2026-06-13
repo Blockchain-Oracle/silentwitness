@@ -20,7 +20,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchai
 
 # 2) Register the case + evidence
 silentwitness init nitroba-smoke-001 --examiner $USER
-silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap
+silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap
 
 # 3) Investigate
 silentwitness investigate nitroba-smoke-001
@@ -65,7 +65,7 @@ docker compose up -d --build
 # 2) Run an investigation — same init + register-evidence + investigate sequence as Path A,
 #    executed inside the container so the host needs no SIFT install.
 docker compose exec silentwitness silentwitness init nitroba-smoke-001 --examiner $USER
-docker compose exec silentwitness silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap
+docker compose exec silentwitness silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap
 docker compose exec silentwitness silentwitness investigate nitroba-smoke-001
 ```
 
@@ -91,7 +91,7 @@ services:
       - silentwitness-ledger:/var/lib/silentwitness
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SILENTWITNESS_MODEL=anthropic:claude-opus-4-7-1m
+      - SILENTWITNESS_MODEL=anthropic:claude-opus-4-7
 
 volumes:
   silentwitness-ledger: {driver: local}
@@ -100,7 +100,7 @@ volumes:
 ## Step-by-step against Nitroba (recommended first run)
 
 1. **`silentwitness init nitroba-smoke-001 --examiner $USER`** — creates `cases/nitroba-smoke-001/.silentwitness/case.toml`, `audit/`, `findings.json`, and an empty `evidence.json` registry.
-2. **`silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap`** — computes SHA256, verifies against the canonical hash in `harness/datasets/nitroba.manifest.json`, refuses to register if the mount is writable (`ro,noexec,nosuid` check per architecture.md §4.11).
+2. **`silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap`** — computes SHA256, verifies against the canonical hash in `harness/datasets/nitroba.manifest.json`, refuses to register if the mount is writable (`ro,noexec,nosuid` check per architecture.md §4.11).
 3. **`silentwitness investigate nitroba-smoke-001`** — opens the live rich layout; the hypothesis sequence is `form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC → confirm`. Each tool call appears in `audit/<backend>.jsonl` with its `audit_id`, `result_sha256`, and `elapsed_ms`.
 4. **`silentwitness review nitroba-smoke-001`** — paginates staged findings with the `[a]pprove [r]eject [m]odify [s]kip` examiner UI (ux-spec §2.4). Approval signs the HMAC ledger row at `/var/lib/silentwitness/verification/<case_id>.jsonl`.
 5. **`silentwitness export nitroba-smoke-001 --pdf --out ./report.pdf`** — WeasyPrint renders the Markdown report with verify-link Appendix-Audit; pdf opens in any viewer.
@@ -111,7 +111,7 @@ volumes:
 Per PRD §5 FR3, `SILENTWITNESS_MODEL` selects the provider + model. All four are CI-tested via `tests/integration/test_investigator_provider_switch.py`:
 
 ```bash
-export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7-1m"        # default; recommended for the demo
+export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"        # default; recommended for the demo
 export SILENTWITNESS_MODEL="openai:gpt-5"                          # alternative — chat-completions API
 export SILENTWITNESS_MODEL="google-gla:gemini-2.5-pro"             # alternative
 export SILENTWITNESS_MODEL="ollama:llama4-70b-instruct"            # local; longer-running on first cold cache

@@ -79,7 +79,7 @@ The contract the build must meet. Numbered to match Epics.
 
 1. **MUST** run on stock SIFT 2026 (Ubuntu 24.04.2 Noble, Python 3.12, Claude Code v2.0.61 at `/usr/local/bin/claude`, Volatility 3 at `/opt/volatility3/bin/vol`).
 2. **MUST** ship a Custom MCP Server (Python, FastMCP) wrapping **≥15 typed Pydantic-v2 forensic tools** spanning memory, disk, log, network, registry. No generic `execute_shell()` exposed.
-3. **MUST** be model-agnostic — switchable via `SILENTWITNESS_MODEL` env var (default `anthropic:claude-opus-4-7-1m`); CI-tested against ≥2 providers. Matches Valhuntir's "LLM client agnostic" bar.
+3. **MUST** be model-agnostic — switchable via `SILENTWITNESS_MODEL` env var (default `anthropic:claude-opus-4-7`); CI-tested against ≥2 providers. Matches Valhuntir's "LLM client agnostic" bar.
 4. **MUST** architecturally reject finding claims citing evidence not present (citation + entity gates, BRAINSTORM Decision 3). Server returns `REJECTED` with reason; agent revises.
 5. **MUST** log every MCP tool call to JSONL at `cases/<case_id>/audit/<backend>.jsonl` with stable `audit_id` (`sift-<examiner>-<YYYYMMDD>-<NNN>`, resumes across restarts).
 6. **MUST** maintain a structured incident report (Markdown + YAML frontmatter) at `cases/<case_id>/report.md`, auto-saved by atomic rename on every staged Observation / Interpretation / Pivot, FOR508-shaped sections including **Gaps** (epistemic honesty) + Appendix-Audit.

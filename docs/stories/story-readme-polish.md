@@ -28,7 +28,7 @@
        ```bash
        curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/<org>/silentwitness/main/install.sh | bash
        silentwitness init mr-evil-001 --examiner $USER
-       silentwitness register-evidence mr-evil-001 --path /evidence/hacking-case
+       silentwitness register-evidence mr-evil-001 /evidence/hacking-case
        silentwitness investigate mr-evil-001
        ```
        (Counts as 3 user-typed commands once `register-evidence` is chained off `init`; the README presents them as 3 numbered steps with the register-evidence call collapsed into step 2.)

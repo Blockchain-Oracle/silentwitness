@@ -40,12 +40,25 @@ install_hayabusa() {
         "ffb31e02bd47d840d999d964d4663287cdb194a22ea856904348786acba414d7"  # pragma: allowlist secret
     sudo mkdir -p /opt/hayabusa
     sudo unzip -q "$TMPDIR/hayabusa.zip" -d "$TMPDIR/hayabusa-extracted"
-    # Release archive layout: hayabusa-3.9.0-lin-x64-gnu/hayabusa — flatten.
-    sudo cp "$(find "$TMPDIR/hayabusa-extracted" -name hayabusa -type f | head -1)" \
-        /opt/hayabusa/hayabusa
+    # Release archive layout (verified v3.9.0): the binary sits at the archive
+    # root, version-suffixed as `hayabusa-3.9.0-lin-x64-gnu` (NOT a plain
+    # `hayabusa` inside a wrapper dir). Match the versioned name and flatten.
+    local hb_bin
+    hb_bin="$(find "$TMPDIR/hayabusa-extracted" -type f -name 'hayabusa-*-lin-x64-gnu' | head -1)"
+    [[ -n "$hb_bin" ]] || fail "hayabusa binary not found in extracted archive"
+    sudo cp "$hb_bin" /opt/hayabusa/hayabusa
     sudo chmod +x /opt/hayabusa/hayabusa
-    /opt/hayabusa/hayabusa --version || fail "hayabusa runtime check failed"
-    log "Hayabusa v3.9.0 installed at /opt/hayabusa/hayabusa"
+    # Hayabusa is a subcommand CLI (clap): it rejects `--version`/`-V`/`-h`.
+    # `help` is the only zero-exit smoke check and prints the version banner.
+    /opt/hayabusa/hayabusa help >/dev/null 2>&1 || fail "hayabusa runtime check failed"
+    # Assert the exact version so a wrong/corrupt/mismatched binary fails loudly.
+    # Capturing without comparing would silently accept a blank banner (pipefail
+    # is masked inside command substitution), so the banner must be load-bearing.
+    local hb_ver
+    hb_ver="$(/opt/hayabusa/hayabusa help 2>&1 | grep -ioE 'Hayabusa v[0-9.]+' | head -1)"
+    [[ "$hb_ver" == "Hayabusa v3.9.0" ]] \
+        || fail "hayabusa version check failed (expected Hayabusa v3.9.0, got: '${hb_ver:-<none>}')"
+    log "Hayabusa installed: $hb_ver"
 }
 
 # ---------------------------------------------------------------------------
@@ -159,7 +172,8 @@ install_suricata() {
     log "installing Suricata from Ubuntu Noble universe"
     sudo apt-get update -q
     sudo apt-get install -y --no-install-recommends suricata
-    /usr/bin/suricata --version || fail "suricata runtime check failed"
+    # Suricata's version flag is `-V` (not `--version`, which it rejects).
+    /usr/bin/suricata -V || fail "suricata runtime check failed"
     log "Suricata installed at /usr/bin/suricata"
     # Fetch ET Open rules to /var/lib/suricata/rules/suricata.rules.
     # suricata_run uses -S <rules> to load ONLY the caller-specified rules file;

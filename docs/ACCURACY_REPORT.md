@@ -165,7 +165,7 @@ for dataset in nitroba nist-data-leakage nist-hacking-case; do
 done
 ```
 
-Expected wall-clock derivation: the TL;DR target times-to-handoff sum to ~2 h 6 min for the baseline and ~35 min for SilentWitness across the three active datasets (610+2400+1800 + 250+1100+850 seconds = 7610 s ≈ 2.1 h on the model side). Add ~30 min for `verify_manifest` + harness IO + scoring + delta-report + bar-chart rendering. Add 1–2 h slack for first-run dataset download (NIST artifacts are 20+ GB; download time dominates fresh runs). Total upper bound: ~4 hours fresh, ~3 hours warm-cache. Expected token spend at the default model (`anthropic:claude-opus-4-7-1m`): ~$60–$80 USD across all three datasets, dominated by the Hacking Case's larger evidence-tree exploration.
+Expected wall-clock derivation: the TL;DR target times-to-handoff sum to ~2 h 6 min for the baseline and ~35 min for SilentWitness across the three active datasets (610+2400+1800 + 250+1100+850 seconds = 7610 s ≈ 2.1 h on the model side). Add ~30 min for `verify_manifest` + harness IO + scoring + delta-report + bar-chart rendering. Add 1–2 h slack for first-run dataset download (NIST artifacts are 20+ GB; download time dominates fresh runs). Total upper bound: ~4 hours fresh, ~3 hours warm-cache. Expected token spend at the default model (`anthropic:claude-opus-4-7`): ~$60–$80 USD across all three datasets, dominated by the Hacking Case's larger evidence-tree exploration.
 
 ## Appendix A — Audit-trail samples
 

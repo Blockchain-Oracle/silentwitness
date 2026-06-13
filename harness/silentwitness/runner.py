@@ -21,7 +21,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 _DatasetId = Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
-_DEFAULT_MODEL = "anthropic:claude-opus-4-7-1m"
+_DEFAULT_MODEL = "anthropic:claude-opus-4-7"
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "harness" / "results"
 
 # Literal sets match values written by the SW agent to audit JSONL files.

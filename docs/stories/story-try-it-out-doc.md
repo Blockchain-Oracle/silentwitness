@@ -30,7 +30,7 @@
      curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/<org>/silentwitness/main/install.sh | bash
      # 2) Register the case + evidence
      silentwitness init nitroba-smoke-001 --examiner $USER
-     silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap
+     silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap
      # 3) Investigate
      silentwitness investigate nitroba-smoke-001
      ```
@@ -50,13 +50,13 @@
      Sub-section `### Pre-built image`: `docker pull ghcr.io/<org>/silentwitness:latest` + image SHA pinned in README per PRD §6 reproducibility.
   5. `## Step-by-step against Nitroba (recommended first run)` — narrative walkthrough using Path A or Path B:
      - Step 1: `silentwitness init nitroba-smoke-001 --examiner $USER` — what gets created (`cases/nitroba-smoke-001/.silentwitness/case.toml`, `audit/`, `findings.json`).
-     - Step 2: `silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap` — SHA256 verification against the manifest at `harness/datasets/nitroba.manifest.json`.
+     - Step 2: `silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap` — SHA256 verification against the manifest at `harness/datasets/nitroba.manifest.json`.
      - Step 3: `silentwitness investigate nitroba-smoke-001` — what the live rich layout shows; what hypothesis events you should expect (form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC).
      - Step 4: `silentwitness review nitroba-smoke-001` — paging through staged findings; the `[a]pprove [r]eject [m]odify [s]kip` examiner UI per ux-spec §2.4.
      - Step 5: `silentwitness export nitroba-smoke-001 --pdf --out ./report.pdf` — WeasyPrint render with verify-link Appendix-Audit.
      - Step 6: `silentwitness verify nitroba-smoke-001` — HMAC-ledger recompute showing the audit trail is intact.
   6. `## Model selection (provider-agnostic)` — cite PRD §5 FR3:
-     - `export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7-1m"` (default; recommended for the demo)
+     - `export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"` (default; recommended for the demo)
      - `export SILENTWITNESS_MODEL="openai:gpt-5"` (alternative — CI-tested per PRD §5 FR3)
      - `export SILENTWITNESS_MODEL="google-gla:gemini-2.5-pro"` (alternative)
      - `export SILENTWITNESS_MODEL="ollama:llama4-70b-instruct"` (local; longer-running on first cold cache)

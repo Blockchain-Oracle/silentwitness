@@ -29,7 +29,7 @@ _INSTALL_SCRIPT_SHA256_FILE = Path(__file__).resolve().parent / "install-script-
 _RESULTS_DIR = Path(__file__).resolve().parents[2] / "harness" / "results"
 INSTALL_SCRIPT_SHA256 = _INSTALL_SCRIPT_SHA256_FILE.read_text(encoding="utf-8").strip()
 _DatasetId = Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
-_DEFAULT_MODEL = "anthropic:claude-opus-4-7-1m"
+_DEFAULT_MODEL = "anthropic:claude-opus-4-7"
 
 
 class BaselineInstallError(Exception):
