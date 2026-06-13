@@ -701,11 +701,11 @@ stories:
 
   - id: story-accuracy-report-writeup
     epic: "Epic 16 — Documentation polish + submission"
-    status: PENDING
+    status: COMPLETE
     depends_on: [delta-report]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/79"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/208"
+    merged_at: "2026-06-13T05:55:00Z"
 
   - id: story-dataset-doc
     epic: "Epic 16 — Documentation polish + submission"
