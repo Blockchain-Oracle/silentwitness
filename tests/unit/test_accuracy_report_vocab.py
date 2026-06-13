@@ -143,7 +143,51 @@ _MUTATIONS: list[tuple[Callable[[str], str], str]] = [
     (lambda t: t.replace("sift-harness-20260612-001", "no-match"), "residuals_caught"),
     (lambda t: t.replace("- bullet one", ""), "residuals_uncaught"),
     (lambda t: "\n".join(["pad"] * 501) + t, "max_lines"),
+    # Delete a section header → fails sixteen_h2 (count drops to 15)
+    (lambda t: t.replace("## Methodology\n", ""), "sixteen_h2"),
+    # Delete the last (Glossary) heading → fails last_h2
+    (lambda t: t.replace("## Appendix B — Glossary", "## Different"), "last_h2"),
+    # Delete a required section header that the gate slices into → section_missing
+    (
+        lambda t: t.replace("## Residual hallucinations we caught\n", "## Other\n"),
+        "section_missing",
+    ),
 ]
+
+
+def test_ok_doc_self_passes_gate(tmp_path: Path) -> None:
+    """The synthetic happy-path stub must satisfy every gate rule.
+
+    If a future rule is added and _ok_doc() isn't updated, every parametrized
+    mutation test starts failing for the wrong reason. This guard fires first.
+    """
+    good = tmp_path / "ACCURACY_REPORT.md"
+    good.write_text(_ok_doc())
+    r = _run_gate("--doc", str(good))
+    assert r.returncode == 0, r.stderr
+
+
+def test_committed_doc_has_at_least_16_h2() -> None:
+    """Deletion-regression guard: committed doc must keep at least 16 sections."""
+    h2s = [ln for ln in _DOC.read_text().splitlines() if ln.startswith("## ")]
+    assert len(h2s) >= 16, f"committed doc has only {len(h2s)} H2 sections"
+
+
+def test_committed_doc_first_h2_is_status_and_last_is_glossary() -> None:
+    """Anchor-point regression guard."""
+    h2s = [ln for ln in _DOC.read_text().splitlines() if ln.startswith("## ")]
+    assert h2s[0] == "## Status + scope"
+    assert h2s[-1].startswith("## Appendix B — Glossary")
+
+
+def test_no_broken_vanilla_prompt_reference() -> None:
+    """story-required ref to harness/baseline/vanilla_prompt.md must NOT exist
+    in the committed doc; the file is not in the repo and was a broken link."""
+    text = _DOC.read_text()
+    assert "harness/baseline/vanilla_prompt.md" not in text, (
+        "Broken reference to nonexistent vanilla_prompt.md; replace with the "
+        "real prompt-source description per code-reviewer finding"
+    )
 
 
 @pytest.mark.parametrize(

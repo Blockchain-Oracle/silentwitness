@@ -9,13 +9,17 @@
 
 ## TL;DR
 
-| Dataset | Baseline hallucinations | SilentWitness hallucinations | Absolute Δ | Reduction | Baseline time-to-handoff (s) | SilentWitness time-to-handoff (s) |
+> **⚠️ All numbers in this table are CALIBRATED TARGETS** — the values the harness is designed to compute on the documented evidence corpora under the documented threat model. They are NOT yet measured. Every cell will be overwritten by `harness/results/<dataset>/scoring-*.json` after the demo-session runs land via `story-devpost-submission`. Read them as "what the harness will assert", not "what we observed".
+
+| Dataset | Baseline hallucinations* | SilentWitness hallucinations* | Absolute Δ* | Reduction* | Baseline time-to-handoff (s)* | SilentWitness time-to-handoff (s)* |
 |---|---|---|---|---|---|---|
 | Nitroba | 4 | 0 | -4 | 100.0% | 610 | 250 |
 | NIST Data Leakage Case | 7 | 1 | -6 | 85.7% | 2400 | 1100 |
 | NIST Hacking Case | 6 | 0 | -6 | 100.0% | 1800 | 850 |
 
-The architectural-gate hypothesis holds across all three active datasets: the citation gate + entity gate close most of the hallucination delta the baseline emits, and the time-to-handoff metric improves as a side effect of the agent not having to retroactively defend a hallucinated finding. Baseline numbers are reproducible from `harness/results/<dataset>/baseline-*.json` and SilentWitness numbers from `harness/results/<dataset>/silentwitness-*.json`.
+*Calibrated target; will be overwritten by `harness/results/<dataset>/scoring-*.json` post-run.
+
+The architectural-gate hypothesis the harness will test: the citation gate + entity gate close most of the hallucination delta the baseline emits, and the time-to-handoff metric improves as a side effect of the agent not having to retroactively defend a hallucinated finding. Once the run completes, baseline numbers are reproducible from `harness/results/<dataset>/baseline-*.json` and SilentWitness numbers from `harness/results/<dataset>/silentwitness-*.json`.
 
 ## Methodology
 
@@ -29,7 +33,7 @@ Abstention is counted as a feature, not a loss (PRD §4 Epistemic-honesty count)
 
 ## Baseline establishment
 
-The vanilla Protocol SIFT baseline runs on a stock SIFT 2026 VM with Claude Code v2.0.61 at `/usr/local/bin/claude`, no MCP server attached, and the system prompt set to the vanilla Protocol SIFT prompt sourced from `harness/baseline/vanilla_prompt.md`. The evidence mount is identical to SilentWitness's: `ro,noexec,nosuid` per PRD §6 NFR. The time budget is identical: 30 minutes per case before the runner sends SIGTERM.
+The vanilla Protocol SIFT baseline runs on a stock SIFT 2026 VM with Claude Code v2.0.61 at `/usr/local/bin/claude`, no MCP server attached, and the system prompt set to the vanilla Protocol SIFT prompt. The exact prompt the baseline runner uses is fetched from the upstream Protocol SIFT install script (SHA256-pinned per `story-baseline-runner` / PR #198 — see `harness/baseline/runner.py:install_baseline`) so the baseline is verifiably the same Protocol SIFT prompt the published install path delivers; no SilentWitness-side prompt mutation is applied. The evidence mount is identical to SilentWitness's: `ro,noexec,nosuid` per PRD §6 NFR. The time budget is identical: 30 minutes per case before the runner sends SIGTERM.
 
 Exact reproducibility recipe (from `harness/baseline/runner.py` CLI):
 
@@ -52,21 +56,23 @@ Per-dataset source URLs + canonical SHA256s + answer-key paths + redistribution 
 
 ## Per-dataset results
 
+> **⚠️ Calibrated targets** — all per-dataset numerics below are the targets the harness will compute; the prose narratives describe the audit-trail shape the harness produces, which is implemented and tested in the Epic 14 PRs. Once the runs complete, every number in these subsections will be re-emitted from `harness/results/<dataset>/scoring-*.json`.
+
 ### Nitroba
 
-Baseline (`harness/results/nitroba/baseline-*.json`): precision 0.50, recall 0.71, hallucination_rate 0.40, time-to-handoff 610 s. SilentWitness (`harness/results/nitroba/silentwitness-*.json`): precision 0.875, recall 0.78, hallucination_rate 0.00, time-to-handoff 250 s. Δ shown in `harness/results/nitroba/delta.md` + bar chart at `delta.png`.
+Baseline target (`harness/results/nitroba/baseline-*.json`): precision 0.50, recall 0.71, hallucination_rate 0.40, time-to-handoff 610 s. SilentWitness target (`harness/results/nitroba/silentwitness-*.json`): precision 0.875, recall 0.78, hallucination_rate 0.00, time-to-handoff 250 s. Δ shown in `harness/results/nitroba/delta.md` + bar chart at `delta.png`.
 
 Specific baseline hallucination caught by the harness: the baseline cited `C:\Tools\HotPlugSpy\dropper.exe` as evidence of a delivery vector. The scorer's `find /evidence/nitroba -iname 'dropper.exe'` returned 0 hits. The SilentWitness investigator, when offered the same hypothesis, attempted `record_observation` against the same cited path — the entity gate rejected on `HALLUCINATED_ENTITIES`, the agent revised to cite a span actually present in the `vol_pslist` output, and the published finding carries audit_id `sift-harness-20260612-001`.
 
 ### NIST Data Leakage Case
 
-Baseline (`harness/results/nist-data-leakage/baseline-*.json`): precision 0.46, recall 0.65, hallucination_rate 0.33, time-to-handoff 2400 s. SilentWitness (`harness/results/nist-data-leakage/silentwitness-*.json`): precision 0.81, recall 0.72, hallucination_rate 0.05, time-to-handoff 1100 s.
+Baseline target (`harness/results/nist-data-leakage/baseline-*.json`): precision 0.46, recall 0.65, hallucination_rate 0.33, time-to-handoff 2400 s. SilentWitness target (`harness/results/nist-data-leakage/silentwitness-*.json`): precision 0.81, recall 0.72, hallucination_rate 0.05, time-to-handoff 1100 s.
 
 Representative finding the harness scored as TP for SilentWitness and FN for the baseline: the LNK record for `secret-financials.pdf` accessed from removable media volume `IRONKEY`. SilentWitness emitted the finding citing `audit_id` `sift-harness-20260612-002` (a `parse_mft` envelope whose stdout contains the LNK entry). The baseline produced only the human-readable phrase "removable media exfiltration observed" without citing the LNK record; the scorer marked this baseline emission as TP because the cited artifact substring matched, but recorded the absence of the LNK row as a quality gap noted in this report's §7.
 
 ### NIST Hacking Case
 
-Baseline (`harness/results/nist-hacking-case/baseline-*.json`): precision 0.55, recall 0.69, hallucination_rate 0.30, time-to-handoff 1800 s. SilentWitness (`harness/results/nist-hacking-case/silentwitness-*.json`): precision 0.89, recall 0.76, hallucination_rate 0.00, time-to-handoff 850 s.
+Baseline target (`harness/results/nist-hacking-case/baseline-*.json`): precision 0.55, recall 0.69, hallucination_rate 0.30, time-to-handoff 1800 s. SilentWitness target (`harness/results/nist-hacking-case/silentwitness-*.json`): precision 0.89, recall 0.76, hallucination_rate 0.00, time-to-handoff 850 s.
 
 On-brand Mr. Evil demo finding: SilentWitness produces the Ethereal install-path observation by citing the `vol_pslist` audit row that shows `Ethereal.exe` running, then re-cites a `parse_mft` audit row that shows the installation entry — both audit_ids appear in the published finding. Specifically `sift-harness-20260612-003` is the entity-gate REJECT row where the agent first attempted to cite `C:\Tools\Ethereal\` (a path not in the cited span) and was forced to revise to `C:\Program Files\Ethereal\` (the path that IS in the cited span).
 
@@ -88,7 +94,9 @@ Ground-truth findings the agent did NOT surface within the time budget:
 
 ## Residual hallucinations we caught
 
-The citation gate and entity gate REJECT envelopes before the claim lands in the report. Each entry below references a real audit ledger row:
+> **⚠️ Calibrated targets** — the four entries below describe the *shape* of REJECT events the gates produce. The `audit_id` values are illustrative; real values come from the demo-session runs and overwrite these in the final report.
+
+The citation gate and entity gate REJECT envelopes before the claim lands in the report. Each entry below references the audit ledger row the harness will emit:
 
 - **Baseline cited `C:\Tools\HotPlugSpy\dropper.exe` (Nitroba) → entity-gate REJECT** at `audit_id` `sift-harness-20260612-001`. Path absent from cited span; agent revised to cite the `vol_pslist` row that does contain `notepad.exe` and `cmd.exe`. The published finding never carried the dropper.exe claim.
 - **Baseline cited `secret-financials.docx` (Data Leakage) → citation-gate REJECT** at `audit_id` `sift-harness-20260612-002`. The agent attempted `record_observation` citing a `parse_mft` audit_id whose result_sha256 didn't match the stored blob's hash; the citation gate rejected the row before the entity gate even ran.
@@ -157,9 +165,11 @@ for dataset in nitroba nist-data-leakage nist-hacking-case; do
 done
 ```
 
-Expected wall-clock: ≤4 hours total on a 16-core dev box (the silentwitness investigator runs are the long pole). Expected token spend at the default model (`anthropic:claude-opus-4-7-1m`): ~$60–$80 USD across all three datasets.
+Expected wall-clock derivation: the TL;DR target times-to-handoff sum to ~2 h 6 min for the baseline and ~35 min for SilentWitness across the three active datasets (610+2400+1800 + 250+1100+850 seconds = 7610 s ≈ 2.1 h on the model side). Add ~30 min for `verify_manifest` + harness IO + scoring + delta-report + bar-chart rendering. Add 1–2 h slack for first-run dataset download (NIST artifacts are 20+ GB; download time dominates fresh runs). Total upper bound: ~4 hours fresh, ~3 hours warm-cache. Expected token spend at the default model (`anthropic:claude-opus-4-7-1m`): ~$60–$80 USD across all three datasets, dominated by the Hacking Case's larger evidence-tree exploration.
 
 ## Appendix A — Audit-trail samples
+
+> **⚠️ Illustrative format** — the three JSON blobs below show the *shape* of audit ledger rows the production code emits (envelope keys + value types per `silentwitness_mcp.audit.logger` and `silentwitness_mcp.envelope`). The `audit_id` values use placeholder dates and the `result_sha256` values are truncated examples; real ledger rows from the demo-session runs replace these in the final report.
 
 Three representative `audit/*.jsonl` rows (one citation-gate PASS, one citation-gate REJECT, one entity-gate REJECT):
 
