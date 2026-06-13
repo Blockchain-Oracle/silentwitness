@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 import pytest
 from pydantic_ai import Agent
+from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models.test import TestModel
 
 from silentwitness_agent.hooks import build_investigator_hooks
@@ -66,7 +67,12 @@ async def test_hooks_end_to_end_produces_valid_audit_jsonl(tmp_path: Path) -> No
         output_type=InvestigatorResult,
         capabilities=[hooks],
     )
-    cfg = _AgentConfig(agent=test_agent, model_str="test", max_iters=5)
+    cfg = _AgentConfig(
+        agent=test_agent,
+        model_str="test",
+        max_iters=5,
+        mcp_server=MCPServerStdio("python", ["-c", "pass"]),
+    )
 
     with (
         patch("silentwitness_agent.investigator.build_investigator", return_value=cfg),
@@ -137,7 +143,12 @@ async def test_hooks_budget_record_tokens_attributed_to_active_hypothesis(
         output_type=InvestigatorResult,
         capabilities=[hooks],
     )
-    cfg = _AgentConfig(agent=test_agent, model_str="test", max_iters=5)
+    cfg = _AgentConfig(
+        agent=test_agent,
+        model_str="test",
+        max_iters=5,
+        mcp_server=MCPServerStdio("python", ["-c", "pass"]),
+    )
 
     record_tokens_calls: list[tuple[str, int, int]] = []
     original_record = budget.record_tokens
