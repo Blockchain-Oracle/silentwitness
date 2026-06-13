@@ -1,6 +1,8 @@
 # Try SilentWitness
 
-Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native (3 commands)** for judges with a SANS Protocol SIFT 2026 VM, and **(b) Docker Compose (2 commands)** for developers on macOS/Linux/Windows-WSL2. The README's `## Quick start` callout (`README.md` §3) summarizes both; this document is the long-form walkthrough with troubleshooting + a step-by-step Nitroba smoke test. Time budget: SIFT path ≤15 min cold; Docker path ≤10 min cold.
+Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native (3 commands)** for judges with a SANS Protocol SIFT 2026 VM, and **(b) Docker Compose (2 commands)** for developers on macOS/Linux/Windows-WSL2. The README's `## Quick start` callout (`README.md` §3) summarizes both; this document is the long-form walkthrough with troubleshooting + a step-by-step Nitroba smoke test.
+
+> **Time budgets below are estimated (not yet measured end-to-end on this branch).** The demo-session run during `story-devpost-submission` produces the first measured numbers; until then, treat the ~15 min SIFT / ~10 min Docker targets as the design budget, not a stopwatch promise.
 
 ## Before you start — prerequisites
 
@@ -28,19 +30,22 @@ Expected timing: install ~5 min on clean SIFT; investigate against Nitroba ~3 mi
 
 ### What you should see
 
+Illustrative panel layout — the real rich layout is column-split (HYPOTHESIS STACK left, CURRENT TOOL CALL right) with a 3-pane footer (FINDINGS, BUDGET, LAST EVENT) per `src/silentwitness_agent/cli_commands/_live_layout.py`:
+
 ```
 ┌─ HYPOTHESIS STACK ─────────────────────┐ ┌─ CURRENT TOOL CALL ────────────┐
 │ H-001  formed  "SMTP timing identifies │ │ network/parse_pcap             │
 │        the harassment-email sender"    │ │ elapsed: 4.2s                  │
 │        dispatch → network specialist   │ │ stdout sha256: 11f9c283…       │
-│ H-002  formed  "DHCP lease window      │ └────────────────────────────────┘
-│        narrows the suspect MAC"        │ ┌─ FINDINGS ─────────────────────┐
-│        dispatch → log specialist       │ │ F-001 DRAFT  SMTP-to-Yahoo at  │
-└────────────────────────────────────────┘ │       21:30 confirms suspect   │
-┌─ BUDGET ──────────────────────────────┐  │       [verify:sift-…-001]      │
-│ tokens: 142k / 800k                   │  └────────────────────────────────┘
-│ tool calls: 14 / 50                   │
-└───────────────────────────────────────┘
+│ H-002  formed  "DHCP lease window      │ │                                │
+│        narrows the suspect MAC"        │ │                                │
+│        dispatch → log specialist       │ │                                │
+└────────────────────────────────────────┘ └────────────────────────────────┘
+┌─ FINDINGS ──────────┐ ┌─ BUDGET ────────────┐ ┌─ LAST EVENT ─────────────┐
+│ staged: 1           │ │ tokens: 142k/800k   │ │ vol_pslist OK            │
+│ tool calls: 14      │ │ steps: 14/50        │ │ 4.2s, sha 11f9c283…      │
+│ elapsed: 47s        │ │                     │ │                          │
+└─────────────────────┘ └─────────────────────┘ └──────────────────────────┘
 ```
 
 ### Viewing the report
@@ -54,35 +59,42 @@ cat cases/nitroba-smoke-001/audit/hypothesis.jsonl | jq '.transition'
 ## Path B — Docker Compose (2 commands)
 
 ```bash
-# 1) Boot the stack (pulls ghcr.io/Blockchain-Oracle/silentwitness:latest; mounts ./evidence + ./cases)
-docker compose up -d
+# 1) Build + boot the stack (local image silentwitness:local; mounts /evidence + ./cases)
+docker compose up -d --build
 
-# 2) Run an investigation
-docker compose exec silentwitness silentwitness investigate nitroba-smoke-001 \
-    --evidence /evidence/nitroba.pcap --examiner $USER
+# 2) Run an investigation — same init + register-evidence + investigate sequence as Path A,
+#    executed inside the container so the host needs no SIFT install.
+docker compose exec silentwitness silentwitness init nitroba-smoke-001 --examiner $USER
+docker compose exec silentwitness silentwitness register-evidence nitroba-smoke-001 --path /evidence/nitroba.pcap
+docker compose exec silentwitness silentwitness investigate nitroba-smoke-001
 ```
 
-Expected timing: image pull ~2 min on first run; investigate ~3 min.
+Expected timing (estimated, unmeasured on this branch — verified during the demo session): image build ~2 min on first run; init + register ≤10 s; investigate ~3 min.
 
 ### Compose file layout
+
+The committed `docker-compose.yml` builds a local `silentwitness:local` image (no ghcr image is published yet — `story-devpost-submission` is the publish gate). Excerpt:
 
 ```yaml
 services:
   silentwitness:
-    image: ghcr.io/Blockchain-Oracle/silentwitness:latest
+    build: {context: ., dockerfile: Dockerfile}
+    image: silentwitness:local
+    user: "silentwitness"
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      # /evidence is host-side; ro,noexec,nosuid intent declared (Docker enforces ro;
+      # noexec/nosuid require host mount flags — see docker-compose.yml top comment).
+      - "/evidence:/evidence:ro,noexec,nosuid"
+      - "./cases:/cases"
+      # Named volume for the HMAC ledger so chown 0700/0600 mode survives restart.
+      - silentwitness-ledger:/var/lib/silentwitness
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
       - SILENTWITNESS_MODEL=anthropic:claude-opus-4-7-1m
-    volumes:
-      - ./evidence:/evidence:ro
-      - ./cases:/cases
-```
 
-### Pre-built image
-
-```bash
-docker pull ghcr.io/Blockchain-Oracle/silentwitness:latest
-# Image SHA256 is pinned in README's badge row + the dependency-review CI gate.
+volumes:
+  silentwitness-ledger: {driver: local}
 ```
 
 ## Step-by-step against Nitroba (recommended first run)
@@ -122,8 +134,8 @@ The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT
 
 ## Troubleshooting
 
-- **"install.sh fails on `uv` bootstrap"**: install uv manually first — `curl --proto '=https' -sSf https://astral.sh/uv/install.sh | sh` — then rerun the SilentWitness install one-liner.
-- **"Apache binds port 80 on SIFT and the install script seems to hang"**: the HUD is **optional** and binds 8088 by default; the install script does not touch port 80. If hung, the cause is upstream `apt-get` lock — `sudo apt-get update` once first (cite ux-spec §3.2 + `context/.raw-design-research/03`).
+- **"install.sh fails on `uv` bootstrap"**: diagnostic order — (a) `~/.local/bin/uv --version` to confirm whether uv is half-installed; (b) re-run with `bash -x install.sh 2>&1 | tee install.log` to capture the exact failure step; (c) common causes are corporate proxy blocking `astral.sh` (workaround: `export HTTPS_PROXY=…`), `~/.local/bin` not on `$PATH` after install (workaround: `export PATH=$HOME/.local/bin:$PATH`), or a previous half-install leaving a broken venv (workaround: `rm -rf ~/.local/share/uv && rerun`). If all three fail, install uv manually: `curl --proto '=https' -sSf https://astral.sh/uv/install.sh | sh` then rerun the SilentWitness one-liner.
+- **"`silentwitness install` seems to hang / `apt-get` lock"**: the install script runs `sudo apt-get update` to provision Hayabusa, Chainsaw, Zeek, Suricata. Lock contention with an unattended-upgrade or another apt session is the usual cause — `sudo lsof /var/lib/dpkg/lock-frontend` identifies the holder. The HUD is **optional** and binds 8088 by default; the install script does NOT touch port 80, so a port-80 Apache binding on a stock SIFT VM is unrelated to install hang.
 - **"evidence mount is not read-only — register-evidence refuses"**: remount with `mount -o remount,ro,noexec,nosuid /evidence` (architecture.md §4.11 — mount validation). SilentWitness intentionally refuses to register evidence on a writable mount to preserve audit integrity.
 - **"Volatility 3 reports symbol-table mismatch on a memory image"**: this is the **intended** PRD §2 3:00–3:30 self-correction moment. The agent rebuilds via `windows.info` + retry; no manual intervention is required and the pivot is captured in `audit/hypothesis.jsonl` with `transition=pivot`.
 - **"model exceeds the default 800k-token budget"**: override at invocation — `silentwitness investigate <case> --max-tokens 1_200_000` (ux-spec §2.6). The investigator aborts cleanly when the budget is reached, with a Gap entry in the report.

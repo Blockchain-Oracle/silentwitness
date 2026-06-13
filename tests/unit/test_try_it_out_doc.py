@@ -137,3 +137,59 @@ def test_doc_missing_exits_1(tmp_path: Path) -> None:
     r = _run_gate("--doc", str(tmp_path / "DOES_NOT_EXIST.md"))
     assert r.returncode == 1
     assert "doc_exists" in r.stderr
+
+
+def test_doc_unreadable_invalid_utf8(tmp_path: Path) -> None:
+    """Non-UTF8 bytes route through doc_unreadable rule (not raw UnicodeDecodeError)."""
+    bad = tmp_path / "TRY_IT_OUT.md"
+    bad.write_bytes(b"\xff\xfe\x00invalid utf8 \xc3\x28")
+    r = _run_gate("--doc", str(bad))
+    assert r.returncode == 1
+    assert "doc_unreadable" in r.stderr
+
+
+def test_troubleshooting_section_missing_distinct_from_entries(tmp_path: Path) -> None:
+    """Deleting `## Troubleshooting` entirely fires the *_section_missing* rule, not entries."""
+    bad = tmp_path / "TRY_IT_OUT.md"
+    bad.write_text(_ok_doc().replace("## Troubleshooting", "## Other"))
+    r = _run_gate("--doc", str(bad))
+    assert r.returncode == 1
+    assert "troubleshooting_section_missing" in r.stderr
+
+
+def test_model_strings_scope_is_section_not_global(tmp_path: Path) -> None:
+    """If provider prefixes appear OUTSIDE `## Model selection`, the gate still fires."""
+    bad = tmp_path / "TRY_IT_OUT.md"
+    # Move provider strings out of the Model section by deleting the lines under it
+    doc = _ok_doc().replace(
+        "anthropic:claude-opus\nopenai:gpt-5\ngoogle-gla:gemini-2.5\nollama:llama4\n",
+        "(removed providers from section)\n",
+    )
+    # Put them in the H1 area, OUTSIDE Model selection
+    doc = doc.replace(
+        "# Try SilentWitness\n",
+        "# Try SilentWitness\n\nanthropic: openai: google-gla: ollama:\n",
+    )
+    bad.write_text(doc)
+    r = _run_gate("--doc", str(bad))
+    assert r.returncode == 1
+    assert "model_strings" in r.stderr
+
+
+def test_openai_word_boundary_not_matched_by_openai_chat(tmp_path: Path) -> None:
+    """`openai-chat:` MUST NOT satisfy the `openai:` provider-prefix rule."""
+    bad = tmp_path / "TRY_IT_OUT.md"
+    doc = _ok_doc().replace("openai:gpt-5", "openai-chat:gpt-5")
+    bad.write_text(doc)
+    r = _run_gate("--doc", str(bad))
+    assert r.returncode == 1
+    assert "model_strings" in r.stderr
+
+
+def test_banned_vocab_inside_code_fence_is_carved_out(tmp_path: Path) -> None:
+    """Banned vocab appearing inside a ``` fence (meta-discussion / example) is allowed."""
+    bad = tmp_path / "TRY_IT_OUT.md"
+    doc = _ok_doc() + "\n```\nFor reference, court-admissible is BANNED vocab.\n```\n"
+    bad.write_text(doc)
+    r = _run_gate("--doc", str(bad))
+    assert r.returncode == 0, r.stderr
