@@ -14,7 +14,13 @@ from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
 from silentwitness_mcp._lifecycle import AppContext
-from silentwitness_mcp._tool_impls import _case_deps, _GuardFn, _tool_out_dir
+from silentwitness_mcp._tool_impls import (
+    _augment_advisories,
+    _case_deps,
+    _GuardFn,
+    _read_to_cite_advisory,
+    _tool_out_dir,
+)
 from silentwitness_mcp.tools._log_chainsaw import chainsaw_hunt as _impl_chainsaw_hunt
 from silentwitness_mcp.tools._log_hayabusa import (
     hayabusa_csv_timeline as _impl_hayabusa_csv_timeline,
@@ -44,7 +50,8 @@ def register_log_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             audit_logger=audit,
             model_used=model,
         )
-        return resp.model_dump(mode="json")
+        dumped = resp.model_dump(mode="json")
+        return _augment_advisories(dumped, _read_to_cite_advisory(dumped))
 
     @mcp.tool()
     async def hayabusa_csv_timeline(
@@ -64,7 +71,8 @@ def register_log_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             audit_logger=audit,
             model_used=model,
         )
-        return resp.model_dump(mode="json")
+        dumped = resp.model_dump(mode="json")
+        return _augment_advisories(dumped, _read_to_cite_advisory(dumped))
 
 
 __all__ = ["LOG_TOOLS", "register_log_tools"]

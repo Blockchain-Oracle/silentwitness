@@ -5,6 +5,10 @@ per-case deps from the lifespan AppContext, call the unit-tested impl, return a
 JSON dict envelope). Split into its own module to keep each file under the
 400-LOC CI cap. ``evidence_path`` is the registered memory image; the impls
 derive their own blob output paths under ``case_dir``.
+
+Unlike the file-decomposing tools (zeek/chainsaw/hayabusa), vol_* return parsed
+rows in the envelope, so the agent cites them directly from this tool's audit_id
+— there is no read_tool_output step, hence no read-to-cite advisory here.
 """
 
 from __future__ import annotations

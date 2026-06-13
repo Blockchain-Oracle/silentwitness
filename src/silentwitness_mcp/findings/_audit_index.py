@@ -15,11 +15,22 @@ directory but are a different shape.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from pydantic import ValidationError
 
 from silentwitness_common.types import AuditEntry
+
+_LOG = logging.getLogger(__name__)
+
+# Backends that legitimately hold non-AuditEntry rows: hook events (agent),
+# hypothesis transitions, sanitizer strip events, critic verdicts. A parse
+# failure there is expected and silent; a parse failure in any OTHER backend
+# (evidence/network/findings/vol/read_output…) signals a corrupt or truncated
+# audit row, which we log so a citation that silently becomes AUDIT_ID_NOT_FOUND
+# is at least greppable.
+_NON_AUDIT_BACKENDS = frozenset({"agent", "hypothesis", "sanitizer", "critic"})
 
 
 def build_audit_index(case_dir: Path) -> dict[str, AuditEntry]:
@@ -33,6 +44,7 @@ def build_audit_index(case_dir: Path) -> dict[str, AuditEntry]:
             lines = jsonl.read_text(encoding="utf-8").splitlines()
         except OSError:
             continue
+        expects_audit = jsonl.stem not in _NON_AUDIT_BACKENDS
         for raw in lines:
             raw = raw.strip()
             if not raw:
@@ -40,7 +52,14 @@ def build_audit_index(case_dir: Path) -> dict[str, AuditEntry]:
             try:
                 entry = AuditEntry.model_validate_json(raw)
             except (ValidationError, ValueError):
-                continue  # non-AuditEntry line (e.g. agent.jsonl hook event)
+                if expects_audit:
+                    _LOG.warning(
+                        "build_audit_index: unparseable audit row in %s (possible "
+                        "corruption): %.120s",
+                        jsonl.name,
+                        raw,
+                    )
+                continue
             index[entry.audit_id] = entry
     return index
 

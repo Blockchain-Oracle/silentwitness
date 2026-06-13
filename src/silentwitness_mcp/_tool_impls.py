@@ -27,7 +27,7 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
@@ -48,13 +48,13 @@ _CaseDeps = tuple[Path, EvidenceRegistry, AuditLogger, str]
 
 _GuardFn = Callable[[str, "Context[ServerSession, AppContext]"], None]
 
-# Tool names wired to real implementations here. Grows as the surface is wired;
-# _tool_stubs stubs only the complement so no tool name is ever unadvertised.
-# All tool names wired to real implementations across this module + the
-# per-domain sub-modules (_tool_impls_memory, _tool_impls_log). Listed
+# All tool names wired to real implementations across this module + the per-domain
+# sub-modules (_tool_impls_memory, _tool_impls_log, _tool_impls_findings). Listed
 # explicitly (not imported from the sub-modules) to avoid an import cycle, since
-# those modules import helpers from here. _tool_stubs stubs only the complement
-# (currently suricata_run + approve_finding).
+# those modules import helpers from here. A registration-time assertion (see
+# register_real_tools) enforces that the live tool surface == WIRED_TOOLS | the
+# _tool_stubs complement (currently suricata_run + approve_finding), so this list
+# cannot silently drift from what is actually registered.
 WIRED_TOOLS: frozenset[str] = frozenset(
     {
         "register_evidence",
@@ -79,6 +79,12 @@ WIRED_TOOLS: frozenset[str] = frozenset(
     }
 )
 
+# Tools registered directly in this module (the rest live in the sub-modules);
+# used by register_real_tools to assert WIRED_TOOLS hasn't drifted.
+_CORE_TOOLS: frozenset[str] = frozenset(
+    {"register_evidence", "verify_evidence_hash", "zeek_run", "read_tool_output"}
+)
+
 
 def _case_deps(ctx: Context[ServerSession, AppContext]) -> _CaseDeps:
     """Return the non-None per-case deps (case_dir, registry, logger, model) or
@@ -92,24 +98,30 @@ def _case_deps(ctx: Context[ServerSession, AppContext]) -> _CaseDeps:
     fields for the type checker.
     """
     app = ctx.request_context.lifespan_context
-    if (
-        not isinstance(app, AppContext)
-        or app.case_dir is None
-        or app.evidence_registry is None
-        or app.audit_logger is None
-        or app.model_used is None
-    ):
+    if not isinstance(app, AppContext) or app.case is None:
         raise ServerConfigurationError(
             "MCP server is not case-bound (SILENTWITNESS_CASE_DIR/EXAMINER/MODEL_USED "
             "unset); evidence-bound tools require a case context"
         )
-    return app.case_dir, app.evidence_registry, app.audit_logger, app.model_used
+    case = app.case
+    return case.case_dir, case.evidence_registry, case.audit_logger, case.model_used
 
 
 def _tool_out_dir(case_dir: Path, tool: str, key: str) -> Path:
     """Per-call output dir derived from case_dir — never an LLM-supplied path."""
     digest = hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return case_dir / ".tool-output" / tool / digest
+
+
+# Cap read_tool_output so a multi-GB zeek/hayabusa output can't OOM the box —
+# the line window is applied AFTER the full read, so the cap is mandatory.
+_MAX_READ_BYTES: Final = 64 * 1024 * 1024  # 64 MiB
+
+
+def _refuse(reason: str, detail: str) -> dict[str, Any]:
+    """Single constructor for the LLM-facing refusal envelope so the
+    success/reason/detail shape cannot drift via a field typo across wrappers."""
+    return {"success": False, "reason": reason, "detail": detail}
 
 
 def _collect_output_paths(obj: Any) -> list[str]:
@@ -174,18 +186,17 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         try:
             etype = EvidenceType(evidence_type)
         except ValueError:
-            return {
-                "success": False,
-                "reason": "INVALID_EVIDENCE_TYPE",
-                "detail": f"{evidence_type!r} is not one of {[e.value for e in EvidenceType]}",
-            }
+            return _refuse(
+                "INVALID_EVIDENCE_TYPE",
+                f"{evidence_type!r} is not one of {[e.value for e in EvidenceType]}",
+            )
         audit_id = audit.next_audit_id()
         try:
             record = registry.register(Path(evidence_path), etype, audit_id)
         except EvidenceContentDriftError as exc:
-            return {"success": False, "reason": "SHA256_MISMATCH_ON_REREGISTER", "detail": str(exc)}
+            return _refuse("SHA256_MISMATCH_ON_REREGISTER", str(exc))
         except (EvidenceRegistryError, OSError) as exc:
-            return {"success": False, "reason": "REGISTER_FAILED", "detail": str(exc)}
+            return _refuse("REGISTER_FAILED", str(exc))
         summary: dict[str, object] = {"sha256": record.sha256, "size_bytes": record.size_bytes}
         audit.emit(
             backend="evidence",
@@ -216,7 +227,7 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         try:
             result = registry.verify_hash(Path(evidence_path))
         except (EvidenceRegistryError, OSError) as exc:
-            return {"success": False, "reason": "VERIFY_FAILED", "detail": str(exc)}
+            return _refuse("VERIFY_FAILED", str(exc))
         return {
             "success": True,
             "matches": result.matches,
@@ -265,14 +276,22 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         try:
             target = Path(output_path).resolve()
         except OSError as exc:
-            return {"success": False, "reason": "BAD_PATH", "detail": str(exc)}
+            return _refuse("BAD_PATH", str(exc))
         if not target.is_relative_to(allowed_root) or not target.is_file():
-            return {
-                "success": False,
-                "reason": "PATH_NOT_ALLOWED",
-                "detail": f"only files under {allowed_root} are readable",
-            }
-        raw = target.read_bytes()
+            return _refuse("PATH_NOT_ALLOWED", f"only files under {allowed_root} are readable")
+        try:
+            size = target.stat().st_size
+            if size > _MAX_READ_BYTES:
+                return _refuse(
+                    "OUTPUT_TOO_LARGE",
+                    f"{size} bytes exceeds the {_MAX_READ_BYTES}-byte read cap; "
+                    "page a smaller window or narrow the query",
+                )
+            raw = target.read_bytes()
+        except OSError as exc:
+            # TOCTOU (deleted/permission-changed between is_file() and read) →
+            # structured reject, not a raw OSError out of the tool body.
+            return _refuse("READ_FAILED", str(exc))
         normalized = normalize_output(raw, "read_tool_output")
         sha = hashlib.sha256(normalized).hexdigest()
         lines = normalized.decode("utf-8", errors="surrogateescape").split("\n")
@@ -303,9 +322,21 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     # Lazy imports break the cycle: the sub-modules import helpers from this
     # module, so they can only be imported after it is fully initialised (i.e.
     # at registration time, not module load time).
-    from silentwitness_mcp._tool_impls_findings import register_finding_recorders
-    from silentwitness_mcp._tool_impls_log import register_log_tools
-    from silentwitness_mcp._tool_impls_memory import register_memory_tools
+    from silentwitness_mcp._tool_impls_findings import (
+        FINDING_TOOLS,
+        register_finding_recorders,
+    )
+    from silentwitness_mcp._tool_impls_log import LOG_TOOLS, register_log_tools
+    from silentwitness_mcp._tool_impls_memory import MEMORY_TOOLS, register_memory_tools
+
+    # Make WIRED_TOOLS load-bearing: it must equal the union of what this module
+    # and the sub-modules actually register, or the hand-maintained list has
+    # drifted (a tool added to a sub-module but not advertised, or vice versa).
+    expected = _CORE_TOOLS | FINDING_TOOLS | MEMORY_TOOLS | LOG_TOOLS
+    if WIRED_TOOLS != expected:
+        raise ServerConfigurationError(
+            f"WIRED_TOOLS drifted from the registered tool sets: {WIRED_TOOLS ^ expected}"
+        )
 
     register_finding_recorders(mcp, guard_mount)
     register_memory_tools(mcp, guard_mount)

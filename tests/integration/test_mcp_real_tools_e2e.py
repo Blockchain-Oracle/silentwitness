@@ -73,6 +73,32 @@ async def _exercise(case_dir: Path) -> dict[str, Any]:
             out["read_tool_output"] = _payload(
                 await session.call_tool("read_tool_output", {"output_path": str(blob)})
             )
+            # Path-traversal: a file outside .tool-output must be refused.
+            out["read_traversal"] = _payload(
+                await session.call_tool("read_tool_output", {"output_path": "/etc/passwd"})
+            )
+            # record_observation over the wire with a bad citation: exercises the
+            # JSON->ObservationInput coercion + citation gate + the at-failure
+            # read_tool_output advisory, without needing spaCy (the citation gate
+            # rejects the unknown audit_id before the entity gate runs).
+            out["record_observation_reject"] = _payload(
+                await session.call_tool(
+                    "record_observation",
+                    {
+                        "text": "Host 10.0.0.5 did something.",
+                        "audit_ids": ["sift-ci-20260613-999"],
+                        "cited_spans": [
+                            {
+                                "audit_id": "sift-ci-20260613-999",
+                                "sha256_of_normalized_output": "0" * 64,
+                                "line_start": 0,
+                                "line_end": 1,
+                                "span_text": "something",
+                            }
+                        ],
+                    },
+                )
+            )
     return out
 
 
@@ -96,6 +122,27 @@ def test_verify_evidence_hash_is_real_not_a_stub(server_results: dict[str, Any])
     res = server_results["verify_evidence_hash"]
     assert res.get("success") is True
     assert res.get("matches") is True
+
+
+def test_read_tool_output_refuses_path_traversal(server_results: dict[str, Any]) -> None:
+    res = server_results["read_traversal"]
+    assert res.get("success") is False
+    assert res.get("reason") == "PATH_NOT_ALLOWED"
+
+
+def test_record_observation_runs_over_the_wire_and_rejects_bad_citation(
+    server_results: dict[str, Any],
+) -> None:
+    """The wrapper does real work the direct-call tests skip: JSON->pydantic
+    coercion, the citation gate, and the at-failure read_tool_output advisory.
+    A made-up audit_id must reject (citation gate) with the fix-hint over the
+    stdio boundary — proving it's not a NotImplementedError stub."""
+    res = server_results["record_observation_reject"]
+    data = res.get("data") if isinstance(res.get("data"), dict) else {}
+    assert data.get("success") is False
+    assert data.get("reason") == "AUDIT_ID_NOT_FOUND"
+    advisories = " ".join(str(a) for a in (res.get("advisories") or []))
+    assert "read_tool_output" in advisories
 
 
 def test_read_tool_output_returns_citable_content(server_results: dict[str, Any]) -> None:
