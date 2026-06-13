@@ -146,7 +146,7 @@ async def _do_agent_run(
     state: DisplayState,
     is_tty: bool,
     t_start: float,
-) -> Any:
+) -> Any:  # pragma: no cover — integration-only seam (monkeypatched in tests)
     """Test seam: monkeypatching this function in integration tests bypasses all model
     construction (no API key or MCP server required). At runtime, builds the investigator
     agent, runs it to completion, and returns InvestigatorResult.

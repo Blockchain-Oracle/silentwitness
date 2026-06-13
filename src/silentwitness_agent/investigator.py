@@ -81,6 +81,8 @@ class _AgentConfig:
     # subprocess, one AuditLogger). pydantic-ai's MCPServer is ref-counted, so
     # nested specialist runs reuse the same session instead of spawning a second
     # case-bound server (which would collide on the AuditLogger flock).
+    # INVARIANT: this is the same object passed to Agent(toolsets=[...]) above —
+    # sharing only yields one subprocess because it is that identical server.
     mcp_server: MCPServerStdio
 
 

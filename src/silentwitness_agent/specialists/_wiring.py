@@ -20,19 +20,22 @@ def register_all_specialists(
     model: str | None,
     shared_server: MCPServerStdio,
 ) -> None:
-    """Build + register dispatch_<x>_specialist for memory/disk/log/network."""
-    memory.register_as_investigator_tool(
-        investigator, memory.build_memory_specialist(model=model, shared_server=shared_server)
+    """Build + register dispatch_<x>_specialist for memory/disk/log/network.
+
+    Build ALL FOUR first (model resolution is the failure-prone step), THEN
+    register — so a bad model never leaves the investigator partially wired with
+    only some dispatch tools attached.
+    """
+    if shared_server is None:  # defensive; the type already forbids this
+        raise ValueError("register_all_specialists requires the investigator's shared MCP server")
+    built = (
+        (memory, memory.build_memory_specialist(model=model, shared_server=shared_server)),
+        (disk, disk.build_disk_specialist(model=model, shared_server=shared_server)),
+        (log, log.build_log_specialist(model=model, shared_server=shared_server)),
+        (network, network.build_network_specialist(model=model, shared_server=shared_server)),
     )
-    disk.register_as_investigator_tool(
-        investigator, disk.build_disk_specialist(model=model, shared_server=shared_server)
-    )
-    log.register_as_investigator_tool(
-        investigator, log.build_log_specialist(model=model, shared_server=shared_server)
-    )
-    network.register_as_investigator_tool(
-        investigator, network.build_network_specialist(model=model, shared_server=shared_server)
-    )
+    for module, specialist in built:
+        module.register_as_investigator_tool(investigator, specialist)
 
 
 __all__ = ["register_all_specialists"]

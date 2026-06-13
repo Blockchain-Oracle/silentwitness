@@ -61,6 +61,9 @@ def build_network_specialist(
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_NETWORK`` env
     → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
     → default (haiku-4-5).
+
+    ``shared_server`` reuses the investigator's MCP server (see
+    build_memory_specialist); omit only in isolated unit tests.
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))
@@ -95,7 +98,7 @@ def register_as_investigator_tool(
     """
 
     @investigator.tool
-    async def dispatch_network_specialist(
+    async def dispatch_network_specialist(  # pragma: no cover
         ctx: RunContext[InvestigatorDeps],
         question: str,
         hypothesis_id: str,

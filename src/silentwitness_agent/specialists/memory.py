@@ -71,7 +71,8 @@ def build_memory_specialist(
 
     ``shared_server``: when the live investigator passes its case-bound MCP server,
     the specialist reuses it (one subprocess, one AuditLogger). Omitting it spawns
-    a private case-less server — only valid for isolated unit tests.
+    a private case-less server; in practice only isolated unit tests do this — the
+    live path always supplies the server via ``register_all_specialists``.
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))
@@ -106,7 +107,7 @@ def register_as_investigator_tool(
     """
 
     @investigator.tool
-    async def dispatch_memory_specialist(
+    async def dispatch_memory_specialist(  # pragma: no cover
         ctx: RunContext[InvestigatorDeps],
         question: str,
         hypothesis_id: str,
