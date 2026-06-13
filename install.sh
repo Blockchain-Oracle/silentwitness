@@ -226,6 +226,24 @@ install_mermaid_cli() {
 }
 
 # ---------------------------------------------------------------------------
+# spaCy en_core_web_lg — the NER model the entity gate requires. It ships as a
+# GitHub-release wheel (not on PyPI), so `uv sync` does NOT pull it. Without it
+# record_observation's entity gate fails ENTITY_GATE_UNAVAILABLE on a fresh
+# checkout. Install + verify it explicitly here.
+# ---------------------------------------------------------------------------
+SPACY_MODEL_WHEEL="https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
+
+install_spacy_model() {
+    log "installing spaCy en_core_web_lg (entity-gate NER model)"
+    command -v uv >/dev/null 2>&1 || fail "uv not found — install uv first (https://docs.astral.sh/uv/)"
+    uv sync || fail "uv sync failed"
+    uv pip install "$SPACY_MODEL_WHEEL" || fail "en_core_web_lg wheel install failed"
+    uv run python -c "import spacy; spacy.load('en_core_web_lg')" \
+        || fail "en_core_web_lg failed to load after install"
+    log "spaCy en_core_web_lg OK"
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 DIAGRAMS=0
@@ -242,6 +260,7 @@ install_chainsaw
 install_sigma_rules
 install_zeek
 install_suricata
+install_spacy_model
 [ "$DIAGRAMS" = "1" ] && install_mermaid_cli
 
 log "all tools provisioned successfully"
