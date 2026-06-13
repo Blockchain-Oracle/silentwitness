@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -19,8 +21,11 @@ from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
 from silentwitness_mcp.findings._approval_store import (
     findings_lock,
     locate_finding,
+    materialize_findings,
     read_findings,
 )
+
+_LOG = logging.getLogger(__name__)
 
 _PROMPT = "[a]pprove  [r]eject  [m]odify  [s]kip  [q]uit  > "
 _DIVIDER = "─" * 41
@@ -169,7 +174,70 @@ def _modify(
     return True
 
 
+def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
+    """Best-effort closed-loop critic over un-reviewed DRAFT findings.
+
+    Materialization already created the DRAFT Finding records; here we run the
+    fresh-context critic over the ones not yet carrying a ``critic_status`` and
+    route its verdicts (AGREE keeps DRAFT, REJECT archives). Best-effort by
+    design: if the model is unavailable (no key / offline — e.g. CI listing the
+    table), we log and fall through to a plain listing rather than failing the
+    command."""
+    from silentwitness_agent.critic import StagedFinding, critique
+    from silentwitness_agent.critic_handler import handle_critic_verdicts
+    from silentwitness_common.types import Confidence
+
+    try:
+        findings = read_findings(case_dir)
+    except (json.JSONDecodeError, ValueError, OSError):
+        return
+    staged: list[StagedFinding] = []
+    for f in findings:
+        if not (isinstance(f, dict) and f.get("finding_id") and f.get("status") == "DRAFT"):
+            continue
+        if f.get("critic_status"):  # already reviewed — don't re-spend tokens
+            continue
+        obs = _find_obs(findings, f.get("observation_id", ""))
+        interp = _find_interp(obs, f.get("interpretation_id", ""))
+        obs_text, interp_text = obs.get("text"), interp.get("text")
+        if not obs_text or not interp_text:
+            continue
+        try:
+            confidence = Confidence(str(interp.get("confidence", "LOW")).upper())
+        except ValueError:
+            confidence = Confidence.LOW
+        staged.append(
+            StagedFinding(
+                finding_id=str(f["finding_id"]),
+                observation_text=str(obs_text),
+                interpretation_text=str(interp_text),
+                confidence=confidence,
+                cited_audit_ids=list(obs.get("audit_ids") or []),
+            )
+        )
+    if not staged:
+        return
+    # Best-effort applies ONLY to the model call (no key / offline → list anyway).
+    try:
+        report = asyncio.run(critique(case_dir, examiner, staged))
+    except Exception as exc:
+        _LOG.warning("review: critic model unavailable (%s: %s)", type(exc).__name__, exc)
+        err.print(
+            f"[yellow]![/yellow] critic pass skipped ({type(exc).__name__}); "
+            "listing un-reviewed findings",
+            highlight=False,
+        )
+        return
+    # Verdict routing writes findings.json/archived.json; a failure here is a
+    # data-integrity event and MUST surface (handle_critic_verdicts raises on
+    # persistence failure) — do not swallow it. pending_critiques is a throwaway
+    # list: the CLI review has no live investigator loop to feed CHALLENGEs back to.
+    handle_critic_verdicts(case_dir, examiner, report.verdicts, [])
+
+
 def run_list(case_dir: Path, status_filter: str, *, console: Console, err: Console) -> int:
+    # NOTE: callers (run()) materialize DRAFT findings before delegating here,
+    # so the table is non-empty. run_list itself is pure read+render.
     try:
         findings = read_findings(case_dir)
     except (json.JSONDecodeError, ValueError, OSError) as exc:
@@ -285,6 +353,14 @@ def run(
 ) -> int:
     console, err = Console(no_color=no_color), Console(stderr=True, no_color=no_color)
     if finding_id is None:
+        # Materialize DRAFT findings once, then run the critic over the
+        # un-reviewed ones, before listing — so the examiner sees critic-annotated
+        # DRAFTs. run_list does NOT re-materialize (it is pure read+render).
+        try:
+            materialize_findings(case_dir)
+        except (OSError, ValueError) as exc:
+            err.print(f"[yellow]![/yellow] finding materialization skipped: {exc}", highlight=False)
+        _run_critic_pass(case_dir, examiner, err=err)
         return run_list(case_dir, status_filter, console=console, err=err)
     return run_detail(
         case_dir,

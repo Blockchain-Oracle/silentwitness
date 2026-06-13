@@ -5,6 +5,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import os
+import secrets
 import shutil
 import time
 import tomllib
@@ -104,6 +105,11 @@ def init(
         (case_dir / ".silentwitness" / "case.toml").write_text(
             f'case_id = "{case_id}"\nexaminer = "{examiner}"\n', encoding="utf-8"
         )
+        # Per-case HMAC salt for the approval ledger. Without this, `approve`
+        # fails CASE_SALT_MISSING and no finding can ever be signed/approved.
+        case_yaml = case_dir / "CASE.yaml"
+        if not case_yaml.exists():
+            case_yaml.write_text(f"salt_hex: {secrets.token_hex(32)}\n", encoding="utf-8")
     except (PermissionError, OSError) as exc:
         err.print(f"[red]✗[/red] system error: {exc}", highlight=False)
         raise typer.Exit(code=2) from exc

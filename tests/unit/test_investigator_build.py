@@ -40,7 +40,9 @@ def test_system_prompt_contains_hypothesis_phrase() -> None:
 
 
 def test_system_prompt_contains_pivot_phrase() -> None:
-    assert "you log a pivot event" in _SYSTEM_PROMPT
+    # The prompt must name the actual stack-driving tool, not prose.
+    assert "pivot_hypothesis" in _SYSTEM_PROMPT
+    assert "form_hypothesis" in _SYSTEM_PROMPT
 
 
 @pytest.mark.parametrize(

@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models import Model, infer_model
+from pydantic_ai.models import Model
 
 from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
@@ -15,6 +14,7 @@ from silentwitness_agent.specialists._base import (
     SpecialistDeps,
     SpecialistReport,
     _load_specialist_prompt,
+    resolve_specialist_model,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -39,32 +39,18 @@ LOG_TOOL_ALLOWLIST: frozenset[str] = frozenset(
 _SYSTEM_PROMPT: str = _load_specialist_prompt("log")
 
 _ENV_MODEL_KEY = "SILENTWITNESS_SPECIALIST_MODEL_LOG"
-_ENV_QUALITY_KEY = "SILENTWITNESS_MODEL_QUALITY"
 _DEFAULT_MODEL = "anthropic:claude-haiku-4-5"
 _HIGH_QUALITY_MODEL = "anthropic:claude-opus-4-7"
 
 
 def _resolve_specialist_model(model: str | None) -> Model:
-    if model is not None:
-        try:
-            return infer_model(model)
-        except Exception as exc:
-            raise ValueError(
-                f"log specialist: explicit model={model!r} is not a valid Pydantic AI "
-                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
-            ) from exc
-    env_model = os.environ.get(_ENV_MODEL_KEY)
-    if env_model:
-        try:
-            return infer_model(env_model)
-        except Exception as exc:
-            raise ValueError(
-                f"log specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
-                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
-            ) from exc
-    if os.environ.get(_ENV_QUALITY_KEY, "").lower() == "high":
-        return infer_model(_HIGH_QUALITY_MODEL)
-    return infer_model(_DEFAULT_MODEL)
+    return resolve_specialist_model(
+        model,
+        label="log",
+        env_model_key=_ENV_MODEL_KEY,
+        default_model=_DEFAULT_MODEL,
+        high_quality_model=_HIGH_QUALITY_MODEL,
+    )
 
 
 def build_log_specialist(
@@ -73,7 +59,8 @@ def build_log_specialist(
     """Build and return the log specialist agent.
 
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_LOG`` env
-    → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7) → default (haiku-4-5).
+    → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
+    → default (haiku-4-5).
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))

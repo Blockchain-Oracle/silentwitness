@@ -6,6 +6,7 @@ import getpass
 import hashlib
 import hmac as _hmac
 import json
+import logging
 import os
 import sys
 from datetime import UTC, datetime
@@ -35,6 +36,8 @@ from silentwitness_mcp.findings.approval import (
     ApproveRejectReason,
     approve_finding,
 )
+
+_LOG = logging.getLogger(__name__)
 
 _DEFAULT_LEDGER_DIR = Path("/var/lib/silentwitness/verification")
 _MAX_ATTEMPTS = 3
@@ -150,6 +153,44 @@ def _ledger_info(ledger_dir: Path, case_id: str) -> tuple[int, str]:
         raise
     except Exception:
         return 0, "????"
+
+
+def _render_report(case_dir: Path, examiner: str, *, err: Console) -> bool:
+    """Compose report.md from APPROVED findings (replaces the old deferral).
+
+    ``ReportWriter.render()`` reads findings.json, partitions APPROVED Findings,
+    joins each to its observation/interpretation, and composes all sections via
+    the ``compose_*`` functions. Best-effort: a render failure must not undo the
+    committed approval (the HMAC ledger is authoritative). Returns True on a
+    successful render so the caller can report honestly."""
+    try:
+        from silentwitness_agent.report.template import parse_frontmatter
+        from silentwitness_agent.report.writer import ReportWriter
+        from silentwitness_common.version import __version__ as sw_version
+
+        model_used = "unknown"
+        report_path = case_dir / "report.md"
+        if report_path.exists():
+            try:
+                frontmatter, _ = parse_frontmatter(report_path.read_text(encoding="utf-8"))
+                model_used = frontmatter.model_used or model_used
+            except (ValueError, OSError):
+                pass
+        ReportWriter(
+            case_dir,
+            examiner=examiner,
+            model_used=model_used,
+            silentwitness_version=sw_version,
+        ).render()
+        return True
+    except Exception as exc:
+        _LOG.error("approve: report.md render failed after approval", exc_info=True)
+        err.print(
+            f"[yellow]![/yellow] report.md render skipped ({type(exc).__name__}: {exc}); "
+            "approval is committed to the ledger — re-render via `export`",
+            highlight=False,
+        )
+        return False
 
 
 def run(
@@ -316,11 +357,15 @@ def run(
             return 2
         ledger_path = ledger_dir / f"{case_id}.jsonl"
         line_ref = f"#{line_no}" if line_no else ""
+        rendered = _render_report(case_dir, examiner, err=err)
+        report_line = (
+            "report.md updated" if rendered else "report.md NOT updated — re-render via `export`"
+        )
         console.print(
             f"[green]✓[/green] {finding_id} APPROVED\n"
             f"       ledger:  {ledger_path}{line_ref}\n"
             f"       hmac:    sha256:{hmac_short}  (PBKDF2-SHA256, 600,000 iter)\n"
-            f"       report.md update deferred (Epic 11 not installed)",
+            f"       {report_line}",
             highlight=False,
         )
         return 0

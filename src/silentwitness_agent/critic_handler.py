@@ -73,12 +73,17 @@ def handle_critic_verdicts(
         raw_findings = _read_json_list(case_dir / _FINDINGS_JSON)
         archived = _read_json_list(case_dir / _ARCHIVED_JSON)
 
-        findings_map: dict[str, dict[str, Any]] = {}
-        for item in raw_findings:
+        # findings.json is a MIXED array — observation records (observation_id),
+        # narratives, AND finding records (finding_id). Index only the findings
+        # by finding_id and mutate them IN PLACE so non-finding records survive
+        # write-back. A prior version keyed on a non-existent "id" field and
+        # rebuilt the file from the index alone, which dropped every observation.
+        findings_index: dict[str, int] = {}
+        for idx, item in enumerate(raw_findings):
             if isinstance(item, dict):
-                fid_key: str = item.get("id") or ""
-                if fid_key:
-                    findings_map[fid_key] = dict(item)
+                fid_key = item.get("finding_id")
+                if isinstance(fid_key, str) and fid_key:
+                    findings_index[fid_key] = idx
 
         rejected_ids: set[str] = set()
 
@@ -86,7 +91,7 @@ def handle_critic_verdicts(
             fid = verdict.finding_id
             ts = _now_iso()
 
-            if fid not in findings_map:
+            if fid not in findings_index:
                 _emit_line(
                     audit_path,
                     {
@@ -101,7 +106,9 @@ def handle_critic_verdicts(
                 _LOG.warning("critic_handler: finding_id=%s not in findings.json; skipped", fid)
                 continue
 
-            finding = findings_map[fid]
+            finding = raw_findings[findings_index[fid]]
+            if not isinstance(finding, dict):  # pragma: no cover — index holds only dicts
+                continue
 
             if verdict.verdict == "AGREE":
                 _handle_agree(audit_path, finding, verdict, ts, examiner)
@@ -137,7 +144,13 @@ def handle_critic_verdicts(
                 raise
 
         if agree_count or challenge_count or rejected_ids:
-            remaining = [findings_map[k] for k in findings_map if k not in rejected_ids]
+            # Preserve every record (observations, narratives, non-rejected
+            # findings); drop only the rejected findings (now in archived.json).
+            remaining = [
+                item
+                for item in raw_findings
+                if not (isinstance(item, dict) and item.get("finding_id") in rejected_ids)
+            ]
             try:
                 write_json_atomic(case_dir / _FINDINGS_JSON, remaining)
             except OSError:

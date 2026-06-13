@@ -156,6 +156,7 @@ async def _do_agent_run(
     from silentwitness_agent.hooks import build_investigator_hooks
     from silentwitness_agent.hypothesis.budget import BudgetEnforcer
     from silentwitness_agent.hypothesis.stack import HypothesisStack
+    from silentwitness_agent.hypothesis_tools import register_hypothesis_tools
     from silentwitness_agent.investigator import (
         InvestigatorDeps,
         InvestigatorResult,
@@ -174,6 +175,9 @@ async def _do_agent_run(
         max_iterations=max_iterations,
         hooks=[audit_hooks, display_hooks],
     )
+    # Without this the HypothesisStack is built but never driven — the model has
+    # no tool to form/confirm/pivot a hypothesis, so the wedge stays at zero.
+    register_hypothesis_tools(cfg.agent)
     deps = InvestigatorDeps(case_dir=case_dir, examiner=examiner, stack=stack, budget=budget)
 
     # Surface the registered evidence (exact paths + types) in the opening
