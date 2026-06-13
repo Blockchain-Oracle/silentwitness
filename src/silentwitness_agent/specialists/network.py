@@ -62,6 +62,18 @@ def _resolve_specialist_model(model: str | None) -> Model:
             ) from exc
     if os.environ.get(_ENV_QUALITY_KEY, "").lower() == "high":
         return infer_model(_HIGH_QUALITY_MODEL)
+    # Inherit the global model so a non-Anthropic SILENTWITNESS_MODEL (e.g.
+    # openai:*) carries the specialists onto the same provider; without this they
+    # stay pinned to the Anthropic default and fail under an OpenAI-only key.
+    global_model = os.environ.get("SILENTWITNESS_MODEL")
+    if global_model:
+        try:
+            return infer_model(global_model)
+        except (ValueError, Exception) as exc:
+            raise ValueError(
+                f"network specialist: SILENTWITNESS_MODEL={global_model!r} is not a valid "
+                f"Pydantic AI model string (e.g. 'openai:gpt-4o'). Error: {exc}"
+            ) from exc
     return infer_model(_DEFAULT_MODEL)
 
 
