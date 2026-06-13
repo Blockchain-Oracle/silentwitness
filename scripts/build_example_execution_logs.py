@@ -34,7 +34,11 @@ _T5 = "2026-06-13T12:00:25Z"
 _EVIDENCE_BYTES = b"E\xaa\x0f\x00"  # deterministic 4 bytes
 _EVIDENCE_SHA256 = hashlib.sha256(_EVIDENCE_BYTES).hexdigest()
 
-# Stable stdout SHA256s — synthetic "tool output" content
+# Stable stdout SHA256s — synthetic "tool output" content.
+# DETERMINISTIC: editing these byte-strings invalidates the committed tree's
+# Appendix-Audit hex prefixes in scripts/_example_templates/report.md. The
+# byte-equality test (tests/integration/test_example_execution_logs.py) will
+# catch the drift, but update the report template's hex columns to match.
 _VOL_STDOUT_SHA256 = hashlib.sha256(
     b"# vol3 windows.pslist\nPID,PPID,Name\n4,0,System\n388,4,smss.exe\n"
 ).hexdigest()
@@ -45,7 +49,8 @@ _EVTX_STDOUT_SHA256 = hashlib.sha256(
     b"# EvtxECmd output\nEventID,Channel\n4624,Security\n"
 ).hexdigest()
 
-# HMAC key — literal example, documented as not-a-real-secret
+# HMAC key — literal sentinel; DO NOT replace with a real key, this ledger is
+# synthetic. The key string carries its own disclosure substring.
 _LEDGER_KEY = b"EXAMPLE-not-a-real-secret-EXAMPLE"  # pragma: allowlist secret
 
 _TPL_DIR = Path(__file__).resolve().parent / "_example_templates"
@@ -282,6 +287,28 @@ def _build(out: Path) -> None:
 
     # Index README
     _write(out / "README.md", _read_tpl("index_README.md"))
+    _check_referential_integrity(out / _CASE_DIR_NAME)
+
+
+def _check_referential_integrity(case_dir: Path) -> None:
+    """Assert every cited_audit_id resolves to an existing audit row.
+
+    Catches the regression class where the script (or a maintainer) writes a
+    finding citing an audit_id that was never logged — the report's verify-link
+    would dangle, defeating the whole point of the example tree.
+    """
+    audit_ids: set[str] = set()
+    for jsonl in (case_dir / "audit").glob("*.jsonl"):
+        for line in jsonl.read_text().splitlines():
+            if line.strip():
+                row = json.loads(line)
+                if "audit_id" in row:
+                    audit_ids.add(str(row["audit_id"]))
+    findings = json.loads((case_dir / "findings.json").read_text())
+    for f in findings.get("findings", []):
+        for cited in f.get("cited_audit_ids", []):
+            if cited not in audit_ids:
+                raise ValueError(f"referential integrity: {cited!r} not in audit/*.jsonl")
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -110,15 +110,37 @@ class TestDeterministicRegeneration:
             )
             assert r.returncode == 0, r.stderr
 
-            for committed_file in _COMMITTED.rglob("*"):
-                if not committed_file.is_file():
-                    continue
-                rel = committed_file.relative_to(_COMMITTED)
-                fresh = tmp_out / rel
-                assert fresh.exists(), f"regen missed {rel}"
-                assert committed_file.read_bytes() == fresh.read_bytes(), (
-                    f"byte drift on {rel}; committed differs from fresh build"
+            committed_files = [
+                f.relative_to(_COMMITTED) for f in _COMMITTED.rglob("*") if f.is_file()
+            ]
+            fresh_files = [f.relative_to(tmp_out) for f in tmp_out.rglob("*") if f.is_file()]
+            assert set(committed_files) == set(fresh_files), (
+                f"tree shape drift; committed_only={set(committed_files) - set(fresh_files)} "
+                f"fresh_only={set(fresh_files) - set(committed_files)}"
+            )
+            for rel in committed_files:
+                assert (_COMMITTED / rel).read_bytes() == (tmp_out / rel).read_bytes(), (
+                    f"byte drift on {rel}"
                 )
+
+    def test_two_independent_builds_byte_identical(self) -> None:
+        """Two fresh builds must match each other byte-for-byte (catches
+        datetime.now() / random / dict-iter drift independent of committed bytes)."""
+        with tempfile.TemporaryDirectory() as ta, tempfile.TemporaryDirectory() as tb:
+            for td in (ta, tb):
+                r = subprocess.run(
+                    [sys.executable, str(_SCRIPT), "--out", td],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                assert r.returncode == 0, r.stderr
+            a, b = Path(ta), Path(tb)
+            a_files = sorted(f.relative_to(a) for f in a.rglob("*") if f.is_file())
+            b_files = sorted(f.relative_to(b) for f in b.rglob("*") if f.is_file())
+            assert a_files == b_files
+            for rel in a_files:
+                assert (a / rel).read_bytes() == (b / rel).read_bytes(), f"non-deterministic: {rel}"
 
 
 class TestHmacLedger:
@@ -130,3 +152,105 @@ class TestHmacLedger:
         assert len(entry["hmac_sha256"]) == 64  # type: ignore[arg-type]
         assert entry["pbkdf2_iter"] == 600000
         assert "EXAMPLE-not-a-real-secret-EXAMPLE" in str(entry["notes"])
+
+    def test_ledger_hmac_recomputes_from_sentinel_key(self) -> None:
+        """Recompute HMAC from sentinel key + canonical payload; assert equality."""
+        import hashlib
+        import hmac
+
+        sentinel_key = b"EXAMPLE-not-a-real-secret-EXAMPLE"  # pragma: allowlist secret
+        # Payload schema mirrors the build script
+        ts = "2026-06-13T12:00:25Z"
+        payload = f"F-example-001|APPROVED|sift-example-20260613-001|{ts}".encode()
+        expected = hmac.new(sentinel_key, payload, hashlib.sha256).hexdigest()
+        rows = _read_jsonl(_CASE / "ledger.jsonl")
+        assert rows[0]["hmac_sha256"] == expected, (
+            "ledger HMAC drifted from sentinel-key computation; "
+            "the committed ledger is stale or the key/payload changed"
+        )
+
+
+class TestSyntheticGuards:
+    def test_no_real_secret_shaped_strings_in_tree(self) -> None:
+        """Tree-wide grep: no string looks like a real API key/secret/token."""
+        import re
+
+        # Match `secret|api_key|token|password = "long-string"` patterns
+        secret_pat = re.compile(
+            r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*"
+            r'["\'][A-Za-z0-9+/_-]{20,}["\']'
+        )
+        for f in _COMMITTED.rglob("*"):
+            if not f.is_file() or f.suffix in (".png", ".bin"):
+                continue
+            text = f.read_text(errors="ignore")
+            for match in secret_pat.finditer(text):
+                # Allow the sentinel form explicitly
+                assert "EXAMPLE-not-a-real-secret-EXAMPLE" in match.group(0), (
+                    f"{f.relative_to(_COMMITTED)}: real-secret-shaped match: {match.group(0)!r}"
+                )
+
+    def test_every_case_id_value_is_synthetic(self) -> None:
+        """case_id values must be 'case-example-...' (no real-looking IDs)."""
+        import re
+
+        case_id_pat = re.compile(r'case_id\s*[:=]\s*["\']?([^"\'\n,}]+)["\']?')
+        for f in _COMMITTED.rglob("*"):
+            if not f.is_file() or f.suffix in (".png", ".bin"):
+                continue
+            text = f.read_text(errors="ignore")
+            for match in case_id_pat.finditer(text):
+                value = match.group(1).strip()
+                assert value.startswith("case-example-"), (
+                    f"{f.relative_to(_COMMITTED)}: non-synthetic case_id {value!r}"
+                )
+
+
+class TestSchemaSanity:
+    def test_case_toml_roundtrips_via_tomllib(self) -> None:
+        """case.toml parses and carries required keys."""
+        import tomllib
+
+        data = tomllib.loads((_CASE / ".silentwitness" / "case.toml").read_text())
+        assert data["case_id"] == "case-example-001"
+        assert "examiner" in data
+        assert "created_at" in data
+
+    def test_evidence_json_schema(self) -> None:
+        """evidence.json: 1 record with 64-hex sha256, integer size_bytes."""
+        data = json.loads((_CASE / "evidence.json").read_text())
+        assert data["schema_version"] == 1
+        assert len(data["records"]) == 1
+        rec = data["records"][0]
+        assert isinstance(rec["sha256"], str) and len(rec["sha256"]) == 64
+        assert isinstance(rec["size_bytes"], int) and rec["size_bytes"] > 0
+        assert "/evidence/sample_EXAMPLE.bin" in rec["path"]
+
+    def test_index_readme_has_six_required_sections(self) -> None:
+        """README.md must carry the 6 PRD §11 sections (intro + 5 H2 headings)."""
+        text = (_COMMITTED / "README.md").read_text()
+        for heading in (
+            "## What this contains",
+            "## How to read this",
+            "## What it demonstrates",
+            "## Synthetic disclosure",
+            "## Source",
+        ):
+            assert heading in text, f"missing section: {heading}"
+
+
+class TestReferentialIntegrity:
+    def test_verify_link_audit_id_exists_in_audit_jsonl(self) -> None:
+        """The [verify:audit_id] in report.md must resolve to an actual audit row."""
+        import re
+
+        text = (_CASE / "report.md").read_text()
+        verify_ids = set(re.findall(r"\[verify:([a-zA-Z0-9-]+)\]", text))
+        assert verify_ids, "report.md has no [verify:] tokens"
+        all_audit_ids: set[str] = set()
+        for jl in (_CASE / "audit").glob("*.jsonl"):
+            for row in _read_jsonl(jl):
+                if "audit_id" in row:
+                    all_audit_ids.add(str(row["audit_id"]))
+        missing = verify_ids - all_audit_ids
+        assert not missing, f"dangling verify-links (no audit_id match): {missing}"

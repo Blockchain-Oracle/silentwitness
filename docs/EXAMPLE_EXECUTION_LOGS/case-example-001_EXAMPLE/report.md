@@ -2,7 +2,9 @@
 case_id: case-example-001
 examiner: example-sansforensics
 status: APPROVED
-content_hash: sha256:placeholder
+synthetic: true
+disclosure: "Synthetic example; not a real investigation"
+content_hash: sha256:example-not-computed
 created_at: 2026-06-13T12:00:00Z
 updated_at: 2026-06-13T12:00:25Z
 silentwitness_version: 0.1.0-example
@@ -10,6 +12,10 @@ model_used: example
 ---
 
 # Incident report — case-example-001 (SYNTHETIC EXAMPLE)
+
+> `[verify:audit_id]` tokens in this report reference rows in
+> `audit/*.jsonl` by their `audit_id` field — grep the ID across the
+> audit dir to find the exact tool-call envelope that produced the claim.
 
 ## Executive Summary
 
@@ -37,6 +43,6 @@ parse_evtx 4624 logon trail.
 
 | audit_id | tool | backend | elapsed_ms | result_sha256 (first 16 hex) |
 |---|---|---|---|---|
-| sift-example-20260613-001 | vol_pslist | memory | 4200 | (see audit/memory.jsonl) |
-| sift-example-20260613-002 | parse_mft | disk | 1800 | (see audit/disk.jsonl) |
-| sift-example-20260613-003 | parse_evtx | log | 950 | (see audit/log.jsonl) |
+| sift-example-20260613-001 | vol_pslist | memory | 4200 | 11f9c283c2879d70 |
+| sift-example-20260613-002 | parse_mft | disk | 1800 | 570a2346932a1965 |
+| sift-example-20260613-003 | parse_evtx | log | 950 | 17acffea1465b611 |
