@@ -51,7 +51,14 @@ install_hayabusa() {
     # Hayabusa is a subcommand CLI (clap): it rejects `--version`/`-V`/`-h`.
     # `help` is the only zero-exit smoke check and prints the version banner.
     /opt/hayabusa/hayabusa help >/dev/null 2>&1 || fail "hayabusa runtime check failed"
-    log "Hayabusa installed: $(/opt/hayabusa/hayabusa help 2>&1 | grep -ioE 'Hayabusa v[0-9.]+' | head -1)"
+    # Assert the exact version so a wrong/corrupt/mismatched binary fails loudly.
+    # Capturing without comparing would silently accept a blank banner (pipefail
+    # is masked inside command substitution), so the banner must be load-bearing.
+    local hb_ver
+    hb_ver="$(/opt/hayabusa/hayabusa help 2>&1 | grep -ioE 'Hayabusa v[0-9.]+' | head -1)"
+    [[ "$hb_ver" == "Hayabusa v3.9.0" ]] \
+        || fail "hayabusa version check failed (expected Hayabusa v3.9.0, got: '${hb_ver:-<none>}')"
+    log "Hayabusa installed: $hb_ver"
 }
 
 # ---------------------------------------------------------------------------
