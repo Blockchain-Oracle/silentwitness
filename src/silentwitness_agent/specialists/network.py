@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import logging
-import os
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
-from pydantic_ai.models import Model, infer_model
+from pydantic_ai.models import Model
 
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
 from silentwitness_agent.specialists._base import (
     SpecialistDeps,
     SpecialistReport,
     _load_specialist_prompt,
+    resolve_specialist_model,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -37,44 +37,18 @@ NETWORK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
 _SYSTEM_PROMPT: str = _load_specialist_prompt("network")
 
 _ENV_MODEL_KEY = "SILENTWITNESS_SPECIALIST_MODEL_NETWORK"
-_ENV_QUALITY_KEY = "SILENTWITNESS_MODEL_QUALITY"
 _DEFAULT_MODEL = "anthropic:claude-haiku-4-5"
 _HIGH_QUALITY_MODEL = "anthropic:claude-opus-4-7"
 
 
 def _resolve_specialist_model(model: str | None) -> Model:
-    if model is not None:
-        try:
-            return infer_model(model)
-        except (ValueError, Exception) as exc:
-            raise ValueError(
-                f"network specialist: explicit model={model!r} is not a valid Pydantic AI "
-                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
-            ) from exc
-    env_model = os.environ.get(_ENV_MODEL_KEY)
-    if env_model:
-        try:
-            return infer_model(env_model)
-        except (ValueError, Exception) as exc:
-            raise ValueError(
-                f"network specialist: {_ENV_MODEL_KEY}={env_model!r} is not a valid Pydantic AI "
-                f"model string (e.g. 'anthropic:claude-haiku-4-5'). Error: {exc}"
-            ) from exc
-    if os.environ.get(_ENV_QUALITY_KEY, "").lower() == "high":
-        return infer_model(_HIGH_QUALITY_MODEL)
-    # Inherit the global model so a non-Anthropic SILENTWITNESS_MODEL (e.g.
-    # openai:*) carries the specialists onto the same provider; without this they
-    # stay pinned to the Anthropic default and fail under an OpenAI-only key.
-    global_model = os.environ.get("SILENTWITNESS_MODEL")
-    if global_model:
-        try:
-            return infer_model(global_model)
-        except (ValueError, Exception) as exc:
-            raise ValueError(
-                f"network specialist: SILENTWITNESS_MODEL={global_model!r} is not a valid "
-                f"Pydantic AI model string (e.g. 'openai:gpt-4o'). Error: {exc}"
-            ) from exc
-    return infer_model(_DEFAULT_MODEL)
+    return resolve_specialist_model(
+        model,
+        label="network",
+        env_model_key=_ENV_MODEL_KEY,
+        default_model=_DEFAULT_MODEL,
+        high_quality_model=_HIGH_QUALITY_MODEL,
+    )
 
 
 def build_network_specialist(
@@ -83,7 +57,8 @@ def build_network_specialist(
     """Build and return the network specialist agent.
 
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_NETWORK`` env
-    → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7) → default (haiku-4-5).
+    → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
+    → default (haiku-4-5).
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))

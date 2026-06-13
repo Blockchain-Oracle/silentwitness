@@ -7,11 +7,17 @@ investigator, which owns all pivot decisions.
 from __future__ import annotations
 
 import importlib.resources
+import os
 from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic_ai.exceptions import UserError
+from pydantic_ai.models import Model, infer_model
 
 from silentwitness_common.types import AuditId, Confidence, CriticVerdict, SpecialistName
+
+_GLOBAL_MODEL_ENV = "SILENTWITNESS_MODEL"
+_QUALITY_ENV = "SILENTWITNESS_MODEL_QUALITY"
 
 # ---------------------------------------------------------------------------
 # Tool-call + finding records
@@ -74,6 +80,59 @@ class SpecialistReport(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+def _infer_model_checked(value: str, source: str) -> Model:
+    """Resolve a model string, relabelling ONLY a genuine bad/unknown string.
+
+    A valid string can still fail because the provider package or API key is
+    missing (``ImportError`` / provider auth ``UserError``). Those are NOT
+    string-syntax problems, so we let them propagate with their native type and
+    message rather than mislabelling them as "invalid model string" (which would
+    send an operator to fix the wrong thing). pydantic-ai signals a genuinely bad
+    string as ``UserError: Unknown model`` or ``ValueError: Unknown provider`` —
+    only those two are relabelled with the env-var context.
+    """
+    try:
+        return infer_model(value)
+    except (UserError, ValueError) as exc:
+        if "Unknown model" in str(exc) or "Unknown provider" in str(exc):
+            raise ValueError(
+                f"{source}={value!r} is not a valid Pydantic AI model string "
+                f"(e.g. 'anthropic:claude-haiku-4-5' or 'openai:gpt-4o'). Error: {exc}"
+            ) from exc
+        raise
+
+
+def resolve_specialist_model(
+    model: str | None,
+    *,
+    label: str,
+    env_model_key: str,
+    default_model: str,
+    high_quality_model: str,
+) -> Model:
+    """Resolve a specialist's model with a single, model-agnostic precedence.
+
+    Order (first match wins): explicit ``model`` arg → per-specialist
+    ``env_model_key`` → global ``SILENTWITNESS_MODEL`` → ``MODEL_QUALITY=high``
+    → ``default_model``. The global model deliberately outranks the quality
+    knob: ``high_quality_model`` is a hardcoded Anthropic id, so honouring it
+    over an explicit non-Anthropic ``SILENTWITNESS_MODEL`` (e.g. ``openai:*``)
+    would reintroduce the very Anthropic-pinning this resolution order exists to
+    prevent under an OpenAI/Gemini-only key.
+    """
+    if model is not None:
+        return _infer_model_checked(model, f"{label} specialist: explicit model")
+    env_model = os.environ.get(env_model_key)
+    if env_model:
+        return _infer_model_checked(env_model, f"{label} specialist: {env_model_key}")
+    global_model = os.environ.get(_GLOBAL_MODEL_ENV)
+    if global_model:
+        return _infer_model_checked(global_model, f"{label} specialist: {_GLOBAL_MODEL_ENV}")
+    if os.environ.get(_QUALITY_ENV, "").lower() == "high":
+        return infer_model(high_quality_model)
+    return infer_model(default_model)
+
+
 def _load_specialist_prompt(slug: str) -> str:
     """Read ``prompts/specialist_<slug>.md`` from the installed package."""
     filename = f"specialist_{slug}.md"
@@ -97,4 +156,5 @@ __all__ = [
     "SpecialistReport",
     "ToolCallRecord",
     "_load_specialist_prompt",
+    "resolve_specialist_model",
 ]
