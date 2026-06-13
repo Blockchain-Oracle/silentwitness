@@ -60,7 +60,6 @@ _DERIVED_KEY_BYTES: Final = 32
 _LEDGER_DIR_MODE: Final = 0o700
 _LEDGER_FILE_MODE: Final = 0o600
 _PRF: Final = "sha256"
-_COMPOSER_FORBIDDEN: Final = frozenset({"\x00", "|", ","})
 
 
 class LedgerError(Exception):
@@ -116,50 +115,49 @@ class InterpretationParts:
     confidence: Confidence
 
 
-def _check_no_separator(value: str, field_name: str) -> None:
-    forbidden = _COMPOSER_FORBIDDEN & set(value)
-    if forbidden:
-        codes = ", ".join(f"\\u{ord(c):04x}" for c in sorted(forbidden))
-        raise LedgerCompositionError(
-            f"{field_name!r} contains separator char(s) {codes} — refusing to "
-            "compose canonical bytes that would collide with a distinct input"
-        )
+def _lp(value: str) -> bytes:
+    """Length-prefixed field: 8-byte big-endian length + UTF-8 bytes.
+
+    Length-prefixing makes the canonical composition unambiguous regardless of
+    content — a field can contain ANY character (commas, pipes, newlines, tabs
+    from forensic tool output) without colliding with a distinct input. This
+    replaces the prior ``|``/``,``-delimited scheme, which rejected the commas
+    that appear in essentially every free-text observation/interpretation and so
+    made approval impossible for real findings.
+    """
+    encoded = value.encode("utf-8")
+    return len(encoded).to_bytes(8, "big") + encoded
 
 
 class LedgerComposer:
     """Reproduce the substantive bytes a signer/verifier hashes.
 
-    Both signer (Epic 4 ``approve_finding``) and verifier (Epic 12 CLI
-    ``silentwitness verify``) call these to produce IDENTICAL bytes. Drift
-    is impossible if both sides import the same function. Each composer
-    rejects fields containing ``|``, ``,``, or NUL — these are the
-    architecture §4.9 separators, and ambiguity in the canonical form is
-    the only thing standing between a valid HMAC and a forged claim.
+    Both signer (``approve_finding``) and verifier (``silentwitness verify``)
+    call these to produce IDENTICAL bytes — drift is impossible because both
+    import the same function. Fields are length-prefixed (see :func:`_lp`), so
+    the canonical form is collision-free for arbitrary content.
     """
 
     @staticmethod
     def observation(parts: ObservationParts) -> bytes:
-        """``text + "|" + sorted(audit_ids).join(",")`` per architecture §4.9."""
-        _check_no_separator(parts.text, "ObservationParts.text")
-        for aid in parts.audit_ids:
-            _check_no_separator(aid, "ObservationParts.audit_ids[]")
-        joined = ",".join(sorted(parts.audit_ids))
-        return f"{parts.text}|{joined}".encode()
+        """``LP(text) + count(audit_ids) + LP(aid)... (audit_ids sorted)``."""
+        out = bytearray(_lp(parts.text))
+        sorted_aids = sorted(parts.audit_ids)
+        out += len(sorted_aids).to_bytes(8, "big")
+        for aid in sorted_aids:
+            out += _lp(aid)
+        return bytes(out)
 
     @staticmethod
     def interpretation(parts: InterpretationParts) -> bytes:
-        """``observation_id + "|" + text + "|" + confidence.value`` per architecture §4.9."""
-        _check_no_separator(parts.observation_id, "InterpretationParts.observation_id")
-        _check_no_separator(parts.text, "InterpretationParts.text")
-        return f"{parts.observation_id}|{parts.text}|{parts.confidence.value}".encode()
+        """``LP(observation_id) + LP(text) + LP(confidence.value)``."""
+        return _lp(parts.observation_id) + _lp(parts.text) + _lp(parts.confidence.value)
 
     @staticmethod
     def finding(observation: ObservationParts, interpretation: InterpretationParts) -> bytes:
-        """``observation_bytes + b"\\x00" + interpretation_bytes`` per architecture §4.9."""
-        return (
-            LedgerComposer.observation(observation)
-            + b"\x00"
-            + LedgerComposer.interpretation(interpretation)
+        """``observation_bytes + interpretation_bytes`` — each self-delimiting."""
+        return LedgerComposer.observation(observation) + LedgerComposer.interpretation(
+            interpretation
         )
 
 
