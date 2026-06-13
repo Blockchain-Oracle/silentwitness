@@ -77,6 +77,13 @@ class _AgentConfig:
     agent: Agent[InvestigatorDeps, InvestigatorResult]
     model_str: str
     max_iters: int
+    # The investigator's MCP server, exposed so specialists can SHARE it (one
+    # subprocess, one AuditLogger). pydantic-ai's MCPServer is ref-counted, so
+    # nested specialist runs reuse the same session instead of spawning a second
+    # case-bound server (which would collide on the AuditLogger flock).
+    # INVARIANT: this is the same object passed to Agent(toolsets=[...]) above —
+    # sharing only yields one subprocess because it is that identical server.
+    mcp_server: MCPServerStdio
 
 
 def _parse_max_iters_env(default: int) -> int:
@@ -169,7 +176,9 @@ def build_investigator(
         capabilities=capabilities,
         model_settings=cache_settings(resolved_model),
     )
-    return _AgentConfig(agent=agent, model_str=model_str, max_iters=max_iters)
+    return _AgentConfig(
+        agent=agent, model_str=model_str, max_iters=max_iters, mcp_server=mcp_server
+    )
 
 
 async def investigate(

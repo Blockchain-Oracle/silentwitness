@@ -272,7 +272,9 @@ def _make_test_cfg(model_str: str = "test") -> _AgentConfig:
         ),
         output_type=InvestigatorResult,
     )
-    return _AgentConfig(agent=test_agent, model_str=model_str, max_iters=5)
+    # A dummy MCP server satisfies the dataclass; TestModel never invokes it.
+    dummy_server = MCPServerStdio("python", ["-c", "pass"])
+    return _AgentConfig(agent=test_agent, model_str=model_str, max_iters=5, mcp_server=dummy_server)
 
 
 @pytest.mark.anyio

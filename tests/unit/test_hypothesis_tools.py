@@ -124,3 +124,104 @@ async def test_form_hypothesis_tool_drives_the_stack(tmp_path: Path) -> None:
     assert snap.active is not None, "form_hypothesis tool did not drive the stack"
     assert snap.active.statement == "Exfil over HTTP to an external host."
     assert snap.active.assigned_specialist is SpecialistName.NETWORK
+
+
+_FINAL_RESULT = {
+    "hypotheses_formed": 1,
+    "hypotheses_confirmed": 0,
+    "hypotheses_pivoted": 0,
+    "hypotheses_abandoned": 0,
+    "findings_staged": 0,
+    "total_tool_calls": 0,
+    "total_tokens_consumed": 0,
+    "time_elapsed_ms": 0.0,
+    "final_state": "COMPLETED",
+    "model_used": "test",
+}
+
+
+async def _run_tool_steps(
+    tmp_path: Path, steps: list[tuple[str, dict[str, object]]]
+) -> HypothesisStack:
+    """Drive the investigator through a scripted sequence of hypothesis-tool
+    calls, then emit the final result. Returns the resulting stack."""
+    calls: list[int] = []
+
+    def _fn(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        idx = len(calls)
+        calls.append(1)
+        if idx < len(steps):
+            name, args = steps[idx]
+            return ModelResponse(parts=[ToolCallPart(tool_name=name, args=args)])
+        return ModelResponse(
+            parts=[ToolCallPart(tool_name=info.output_tools[0].name, args=_FINAL_RESULT)]
+        )
+
+    agent: Agent[InvestigatorDeps, InvestigatorResult] = Agent(
+        FunctionModel(_fn), deps_type=InvestigatorDeps, output_type=InvestigatorResult
+    )
+    register_hypothesis_tools(agent)
+    stack = HypothesisStack(case_dir=tmp_path, examiner="tester")
+    deps = InvestigatorDeps(
+        case_dir=tmp_path, examiner="tester", stack=stack, budget=BudgetEnforcer()
+    )
+    await agent.run("go", deps=deps)
+    return stack
+
+
+@pytest.mark.anyio
+async def test_confirm_hypothesis_moves_it_to_history(tmp_path: Path) -> None:
+    stack = await _run_tool_steps(
+        tmp_path,
+        [
+            ("form_hypothesis", {"statement": "C2 beacon", "specialist": "network"}),
+            ("confirm_hypothesis", {"hypothesis_id": "H-001", "evidence_audit_ids": ["aid-1"]}),
+        ],
+    )
+    snap = stack.snapshot()
+    assert snap.active is None
+    assert any(h.id == "H-001" and h.status.value == "CONFIRMED" for h in snap.history)
+
+
+@pytest.mark.anyio
+async def test_pivot_hypothesis_activates_child(tmp_path: Path) -> None:
+    stack = await _run_tool_steps(
+        tmp_path,
+        [
+            ("form_hypothesis", {"statement": "first theory", "specialist": "memory"}),
+            (
+                "pivot_hypothesis",
+                {
+                    "from_hypothesis_id": "H-001",
+                    "to_statement": "better theory",
+                    "reason": "contradicted by the http.log",
+                },
+            ),
+        ],
+    )
+    snap = stack.snapshot()
+    assert snap.active is not None and snap.active.id == "H-002"
+    assert any(h.id == "H-001" and h.status.value == "PIVOTED" for h in snap.history)
+
+
+@pytest.mark.anyio
+async def test_abandon_hypothesis_records_abandoned(tmp_path: Path) -> None:
+    stack = await _run_tool_steps(
+        tmp_path,
+        [
+            ("form_hypothesis", {"statement": "dead end", "specialist": "disk"}),
+            ("abandon_hypothesis", {"hypothesis_id": "H-001", "reason": "no supporting evidence"}),
+        ],
+    )
+    assert any(h.id == "H-001" and h.status.value == "ABANDONED" for h in stack.snapshot().history)
+
+
+@pytest.mark.anyio
+async def test_invalid_transition_returns_guidance_not_crash(tmp_path: Path) -> None:
+    # Confirming a non-active hypothesis must return a guidance string (the tool
+    # catches InvalidTransition), not raise — the run completes cleanly.
+    stack = await _run_tool_steps(
+        tmp_path,
+        [("confirm_hypothesis", {"hypothesis_id": "H-999", "evidence_audit_ids": []})],
+    )
+    assert stack.snapshot().active is None

@@ -61,23 +61,29 @@ def _resolve_specialist_model(model: str | None) -> Model:
 
 def build_memory_specialist(
     model: str | None = None,
+    shared_server: MCPServerStdio | None = None,
 ) -> Agent[SpecialistDeps, SpecialistReport]:
     """Build and return the memory specialist agent.
 
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_MEMORY`` env
     → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
     → default (haiku-4-5).
+
+    ``shared_server``: when the live investigator passes its case-bound MCP server,
+    the specialist reuses it (one subprocess, one AuditLogger). Omitting it spawns
+    a private case-less server; in practice only isolated unit tests do this — the
+    live path always supplies the server via ``register_all_specialists``.
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))
     _LOG.debug("memory specialist: resolved model=%s", model_name)
 
-    mcp_server = MCPServerStdio(
+    server = shared_server or MCPServerStdio(
         "python",
         ["-m", "silentwitness_mcp"],
         sampling_model=resolved,
     )
-    filtered = mcp_server.filtered(lambda _ctx, td: td.name in MEMORY_TOOL_ALLOWLIST)
+    filtered = server.filtered(lambda _ctx, td: td.name in MEMORY_TOOL_ALLOWLIST)
 
     return Agent(
         model=resolved,
@@ -101,7 +107,7 @@ def register_as_investigator_tool(
     """
 
     @investigator.tool
-    async def dispatch_memory_specialist(
+    async def dispatch_memory_specialist(  # pragma: no cover
         ctx: RunContext[InvestigatorDeps],
         question: str,
         hypothesis_id: str,

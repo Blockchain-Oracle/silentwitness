@@ -55,23 +55,27 @@ def _resolve_specialist_model(model: str | None) -> Model:
 
 def build_log_specialist(
     model: str | None = None,
+    shared_server: MCPServerStdio | None = None,
 ) -> Agent[SpecialistDeps, SpecialistReport]:
     """Build and return the log specialist agent.
 
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_LOG`` env
     → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
     → default (haiku-4-5).
+
+    ``shared_server`` reuses the investigator's MCP server (see
+    build_memory_specialist); omit only in isolated unit tests.
     """
     resolved = _resolve_specialist_model(model)
     model_name = getattr(resolved, "model_name", repr(resolved))
     _LOG.debug("log specialist: resolved model=%s", model_name)
 
-    mcp_server = MCPServerStdio(
+    server = shared_server or MCPServerStdio(
         "python",
         ["-m", "silentwitness_mcp"],
         sampling_model=resolved,
     )
-    filtered = mcp_server.filtered(lambda _ctx, td: td.name in LOG_TOOL_ALLOWLIST)
+    filtered = server.filtered(lambda _ctx, td: td.name in LOG_TOOL_ALLOWLIST)
 
     return Agent(
         model=resolved,
@@ -95,7 +99,7 @@ def register_as_investigator_tool(
     """
 
     @investigator.tool
-    async def dispatch_log_specialist(
+    async def dispatch_log_specialist(  # pragma: no cover
         ctx: RunContext[InvestigatorDeps],
         question: str,
         hypothesis_id: str,
