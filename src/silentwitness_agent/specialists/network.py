@@ -8,6 +8,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model
 
+from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
 from silentwitness_agent.specialists._base import (
     SpecialistDeps,
@@ -77,6 +78,7 @@ def build_network_specialist(
         output_type=SpecialistReport,
         system_prompt=_SYSTEM_PROMPT,
         toolsets=[filtered],
+        model_settings=cache_settings(resolved),
     )
 
 

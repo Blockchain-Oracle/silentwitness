@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import Agent
 from pydantic_ai.models import Model, infer_model
 
+from silentwitness_agent._caching import cache_settings
 from silentwitness_common.types import Confidence
 
 _LOG = logging.getLogger(__name__)
@@ -155,6 +156,7 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
         deps_type=CriticDeps,
         output_type=CriticReport,
         system_prompt=_SYSTEM_PROMPT,
+        model_settings=cache_settings(resolved_model),
     )
 
 
