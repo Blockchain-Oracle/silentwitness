@@ -64,6 +64,11 @@ _GuardFn = Callable[[str, "Context[ServerSession, AppContext]"], None]
 
 # Tool names wired to real implementations here. Grows as the surface is wired;
 # _tool_stubs stubs only the complement so no tool name is ever unadvertised.
+# All tool names wired to real implementations across this module + the
+# per-domain sub-modules (_tool_impls_memory, _tool_impls_log). Listed
+# explicitly (not imported from the sub-modules) to avoid an import cycle, since
+# those modules import helpers from here. _tool_stubs stubs only the complement
+# (currently suricata_run + approve_finding).
 WIRED_TOOLS: frozenset[str] = frozenset(
     {
         "register_evidence",
@@ -73,6 +78,17 @@ WIRED_TOOLS: frozenset[str] = frozenset(
         "record_interpretation",
         "record_narrative",
         "record_pivot",
+        "vol_pslist",
+        "vol_psscan",
+        "vol_pstree",
+        "vol_malfind",
+        "vol_netscan",
+        "vol_cmdline",
+        "vol_dlllist",
+        "vol_handles",
+        "vol_lsadump",
+        "chainsaw_hunt",
+        "hayabusa_csv_timeline",
     }
 )
 
@@ -313,6 +329,15 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
         resp = _impl_record_pivot(payload, case_dir=case_dir, audit_logger=audit, model_used=model)
         return resp.model_dump(mode="json")
+
+    # Lazy imports break the cycle: the sub-modules import helpers from this
+    # module, so they can only be imported after it is fully initialised (i.e.
+    # at registration time, not module load time).
+    from silentwitness_mcp._tool_impls_log import register_log_tools
+    from silentwitness_mcp._tool_impls_memory import register_memory_tools
+
+    register_memory_tools(mcp, guard_mount)
+    register_log_tools(mcp, guard_mount)
 
 
 __all__ = ["WIRED_TOOLS", "register_real_tools"]
