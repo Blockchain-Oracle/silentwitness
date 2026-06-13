@@ -19,6 +19,16 @@ from silentwitness_agent.specialists.disk import (
     build_disk_specialist,
     register_as_investigator_tool,
 )
+from silentwitness_agent.specialists.log import build_log_specialist
+from silentwitness_agent.specialists.memory import build_memory_specialist
+from silentwitness_agent.specialists.network import build_network_specialist
+
+_BUILDERS = {
+    "memory": build_memory_specialist,
+    "disk": build_disk_specialist,
+    "log": build_log_specialist,
+    "network": build_network_specialist,
+}
 
 _WIRING_SRC = Path("src/silentwitness_agent/specialists/_wiring.py").read_text(encoding="utf-8")
 _INVESTIGATE_SRC = Path("src/silentwitness_agent/cli_commands/investigate.py").read_text(
@@ -36,14 +46,16 @@ def test_live_investigate_calls_register_all_specialists() -> None:
     assert "register_all_specialists(cfg.agent" in _INVESTIGATE_SRC
 
 
-def test_specialist_reuses_shared_server_not_a_new_one(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SILENTWITNESS_SPECIALIST_MODEL_DISK", "test")
+@pytest.mark.parametrize("name", ["memory", "disk", "log", "network"])
+def test_specialist_reuses_shared_server_not_a_new_one(
+    name: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
     shared = MCPServerStdio("python", ["-c", "pass"])
-    specialist = build_disk_specialist(model="test", shared_server=shared)
+    specialist = _BUILDERS[name](model="test", shared_server=shared)
     # The specialist's filtered toolset must wrap the SHARED server instance.
-    wrapped = specialist.toolsets
-    assert any(getattr(t, "wrapped", None) is shared for t in wrapped), (
-        "disk specialist did not reuse the shared MCP server"
+    assert any(getattr(t, "wrapped", None) is shared for t in specialist.toolsets), (
+        f"{name} specialist did not reuse the shared MCP server"
     )
 
 
