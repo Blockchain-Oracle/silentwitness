@@ -7,8 +7,9 @@ A hypothesis-first IR investigator (Custom MCP Server + Pydantic AI reference ag
 1. **Quality > deadline.** AI coding gives us speed to ship the *right thing*, not to cut corners. **No mocks on the hot path. No half-built features.** If the right way takes longer, do it the right way. Per Abu 2026-06-03: *"by using AI coding…a deadline is not a barrier. I don't want this to go; I've been doing mock integration and something like that."*
 2. **Test before commit.** Coverage per `docs/CICD_SPEC.md §8`: 95% on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere. Property tests with `hypothesis` where applicable. BDD criteria from the story are the acceptance bar.
 3. **Research when stuck.** Library APIs drift. If behavior differs from spec: Context7 the library → web-search the symptom → read source → amend. Don't ship a workaround that hides the underlying issue.
-4. **One task at a time.** Sub-agents are for *research assistance*, not for parallel implementation. Eggs in one basket per task.
-5. **≤400 LOC per Python file** (CI gate). Split at natural module boundaries.
+4. **Research existing libraries BEFORE hand-rolling.** It's 2026 — a mature permissive library probably already solves it. Don't reinvent (e.g. evidence access/parsing/indexing = `dfvfs`/`plaso`/`regipy`/`python-evtx`/SQLite-FTS5, NOT bespoke TSK glue). **Licensing gate: submission is MIT/Apache, so every dep must be permissive — `dissect` (Fox-IT) is AGPL-3.0, DO NOT USE.** Check license before adopting.
+5. **Use sub-agents liberally for research/audits.** Parallel, fast, keeps main context clean — delegate surveys/audits/deep-dives to `general-purpose`/`Explore` agents. (Implementation stays one-task-at-a-time: sub-agents are for research, not parallel coding.)
+6. **≤400 LOC per Python file** (CI gate). Split at natural module boundaries.
 
 ## Vocab discipline (CI grep gate)
 Never: "Ralph Wiggum Loop", "court-admissible", "autonomous SOC", "eliminates hallucinations", "find evil" as marketing.
