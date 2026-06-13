@@ -29,6 +29,7 @@ LOG_TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "chainsaw_hunt",
         "record_observation",
         "record_interpretation",
+        "read_tool_output",
         "register_evidence",
         "verify_evidence_hash",
     }

@@ -35,6 +35,7 @@ MEMORY_TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "vol_lsadump",
         "record_observation",
         "record_interpretation",
+        "read_tool_output",
         "register_evidence",
         "verify_evidence_hash",
     }

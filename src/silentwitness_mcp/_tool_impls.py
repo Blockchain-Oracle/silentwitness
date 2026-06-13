@@ -31,7 +31,6 @@ from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
-from pydantic import ValidationError
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp._errors import ServerConfigurationError
@@ -42,21 +41,8 @@ from silentwitness_mcp.evidence.registry import (
     EvidenceRegistry,
     EvidenceRegistryError,
 )
-from silentwitness_mcp.findings._audit_index import build_audit_index
-from silentwitness_mcp.findings.interpretation import (
-    InterpretationInput,
-    record_interpretation as _impl_record_interpretation,
-)
-from silentwitness_mcp.findings.narrative import (
-    NarrativeInput,
-    record_narrative as _impl_record_narrative,
-)
-from silentwitness_mcp.findings.observation import (
-    ObservationInput,
-    record_observation as _impl_record_observation,
-)
-from silentwitness_mcp.findings.pivot import PivotInput, record_pivot as _impl_record_pivot
 from silentwitness_mcp.tools.network import zeek_run as _impl_zeek_run
+from silentwitness_mcp.verification.normalizer import normalize_output
 
 _CaseDeps = tuple[Path, EvidenceRegistry, AuditLogger, str]
 
@@ -78,6 +64,7 @@ WIRED_TOOLS: frozenset[str] = frozenset(
         "record_interpretation",
         "record_narrative",
         "record_pivot",
+        "read_tool_output",
         "vol_pslist",
         "vol_psscan",
         "vol_pstree",
@@ -123,6 +110,45 @@ def _tool_out_dir(case_dir: Path, tool: str, key: str) -> Path:
     """Per-call output dir derived from case_dir — never an LLM-supplied path."""
     digest = hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return case_dir / ".tool-output" / tool / digest
+
+
+def _collect_output_paths(obj: Any) -> list[str]:
+    """Recursively collect every ``"path"`` string value in a dumped envelope.
+
+    Tools that decompose evidence into files (zeek -> conn.log/http.log/...) report
+    those files as ``path`` entries. Surfacing them lets the wrapper tell the agent
+    EXACTLY which files to read_tool_output for citation."""
+    found: list[str] = []
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            if key == "path" and isinstance(value, str):
+                found.append(value)
+            else:
+                found.extend(_collect_output_paths(value))
+    elif isinstance(obj, list):
+        for item in obj:
+            found.extend(_collect_output_paths(item))
+    return found
+
+
+def _with_citation_next_step(dumped: dict[str, Any]) -> dict[str, Any]:
+    """Attach a structured next-step telling the agent how to cite the output
+    files this tool produced.
+
+    This is the ENFORCEMENT-aligned alternative to a system-prompt plea: the
+    guidance rides in the tool's own response, which the agent always reads, so
+    it does not depend on the agent having internalised a prompt instruction. The
+    citation gate still does the hard enforcement (a finding must quote verbatim
+    content) — this just removes the discovery friction every single call."""
+    paths = _collect_output_paths(dumped)
+    if paths:
+        dumped["citation_next_step"] = (
+            "The fields above are an INVENTORY of output files, not their content. "
+            "To cite a specific event in record_observation, call "
+            "read_tool_output(output_path=<one of these paths>) and quote the exact "
+            f"line verbatim. Readable output files: {paths}"
+        )
+    return dumped
 
 
 def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
@@ -211,131 +237,70 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
             model_used=model,
             timeout_s=timeout_s,
         )
-        return resp.model_dump(mode="json")
+        return _with_citation_next_step(resp.model_dump(mode="json"))
 
     @mcp.tool()
-    async def record_observation(
+    async def read_tool_output(
         ctx: Context[ServerSession, AppContext],
-        text: str,
-        cited_spans: list[dict[str, Any]],
-        audit_ids: list[str],
+        output_path: str,
+        line_start: int = 0,
+        max_lines: int = 200,
     ) -> dict[str, Any]:
-        """Record a verifiable observation. Each cited_span = {audit_id, line_start,
-        line_end, span_text}; span_text must appear verbatim in the cited tool
-        output (citation gate) and every named entity must appear in a cited span
-        (entity gate). Rejections are returned, not raised — re-submit with fixes."""
-        guard_mount("record_observation", ctx)
+        """Read the line-numbered content of a stored tool-output file (e.g. a
+        Zeek log path returned by zeek_run) so you can quote EXACT lines in a
+        record_observation citation. Returns an audit_id +
+        sha256_of_normalized_output + numbered lines; pass those (with the line
+        range and the verbatim span_text) as a cited_span. Only files under the
+        case's .tool-output directory are readable. Page via line_start/max_lines."""
+        guard_mount("read_tool_output", ctx)
         case_dir, _registry, audit, model = _case_deps(ctx)
+        allowed_root = (case_dir / ".tool-output").resolve()
         try:
-            payload = ObservationInput.model_validate(
-                {"text": text, "cited_spans": cited_spans, "audit_ids": audit_ids}
-            )
-        except (ValidationError, ValueError) as exc:
-            return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
-        resp = _impl_record_observation(
-            payload,
-            case_dir=case_dir,
-            audit_index=build_audit_index(case_dir),
-            audit_logger=audit,
+            target = Path(output_path).resolve()
+        except OSError as exc:
+            return {"success": False, "reason": "BAD_PATH", "detail": str(exc)}
+        if not target.is_relative_to(allowed_root) or not target.is_file():
+            return {
+                "success": False,
+                "reason": "PATH_NOT_ALLOWED",
+                "detail": f"only files under {allowed_root} are readable",
+            }
+        raw = target.read_bytes()
+        normalized = normalize_output(raw, "read_tool_output")
+        sha = hashlib.sha256(normalized).hexdigest()
+        lines = normalized.decode("utf-8", errors="surrogateescape").split("\n")
+        total = len(lines)
+        start = max(0, line_start)
+        window = lines[start : start + max(1, min(max_lines, 500))]
+        numbered = "\n".join(f"{start + i}: {ln}" for i, ln in enumerate(window))
+        entry = audit.emit(
+            backend="read_output",
+            tool="read_tool_output",
+            params={"output_path": str(target), "line_start": start},
+            result_summary={"sha256": sha, "total_lines": total},
+            result_sha256=sha,
+            stdout_path=target,
+            elapsed_ms=0.0,
             model_used=model,
         )
-        return resp.model_dump(mode="json")
-
-    @mcp.tool()
-    async def record_interpretation(
-        ctx: Context[ServerSession, AppContext],
-        observation_id: str,
-        text: str,
-        confidence: str,
-        justification: str,
-        what_would_change_this_confidence: str,
-    ) -> dict[str, Any]:
-        """Link an interpretation to an observation. confidence is LOW/MEDIUM/HIGH;
-        higher confidence requires a longer justification."""
-        guard_mount("record_interpretation", ctx)
-        case_dir, _registry, audit, model = _case_deps(ctx)
-        try:
-            payload = InterpretationInput.model_validate(
-                {
-                    "observation_id": observation_id,
-                    "text": text,
-                    "confidence": confidence,
-                    "justification": justification,
-                    "what_would_change_this_confidence": what_would_change_this_confidence,
-                }
-            )
-        except (ValidationError, ValueError) as exc:
-            return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
-        resp = _impl_record_interpretation(
-            payload, case_dir=case_dir, audit_logger=audit, model_used=model
-        )
-        return resp.model_dump(mode="json")
-
-    @mcp.tool()
-    async def record_narrative(
-        ctx: Context[ServerSession, AppContext],
-        section: str,
-        text: str,
-        initial_hypothesis: str,
-        attack_chain: list[dict[str, Any]],
-        pivots: list[str] | None = None,
-        gaps: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Append a narrative section. section is one of executive_summary/
-        methodology/findings/timeline/iocs; attack_chain = [{observation_id,
-        interpretation_id?, note?}]; pivots = [P-NNN]; gaps = free text."""
-        guard_mount("record_narrative", ctx)
-        case_dir, _registry, audit, model = _case_deps(ctx)
-        try:
-            payload = NarrativeInput.model_validate(
-                {
-                    "section": section,
-                    "text": text,
-                    "initial_hypothesis": initial_hypothesis,
-                    "attack_chain": attack_chain,
-                    "pivots": tuple(pivots or ()),
-                    "gaps": tuple(gaps or ()),
-                }
-            )
-        except (ValidationError, ValueError) as exc:
-            return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
-        resp = _impl_record_narrative(
-            payload, case_dir=case_dir, audit_logger=audit, model_used=model
-        )
-        return resp.model_dump(mode="json")
-
-    @mcp.tool()
-    async def record_pivot(
-        ctx: Context[ServerSession, AppContext],
-        from_hypothesis_id: str,
-        to_hypothesis_id: str,
-        reason: str,
-        abandoning_evidence: list[str] | None = None,
-    ) -> dict[str, Any]:
-        """Record a hypothesis pivot — abandoning one theory for another, with the
-        evidence that triggered the change."""
-        guard_mount("record_pivot", ctx)
-        case_dir, _registry, audit, model = _case_deps(ctx)
-        try:
-            payload = PivotInput.model_validate(
-                {
-                    "from_hypothesis_id": from_hypothesis_id,
-                    "to_hypothesis_id": to_hypothesis_id,
-                    "reason": reason,
-                    "abandoning_evidence": tuple(abandoning_evidence or ()),
-                }
-            )
-        except (ValidationError, ValueError) as exc:
-            return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
-        resp = _impl_record_pivot(payload, case_dir=case_dir, audit_logger=audit, model_used=model)
-        return resp.model_dump(mode="json")
+        return {
+            "success": True,
+            "audit_id": entry.audit_id,
+            "sha256_of_normalized_output": sha,
+            "total_lines": total,
+            "line_start": start,
+            "line_end": start + len(window),
+            "content": numbered,
+        }
 
     # Lazy imports break the cycle: the sub-modules import helpers from this
     # module, so they can only be imported after it is fully initialised (i.e.
     # at registration time, not module load time).
+    from silentwitness_mcp._tool_impls_findings import register_finding_recorders
     from silentwitness_mcp._tool_impls_log import register_log_tools
     from silentwitness_mcp._tool_impls_memory import register_memory_tools
 
+    register_finding_recorders(mcp, guard_mount)
     register_memory_tools(mcp, guard_mount)
     register_log_tools(mcp, guard_mount)
 

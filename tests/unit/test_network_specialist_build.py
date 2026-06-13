@@ -49,8 +49,8 @@ _BANNED_TOOLS = {
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_6_tools() -> None:
-    assert len(NETWORK_TOOL_ALLOWLIST) == 6
+def test_allowlist_has_7_tools() -> None:
+    assert len(NETWORK_TOOL_ALLOWLIST) == 7
 
 
 # ---------------------------------------------------------------------------
