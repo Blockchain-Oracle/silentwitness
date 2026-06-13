@@ -709,11 +709,11 @@ stories:
 
   - id: story-dataset-doc
     epic: "Epic 16 — Documentation polish + submission"
-    status: PENDING
+    status: COMPLETE
     depends_on: [dataset-manifests]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/80"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/207"
+    merged_at: "2026-06-13T05:50:00Z"
 
   - id: story-try-it-out-doc
     epic: "Epic 16 — Documentation polish + submission"
