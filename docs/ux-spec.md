@@ -80,7 +80,7 @@ Snapshot of case state. Reads `audit/hypothesis.jsonl` + in-flight state file. S
 
 ```
 $ silentwitness status mr-evil-001
-case:        mr-evil-001       model:   anthropic:claude-opus-4-7-1m
+case:        mr-evil-001       model:   anthropic:claude-opus-4-7
 examiner:    sansforensics     status:  INVESTIGATING (12m 04s elapsed)
 
 hypothesis stack (3 active, 2 confirmed, 1 pivoted, 0 abandoned):
@@ -231,7 +231,7 @@ Precedence (lowest → highest): defaults → `~/.silentwitnessrc.toml` → `./.
 ```toml
 # ~/.silentwitnessrc.toml
 [model]
-default = "anthropic:claude-opus-4-7-1m"
+default = "anthropic:claude-opus-4-7"
 critic  = "anthropic:claude-haiku-4-5"
 
 [budget]
@@ -353,7 +353,7 @@ updated_at: 2026-06-02T13:48:30Z
 status: DRAFT          # DRAFT | REVIEWED | FINAL
 content_hash: sha256:f0c2...a991
 silentwitness_version: 0.3.1
-model_used: anthropic:claude-opus-4-7-1m
+model_used: anthropic:claude-opus-4-7
 ---
 ```
 

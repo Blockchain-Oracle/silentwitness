@@ -27,7 +27,7 @@ def test_defaults_no_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     ):
         monkeypatch.delenv(key, raising=False)
     cfg = load_config()
-    assert cfg.model.default == "anthropic:claude-opus-4-7-1m"
+    assert cfg.model.default == "anthropic:claude-opus-4-7"
     assert cfg.model.critic == "anthropic:claude-haiku-4-5"
     assert cfg.budget.max_steps == 200
     assert cfg.budget.max_tokens == 800_000

@@ -219,7 +219,7 @@ class TestBaselineRunResultRoundTrip:
             finished_at=now,
             elapsed_seconds=12.5,
             exit_code=0,
-            model="anthropic:claude-opus-4-7-1m",
+            model="anthropic:claude-opus-4-7",
             temperature=0.0,
             commit_sha="deadbeef",
             findings=[

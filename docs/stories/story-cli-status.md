@@ -131,7 +131,7 @@ uv run silentwitness status test-case --json | jq -e '.case_id' >/dev/null
 - Budget remaining = `budget - consumed`. Display as `312k / 800k` (k = ×1000, not KiB) per ux-spec §2.2 sample. Implement with a `_humanize_count(n)` helper that uses `k` for thousands and `M` for millions.
 - Default render shape (the non-`--full` path) per ux-spec §2.2:
   ```
-  case:        mr-evil-001       model:   anthropic:claude-opus-4-7-1m
+  case:        mr-evil-001       model:   anthropic:claude-opus-4-7
   examiner:    sansforensics     status:  INVESTIGATING (12m 04s elapsed)
 
   hypothesis stack (3 active, 2 confirmed, 1 pivoted, 0 abandoned):

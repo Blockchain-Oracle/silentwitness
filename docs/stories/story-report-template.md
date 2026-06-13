@@ -57,7 +57,7 @@ content_hash: sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b785
 created_at: 2026-06-02T12:00:00Z
 updated_at: 2026-06-02T12:00:00Z
 silentwitness_version: 1.0.0
-model_used: anthropic:claude-opus-4-7-1m
+model_used: anthropic:claude-opus-4-7
 ---
 
 # Incident Report — Case hacking-case-001

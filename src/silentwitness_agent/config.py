@@ -18,7 +18,7 @@ _BASE = ConfigDict(frozen=True, extra="forbid")
 
 class ModelConfig(BaseModel):
     model_config = _BASE
-    default: str = "anthropic:claude-opus-4-7-1m"
+    default: str = "anthropic:claude-opus-4-7"
     critic: str = "anthropic:claude-haiku-4-5"
 
 

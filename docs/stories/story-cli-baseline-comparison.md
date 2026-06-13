@@ -127,7 +127,7 @@ jq -e '.hallucination_rate_delta' cases/test-case/baseline-delta.json >/dev/null
     "case_id": "mr-evil-001",
     "baseline_mode": "protocol-sift",
     "baseline_model": "anthropic:claude-opus-4-7",
-    "silentwitness_model": "anthropic:claude-opus-4-7-1m",
+    "silentwitness_model": "anthropic:claude-opus-4-7",
     "ground_truth_source": "NIST Hacking Case",
     "metrics": {
       "time_to_handoff_seconds": {"baseline": 3600, "silentwitness": 1200, "delta": -2400},
