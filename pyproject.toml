@@ -56,6 +56,12 @@ dependencies = [
 # (silentwitness_mcp/evidence/access.py) is exercised on the Linux box. Apache-2.0.
 forensics = [
     "dfvfs>=20240115",
+    # Parsing/indexing layer (Phase 1). plaso = super-timeline (100s of artifact
+    # parsers + the libyal stack); regipy = pure-Python offline registry;
+    # python-evtx = pure-Python EVTX. All Apache-2.0 / MIT.
+    "plaso>=20240308",
+    "regipy>=5.0",
+    "python-evtx>=0.7",
 ]
 
 [dependency-groups]
