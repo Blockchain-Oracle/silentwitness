@@ -70,3 +70,12 @@ build:
 # Render docs/diagrams/*.mmd to PNG via mmdc. Run `./install.sh --diagrams` first.
 diagrams:
     ./scripts/render_diagrams.sh
+
+# Run the full accuracy harness (baseline + silentwitness + scorer + delta) for a dataset.
+# Usage: just harness DATASET=nitroba
+harness DATASET:
+    uv run python harness/datasets/verify_manifest.py --manifest harness/datasets/{{DATASET}}.manifest.json --strict
+    uv run python -m harness.baseline.runner --dataset {{DATASET}} --evidence ./evidence
+    uv run python -m harness.silentwitness.runner --dataset {{DATASET}} --evidence ./evidence
+    bash -c 'uv run python -m harness.scorer --dataset {{DATASET}} --baseline harness/results/{{DATASET}}/baseline-*.json --silentwitness harness/results/{{DATASET}}/silentwitness-*.json --evidence ./evidence'
+    uv run python -m harness.delta_report --dataset {{DATASET}}
