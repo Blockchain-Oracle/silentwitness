@@ -34,6 +34,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
+from silentwitness_mcp._case_env import read_case_env
+from silentwitness_mcp.audit.logger import AuditLogger
+from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.verification._injection_loader import get_patterns
 
 if TYPE_CHECKING:
@@ -59,11 +62,22 @@ class MountCheckResult:
 @dataclass(slots=True)
 class AppContext:
     """Lifespan-shared context passed to every tool via
-    ``ctx.request_context.lifespan_context``."""
+    ``ctx.request_context.lifespan_context``.
+
+    The first three fields are always populated. The case-binding fields
+    (``case_dir`` / ``evidence_registry`` / ``audit_logger`` / ``model_used``)
+    are populated only when the server is spawned with a case env (see
+    :mod:`silentwitness_mcp._case_env`); they stay ``None`` for bare boots and
+    test harnesses, in which case evidence-bound tools refuse with a typed
+    misconfiguration error rather than dereferencing ``None``."""
 
     mount: MountCheckResult
     evidence_root: Path
     injection_pattern_count: int
+    case_dir: Path | None = None
+    evidence_registry: EvidenceRegistry | None = None
+    audit_logger: AuditLogger | None = None
+    model_used: str | None = None
 
 
 def check_mount(target: Path = DEFAULT_EVIDENCE_ROOT) -> MountCheckResult:
@@ -160,16 +174,40 @@ async def lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
             logger.info("mount: %s", note)
     pattern_count = warm_injection_patterns()
     logger.info("injection-pattern catalog loaded: %d patterns", pattern_count)
+
+    # Case binding: when spawned by the investigator the server receives the
+    # case via env (see _case_env). Construct exactly one registry + one logger
+    # here — the run serves one case for the server's whole lifetime. Absent env
+    # (tests / bare boot) leaves these None and evidence-bound tools refuse.
+    case = read_case_env()
+    case_dir: Path | None = None
+    evidence_registry: EvidenceRegistry | None = None
+    audit_logger: AuditLogger | None = None
+    model_used: str | None = None
+    if case is not None:
+        case_dir = case.case_dir
+        evidence_registry = EvidenceRegistry(case.case_dir)
+        audit_logger = AuditLogger(case.case_dir, case.examiner)
+        model_used = case.model_used
+        logger.info("case bound: %s (examiner=%s, model=%s)", case_dir, case.examiner, model_used)
+    else:
+        logger.info("no case env — server booting without case binding (test/bare mode)")
+
     ctx = AppContext(
         mount=mount,
         evidence_root=DEFAULT_EVIDENCE_ROOT,
         injection_pattern_count=pattern_count,
+        case_dir=case_dir,
+        evidence_registry=evidence_registry,
+        audit_logger=audit_logger,
+        model_used=model_used,
     )
     try:
         yield ctx
     finally:
-        # AuditLogger instances are case-scoped and own their own
-        # __exit__ via fcntl.flock release; the spaCy model cache is
+        # Release the AuditLogger's per-case fcntl lock so a follow-up run on the
+        # same case (e.g. --resume) can re-acquire it. The spaCy model cache is
         # process-global and CPython drops it on interpreter shutdown.
-        # Nothing to flush here for v1.
+        if audit_logger is not None:
+            audit_logger.close()
         logger.info("silentwitness server shutdown complete")
