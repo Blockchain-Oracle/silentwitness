@@ -42,6 +42,10 @@ dependencies = [
     "spacy>=3.8.10,<3.9",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
     "volatility3==2.27.0",
+    # Evidence access: open E01/raw images, resolve partitions + filesystems
+    # in-process (story-evidence-access). Apache-2.0; ships on the SIFT
+    # Workstation as a plaso dependency. Pulls pytsk3 + libyal Python bindings.
+    "dfvfs>=20240115",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
     "matplotlib>=3.10,<3.11",
 ]
