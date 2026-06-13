@@ -21,6 +21,13 @@ def _write(case_dir: Path, records: list[dict]) -> None:  # type: ignore[type-ar
     (case_dir / "findings.json").write_text(json.dumps(records), encoding="utf-8")
 
 
+def _write_blob(case_dir: Path, audit_id: str = "aid-1") -> None:
+    """The critic only judges findings whose cited evidence is on disk."""
+    blobs = case_dir / "audit" / "blobs"
+    blobs.mkdir(parents=True, exist_ok=True)
+    (blobs / f"{audit_id}.txt").write_text("cited evidence line\n", encoding="utf-8")
+
+
 def _obs(oid: str, iid: str, conf: str = "MEDIUM") -> dict:  # type: ignore[type-arg]
     return {
         "observation_id": oid,
@@ -46,6 +53,7 @@ def test_critic_pass_swallows_model_unavailable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _write(tmp_path, [_obs("O-001", "I-001"), _finding("F-001", "O-001", "I-001")])
+    _write_blob(tmp_path)
 
     async def _boom(*_a: object, **_k: object) -> CriticReport:
         raise RuntimeError("no API key")
@@ -65,6 +73,7 @@ def test_critic_pass_skips_reviewed_and_malformed(
         return CriticReport(verdicts=[], tokens_spent=0, time_elapsed_ms=0.0)
 
     monkeypatch.setattr("silentwitness_agent.critic.critique", _capture)
+    _write_blob(tmp_path)  # both O-001/O-002 cite aid-1 → evidence on disk
     _write(
         tmp_path,
         [
