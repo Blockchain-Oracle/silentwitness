@@ -147,23 +147,26 @@ class _JsonlStripWriter(StripEventWriter):
 # ---------------------------------------------------------------------------
 
 
-def _suggested_for_hallucination(
-    hallucinated_texts: tuple[str, ...], cited_spans: tuple[CitedSpan, ...]
-) -> str | None:
-    """Pick the first hallucinated entity and emit a one-line hint
-    pointing the agent at the verbatim text in the cited spans.
+def _suggested_for_hallucination(hallucinated_texts: tuple[str, ...]) -> str | None:
+    """Build actionable self-correction guidance for a HALLUCINATED_ENTITIES reject.
 
+    The gate found one or more entities in ``observation_text`` that do not
+    appear verbatim in ANY cited span — typically because the agent described
+    lines it read but cited a *different* line. We name EVERY offending entity
+    (not just the first) and give the two — and only two — valid fixes, so the
+    agent corrects by construction rather than guessing (architecture §8.4).
     The agent's reasoning loop reads ``ObservationResult.suggested`` and
-    composes a re-submission using the verbatim string. The hint format
-    is deliberately terse — it's a single-shot prompt-layer nudge, not
-    an explanation."""
-    if not hallucinated_texts or not cited_spans:
+    re-submits."""
+    if not hallucinated_texts:
         return None
-    first = hallucinated_texts[0]
-    sample_span = cited_spans[0].span_text
+    offending = ", ".join(repr(t) for t in hallucinated_texts)
     return (
-        f"observation_text mentioned {first!r} but the cited spans say "
-        f"{sample_span!r}; re-cite the verbatim string from the evidence"
+        f"Entity gate: {offending} do not appear verbatim in any span you cited "
+        "— you are likely describing evidence you read but did not cite. Fix by "
+        "EITHER (a) for each entity, add a cited_span whose span_text is the exact "
+        "line containing it (use read_tool_output to locate that line), OR (b) "
+        "remove the entity from observation_text. Quote every entity you name "
+        "byte-for-byte; do not paraphrase it."
     )
 
 
@@ -299,7 +302,7 @@ def _run_pipeline(
             success=False,
             reason=ObservationRejectReason.HALLUCINATED_ENTITIES,
             hallucinated=hallucinated_texts,
-            suggested=_suggested_for_hallucination(hallucinated_texts, payload.cited_spans),
+            suggested=_suggested_for_hallucination(hallucinated_texts),
         )
 
     observation_record = {
