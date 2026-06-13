@@ -58,6 +58,7 @@ def _resolve_specialist_model(model: str | None) -> Model:
 
 def build_disk_specialist(
     model: str | None = None,
+    shared_server: MCPServerStdio | None = None,
 ) -> Agent[SpecialistDeps, SpecialistReport]:
     """Build and return the disk specialist agent.
 
@@ -69,12 +70,12 @@ def build_disk_specialist(
     model_name = getattr(resolved, "model_name", repr(resolved))
     _LOG.debug("disk specialist: resolved model=%s", model_name)
 
-    mcp_server = MCPServerStdio(
+    server = shared_server or MCPServerStdio(
         "python",
         ["-m", "silentwitness_mcp"],
         sampling_model=resolved,
     )
-    filtered = mcp_server.filtered(lambda _ctx, td: td.name in DISK_TOOL_ALLOWLIST)
+    filtered = server.filtered(lambda _ctx, td: td.name in DISK_TOOL_ALLOWLIST)
 
     return Agent(
         model=resolved,

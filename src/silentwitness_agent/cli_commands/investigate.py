@@ -175,15 +175,17 @@ async def _do_agent_run(
         max_iterations=max_iterations,
         hooks=[audit_hooks, display_hooks],
     )
-    # Without this the HypothesisStack is built but never driven — the model has
-    # no tool to form/confirm/pivot a hypothesis, so the wedge stays at zero.
+    # Drive the HypothesisStack (without these tools the wedge stays at zero).
     register_hypothesis_tools(cfg.agent)
+
+    # Wire the 4 dispatch_<x>_specialist tools, sharing the investigator's server.
+    from silentwitness_agent.specialists._wiring import register_all_specialists
+
+    register_all_specialists(cfg.agent, model=model, shared_server=cfg.mcp_server)
     deps = InvestigatorDeps(case_dir=case_dir, examiner=examiner, stack=stack, budget=budget)
 
-    # Surface the registered evidence (exact paths + types) in the opening
-    # prompt. Without this the agent has no way to discover what is registered
-    # or where it lives, and burns iterations guessing paths that fail
-    # EVIDENCE_NOT_REGISTERED.
+    # Surface registered evidence (exact paths + types) in the opening prompt so
+    # the agent does not burn iterations guessing paths that fail registration.
     evidence_records = EvidenceRegistry(case_dir=case_dir).list_all()
     evidence_block = (
         "\n".join(f"- {rec.path} ({rec.type.value})" for rec in evidence_records)
