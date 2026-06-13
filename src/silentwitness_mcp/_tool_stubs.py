@@ -14,6 +14,7 @@ from mcp.server.session import ServerSession
 
 from silentwitness_mcp._errors import ServerConfigurationError
 from silentwitness_mcp._lifecycle import AppContext
+from silentwitness_mcp._tool_impls import register_real_tools
 
 _GuardFn = Callable[[str, Context[ServerSession, AppContext]], None]
 
@@ -31,6 +32,11 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         raise ServerConfigurationError(
             "register_finding_tool_stubs requires a non-None guard_mount callable; got None"
         )
+
+    # Wire the real implementations first; the stubs below cover only the names
+    # not yet wired (see _tool_impls.WIRED_TOOLS), so every tool stays advertised
+    # while the surface is wired incrementally.
+    register_real_tools(mcp, guard_mount)
 
     @mcp.tool()
     def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
@@ -61,18 +67,6 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         """Examiner-only HMAC-ledger approval. Stub."""
         guard_mount("approve_finding", ctx)
         raise NotImplementedError("approve_finding is registered but not yet implemented")
-
-    @mcp.tool()
-    def register_evidence(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Hash + manifest registration (§4.10). Stub."""
-        guard_mount("register_evidence", ctx)
-        raise NotImplementedError("register_evidence is registered but not yet implemented")
-
-    @mcp.tool()
-    def verify_evidence_hash(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Re-hash on case resume to catch bit-rot. Stub."""
-        guard_mount("verify_evidence_hash", ctx)
-        raise NotImplementedError("verify_evidence_hash is registered but not yet implemented")
 
     @mcp.tool()
     def vol_pslist(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
@@ -139,12 +133,6 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         """Hayabusa Sigma-rule csv-timeline over an EVTX directory. Stub."""
         guard_mount("hayabusa_csv_timeline", ctx)
         raise NotImplementedError("hayabusa_csv_timeline is registered but not yet implemented")
-
-    @mcp.tool()
-    def zeek_run(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Zeek offline pcap replay — decomposes pcap into structured logs. Stub."""
-        guard_mount("zeek_run", ctx)
-        raise NotImplementedError("zeek_run is registered but not yet implemented")
 
     @mcp.tool()
     def suricata_run(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
