@@ -5,11 +5,13 @@ prior assumption that tools receive an already-extracted ``$MFT`` / hive. The
 real judged case (ROCBA) is a 24 GB E01 (87 GB uncompressed) whose disk image
 has **no partition table** — the NTFS filesystem sits at offset 0.
 
-dfVFS's :class:`~dfvfs.helpers.volume_scanner.VolumeScanner` resolves both the
-partition-less case (ROCBA) and partitioned images (e.g. the NIST XP E01 with
-NTFS at sector 63) without manual offset arithmetic, so one code path serves
-every case. We drive it non-interactively (``partitions=all``, ``volumes=none``)
-— no mediator, no prompts.
+We build the dfVFS path spec by hand (OS [-> EWF] -> TSK filesystem) and read via
+libtsk, which serves both the partition-less case (ROCBA, NTFS at offset 0) and
+partitioned images (e.g. the NIST XP E01 with NTFS at sector 63). We do NOT use
+dfVFS's ``VolumeScanner``: on real Windows images it probes the Volume Shadow
+Copy volume system (libvshadow), which reads a backup NTFS header past the media
+end and crashes the entire scan (observed on the 87 GB ROCBA NTFS). Going
+straight to TSK skips VSS while still resolving every partition.
 
 We address artifacts by **exact location** (direct path-spec lookup) or by
 listing a single known directory, rather than walking the whole tree: an 87 GB
@@ -17,9 +19,9 @@ NTFS volume has hundreds of thousands of entries, and a per-target full walk
 would blow the "extraction is minutes" budget. Using explicit live ``/Windows``
 paths also sidesteps the ROCBA ``Windows.old`` duplicate hive set for free.
 
-Safety: ``VolumeScanner`` falls back to an OS path spec for a source it cannot
-identify as a disk image — which would enumerate the *host* filesystem. We guard
-against that by accepting only filesystem-type base specs.
+Safety: we only keep a filesystem spec whose TSK filesystem actually opens, so a
+non-image source produces an empty list (-> ``EvidenceAccessError``) rather than
+enumerating the *host* filesystem.
 
 This module is pure evidence mechanics. Audit provenance + evidence-registry
 recording are the caller's job (``cli_commands/prepare.py``) so the access layer
@@ -28,18 +30,16 @@ stays unit-testable in isolation.
 
 from __future__ import annotations
 
-import re
 import shutil
 import subprocess
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from dfvfs.helpers import volume_scanner
 from dfvfs.lib import definitions as dfvfs_definitions, errors as dfvfs_errors
 from dfvfs.path import factory as path_spec_factory
 from dfvfs.resolver import resolver
+from dfvfs.volume import tsk_volume_system
 
 # Read window for in-process file copies — bounds peak memory on a multi-GB
 # artifact ($MFT on a large NTFS volume can be hundreds of MB).
@@ -50,59 +50,13 @@ _ARCHIVE_SUFFIXES = frozenset({".zip", ".7z", ".gz", ".tar", ".tgz", ".bz2", ".x
 # Bound on nested-archive recursion so a zip-bomb / cycle can't loop forever.
 _MAX_ARCHIVE_DEPTH = 4
 
-# Base path specs we accept from VolumeScanner: real filesystem types only.
-# FAKE is the in-memory test filesystem; OS would be the host root. Excluding
-# both means a non-image source raises rather than enumerating the host.
-_ACCEPTED_FS_INDICATORS: frozenset[str] = frozenset(
-    dfvfs_definitions.FILE_SYSTEM_TYPE_INDICATORS
-) - {dfvfs_definitions.TYPE_INDICATOR_FAKE}
+# EnCase/EWF image suffixes — these get an EWF storage-media layer; everything
+# else (dd/raw/img/001) is read as a raw storage-media file.
+_EWF_SUFFIXES: frozenset[str] = frozenset({".e01", ".ex01", ".s01"})
 
 
 class EvidenceAccessError(Exception):
     """Raised when an image cannot be opened or extraction fails."""
-
-
-@dataclass(frozen=True)
-class ArtifactTarget:
-    """A high-value artifact to extract.
-
-    * ``kind="file"`` — ``location`` is an absolute filesystem path; the single
-      file is copied if present.
-    * ``kind="dir_glob"`` — ``location`` is a directory; every immediate child
-      whose name matches ``name_pattern`` (case-insensitive) is copied.
-    * ``kind="per_user"`` — ``location`` is a path *relative to* each
-      ``/Users/<name>/`` directory; copied for every user profile present.
-    """
-
-    label: str
-    kind: Literal["file", "dir_glob", "per_user"]
-    location: str
-    name_pattern: str = ""
-
-
-# ROCBA Windows-10 high-value set (confirmed present by the VPS probe). Explicit
-# live /Windows paths avoid the Windows.old duplicate tree. $UsnJrnl is
-# best-effort (its content is the $J alternate data stream; full ADS extraction
-# is a Phase-1 refinement).
-ROCBA_ARTIFACT_TARGETS: tuple[ArtifactTarget, ...] = (
-    ArtifactTarget("mft", "file", "/$MFT"),
-    ArtifactTarget("usnjrnl", "file", "/$Extend/$UsnJrnl"),
-    ArtifactTarget("hive_software", "file", "/Windows/System32/config/SOFTWARE"),
-    ArtifactTarget("hive_system", "file", "/Windows/System32/config/SYSTEM"),
-    ArtifactTarget("hive_sam", "file", "/Windows/System32/config/SAM"),
-    ArtifactTarget("hive_security", "file", "/Windows/System32/config/SECURITY"),
-    ArtifactTarget("hive_default", "file", "/Windows/System32/config/DEFAULT"),
-    ArtifactTarget("amcache", "file", "/Windows/appcompat/Programs/Amcache.hve"),
-    ArtifactTarget("srum", "file", "/Windows/System32/sru/SRUDB.dat"),
-    ArtifactTarget("evtx", "dir_glob", "/Windows/System32/winevt/Logs", r"\.evtx$"),
-    ArtifactTarget("prefetch", "dir_glob", "/Windows/Prefetch", r"\.pf$"),
-    ArtifactTarget("ntuser", "per_user", "NTUSER.DAT"),
-    ArtifactTarget(
-        "usrclass", "per_user", "AppData/Local/Microsoft/Windows/UsrClass.dat"
-    ),
-)
-
-_USERS_DIR = "/Users"
 
 
 @dataclass
@@ -118,37 +72,105 @@ class OpenedImage:
     base_path_specs: list[Any] = field(default_factory=list)
 
 
-@dataclass(frozen=True)
-class ExtractedArtifact:
-    """One artifact copied out of an image: where it came from, where it landed."""
+def _storage_media_spec(path: Path) -> Any:
+    """Build the storage-media path spec: OS, wrapped in EWF for E01 images.
 
-    label: str
-    source_location: str
-    output_path: Path
-    size_bytes: int
+    We deliberately do NOT use dfVFS's ``VolumeScanner``: on real Windows images
+    it probes the Volume Shadow Copy (VSS/libvshadow) volume system, which reads
+    a backup NTFS header past the media end and crashes the whole scan
+    (observed on the ROCBA 87 GB NTFS). Building the spec by hand and reading via
+    TSK (libtsk) skips VSS entirely while still serving partitioned and
+    partition-less images alike."""
+    os_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_OS, location=str(path)
+    )
+    if path.suffix.lower() in _EWF_SUFFIXES:
+        return path_spec_factory.Factory.NewPathSpec(
+            dfvfs_definitions.TYPE_INDICATOR_EWF, parent=os_spec
+        )
+    return os_spec
+
+
+# (type_indicator, root_location) tried per parent, in order. libfsntfs (NTFS)
+# is preferred: it decodes NTFS-compressed files (Security.evtx, Prefetch) that
+# TSK's LZNT1 decompressor crashes on. TSK is the fallback for non-NTFS (e.g.
+# FAT). NTFS uses backslash locations, TSK forward-slash — see _to_spec_location.
+_FS_BACKENDS: tuple[tuple[str, str], ...] = (
+    (dfvfs_definitions.TYPE_INDICATOR_NTFS, "\\"),
+    (dfvfs_definitions.TYPE_INDICATOR_TSK, "/"),
+)
+
+
+def _candidate_parents(storage_spec: Any) -> list[Any]:
+    """Return the parent spec for each filesystem in the image.
+
+    Uses the TSK partition table (libtsk ``mmls``): one parent per partition, or
+    the storage media itself when there is no partition table (ROCBA: NTFS at
+    offset 0)."""
+    part_spec = path_spec_factory.Factory.NewPathSpec(
+        dfvfs_definitions.TYPE_INDICATOR_TSK_PARTITION, location="/", parent=storage_spec
+    )
+    volume_system = tsk_volume_system.TSKVolumeSystem()
+    try:
+        volume_system.Open(part_spec)
+        parents = [
+            path_spec_factory.Factory.NewPathSpec(
+                dfvfs_definitions.TYPE_INDICATOR_TSK_PARTITION,
+                location=f"/{volume.identifier}",
+                parent=storage_spec,
+            )
+            for volume in volume_system.volumes
+        ]
+    except dfvfs_errors.Error:
+        parents = []
+    return parents or [storage_spec]
+
+
+def _filesystem_specs(storage_spec: Any) -> list[Any]:
+    """Return one filesystem path spec per filesystem in the image.
+
+    For each parent (partition or offset-0 media) the NTFS then TSK backend is
+    tried; the first whose filesystem opens wins. Only opened specs are kept, so
+    junk input yields an empty list rather than enumerating the host."""
+    opened: list[Any] = []
+    for parent in _candidate_parents(storage_spec):
+        for type_indicator, root in _FS_BACKENDS:
+            spec = path_spec_factory.Factory.NewPathSpec(
+                type_indicator, location=root, parent=parent
+            )
+            try:
+                file_system = resolver.Resolver.OpenFileSystem(spec)
+            except dfvfs_errors.Error:
+                continue
+            if file_system is not None:
+                opened.append(spec)
+                break  # one filesystem per parent; NTFS preferred over TSK
+    return opened
+
+
+def _to_spec_location(type_indicator: str, location: str) -> str:
+    """Convert a canonical ``/``-rooted location to the backend's convention.
+
+    libfsntfs addresses files with backslashes (``\\Windows\\...``); TSK uses
+    forward slashes. Targets and traversal speak canonical ``/`` everywhere;
+    conversion happens only at the dfVFS path-spec boundary."""
+    if type_indicator != dfvfs_definitions.TYPE_INDICATOR_NTFS:
+        return location
+    inner = location.strip("/")
+    return "\\" + inner.replace("/", "\\") if inner else "\\"
 
 
 def open_image(path: Path) -> OpenedImage:
-    """Scan ``path`` (E01/raw/dd) and return its filesystem base path specs.
+    """Open ``path`` (E01/raw/dd) and return its TSK filesystem base path specs.
 
-    VolumeScanner runs non-interactively so a partition-less volume image
-    resolves to its filesystem at offset 0 and a partitioned image to each
-    partition's filesystem. Base specs that are not a real filesystem type
-    (e.g. an OS fallback for an unrecognised source) are rejected — otherwise a
-    bad input could enumerate the host filesystem. Raises
-    :class:`EvidenceAccessError` on any failure."""
+    Builds the path spec by hand (OS [-> EWF] -> TSK) and reads via libtsk,
+    bypassing dfVFS's VolumeScanner so the Volume Shadow Copy probe that crashes
+    on real Windows images is never run. A partition-less image resolves to its
+    filesystem at offset 0; a partitioned image to each partition's filesystem.
+    Raises :class:`EvidenceAccessError` if no filesystem opens."""
     if not path.is_file():
         raise EvidenceAccessError(f"evidence image not found: {path}")
-    options = volume_scanner.VolumeScannerOptions()
-    options.partitions = ["all"]
-    options.volumes = ["none"]
-    options.snapshots = ["none"]
-    scanner = volume_scanner.VolumeScanner()
-    try:
-        scanned = scanner.GetBasePathSpecs(str(path), options=options)
-    except dfvfs_errors.ScannerError as exc:
-        raise EvidenceAccessError(f"dfVFS could not scan {path}: {exc}") from exc
-    specs = [s for s in (scanned or []) if s.type_indicator in _ACCEPTED_FS_INDICATORS]
+    specs = _filesystem_specs(_storage_media_spec(path))
     if not specs:
         raise EvidenceAccessError(
             f"no supported filesystem found in {path} "
@@ -163,8 +185,9 @@ def _open_location(opened: OpenedImage, location: str) -> Any:
     Returns the first existing dfVFS file entry or ``None``. Uses a direct
     path-spec build (no tree walk)."""
     for base_spec in opened.base_path_specs:
+        spec_location = _to_spec_location(base_spec.type_indicator, location)
         path_spec = path_spec_factory.Factory.NewPathSpec(
-            base_spec.type_indicator, location=location, parent=base_spec.parent
+            base_spec.type_indicator, location=spec_location, parent=base_spec.parent
         )
         try:
             file_entry = resolver.Resolver.OpenFileEntry(path_spec)
@@ -203,87 +226,6 @@ def _read_entry(file_entry: Any) -> bytes:
             break
         buf.extend(chunk)
     return bytes(buf)
-
-
-def _write_entry(file_entry: Any, out_path: Path) -> int:
-    """Stream a dfVFS file entry to ``out_path``; return bytes written."""
-    file_object = file_entry.GetFileObject()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    written = 0
-    with out_path.open("wb") as handle:
-        if file_object is None:
-            return 0
-        while True:
-            chunk: bytes = file_object.read(_COPY_CHUNK_BYTES)
-            if not chunk:
-                break
-            handle.write(chunk)
-            written += len(chunk)
-    return written
-
-
-def _iter_dir(opened: OpenedImage, dir_location: str) -> Iterator[tuple[str, Any]]:
-    """Yield ``(location, file_entry)`` for immediate children of a directory."""
-    entry = _open_location(opened, dir_location)
-    if entry is None or not entry.IsDirectory():
-        return
-    for sub in entry.sub_file_entries:
-        location = getattr(sub.path_spec, "location", "") or ""
-        yield location, sub
-
-
-def _sanitise_location(location: str) -> str:
-    """Turn a dfVFS ``/``-location into a safe relative output path component."""
-    cleaned = location.replace("\\", "/").lstrip("/")
-    cleaned = cleaned.replace("$", "_").replace(":", "_")
-    parts = [p for p in cleaned.split("/") if p not in ("", ".", "..")]
-    return "/".join(parts) or "artifact"
-
-
-def _extract_one(
-    label: str, location: str, file_entry: Any, workdir: Path
-) -> ExtractedArtifact:
-    out_path = workdir / label / _sanitise_location(location)
-    size = _write_entry(file_entry, out_path)
-    return ExtractedArtifact(
-        label=label, source_location=location, output_path=out_path, size_bytes=size
-    )
-
-
-def extract_artifacts(
-    opened: OpenedImage,
-    workdir: Path,
-    *,
-    targets: tuple[ArtifactTarget, ...] = ROCBA_ARTIFACT_TARGETS,
-) -> list[ExtractedArtifact]:
-    """Copy every matching artifact into ``workdir`` and return what was written.
-
-    A target that matches nothing is silently skipped (a host may legitimately
-    lack SRUM/Amcache); the caller decides whether an empty result is fatal.
-    Output layout: ``<workdir>/<label>/<sanitised-source-path>``."""
-    workdir.mkdir(parents=True, exist_ok=True)
-    results: list[ExtractedArtifact] = []
-    for target in targets:
-        if target.kind == "file":
-            entry = _open_location(opened, target.location)
-            if entry is not None and entry.IsFile():
-                results.append(
-                    _extract_one(target.label, target.location, entry, workdir)
-                )
-        elif target.kind == "dir_glob":
-            pattern = re.compile(target.name_pattern, re.IGNORECASE)
-            for location, sub in _iter_dir(opened, target.location):
-                if sub.IsFile() and pattern.search(location):
-                    results.append(_extract_one(target.label, location, sub, workdir))
-        else:  # per_user
-            for user_location, user_entry in _iter_dir(opened, _USERS_DIR):
-                if not user_entry.IsDirectory():
-                    continue
-                child = f"{user_location.rstrip('/')}/{target.location}"
-                entry = _open_location(opened, child)
-                if entry is not None and entry.IsFile():
-                    results.append(_extract_one(target.label, child, entry, workdir))
-    return results
 
 
 def decompress_archive(archive: Path, workdir: Path) -> list[Path]:
@@ -348,6 +290,17 @@ def _run_7z(seven_zip: str, archive: Path, out_dir: Path) -> None:
             f"7-Zip failed on {archive} (exit {completed.returncode}): {detail}"
         )
 
+
+# Artifact extraction lives in the sibling module (keeps each file under the
+# 400-LOC gate); re-export it so callers and tests see one ``access`` namespace.
+# Imported at the bottom: artifacts imports the image core from here, so this
+# order avoids a circular import (access is always the entry point).
+from silentwitness_mcp.evidence.artifacts import (  # noqa: E402
+    ROCBA_ARTIFACT_TARGETS,
+    ArtifactTarget,
+    ExtractedArtifact,
+    extract_artifacts,
+)
 
 __all__ = [
     "ROCBA_ARTIFACT_TARGETS",

@@ -20,7 +20,7 @@ import pytest
 # only). Skip the whole module when it is absent rather than failing collection.
 pytest.importorskip("dfvfs", reason="forensics extra not installed (uv sync --extra forensics)")
 
-from silentwitness_mcp.evidence import access
+from silentwitness_mcp.evidence import access, artifacts
 
 _HAVE_7Z = any(shutil.which(name) for name in ("7z", "7za", "7zr"))
 
@@ -124,15 +124,15 @@ def test_resolve_7z_missing_gives_actionable_error(
     ],
 )
 def test_sanitise_location(location: str, expected: str) -> None:
-    assert access._sanitise_location(location) == expected
+    assert artifacts._sanitise_location(location) == expected
 
 
 def test_artifact_targets_cover_rocba_high_value_set() -> None:
-    labels = {t.label for t in access.ROCBA_ARTIFACT_TARGETS}
+    labels = {t.label for t in artifacts.ROCBA_ARTIFACT_TARGETS}
     # The probe-confirmed ROCBA artifacts must all be addressed.
     assert {"mft", "hive_software", "hive_system", "amcache", "srum", "evtx", "ntuser"} <= labels
     # Hives are exact-file lookups; EVTX/Prefetch are directory globs; user hives per-user.
-    by_label = {t.label: t for t in access.ROCBA_ARTIFACT_TARGETS}
+    by_label = {t.label: t for t in artifacts.ROCBA_ARTIFACT_TARGETS}
     assert by_label["hive_software"].kind == "file"
     assert by_label["evtx"].kind == "dir_glob"
     assert by_label["ntuser"].kind == "per_user"
