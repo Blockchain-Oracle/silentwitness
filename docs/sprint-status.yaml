@@ -717,11 +717,11 @@ stories:
 
   - id: story-try-it-out-doc
     epic: "Epic 16 — Documentation polish + submission"
-    status: PENDING
+    status: COMPLETE
     depends_on: [cli-install-claude-code, docker-baseline]
     issue_url: "https://github.com/Blockchain-Oracle/silentwitness/issues/81"
-    pr_url: ""
-    merged_at: ""
+    pr_url: "https://github.com/Blockchain-Oracle/silentwitness/pull/209"
+    merged_at: "2026-06-13T06:30:00Z"
 
   - id: story-execution-logs-export
     epic: "Epic 16 — Documentation polish + submission"
