@@ -22,7 +22,7 @@ from silentwitness_agent.critic_handler import (
 
 def _f(n: int) -> dict[str, str]:
     return {
-        "id": f"F-{n:03d}",
+        "finding_id": f"F-{n:03d}",
         "status": "DRAFT",
         "observation_id": f"O-{n:03d}",
         "interpretation_id": f"I-{n:03d}",
@@ -159,7 +159,7 @@ def test_reject_removes_finding_from_findings_json(tmp_path: Path) -> None:
     _write_findings(case, [_f(3)])
     handle_critic_verdicts(case, "aj", [_verdict("F-003", "REJECT")], [])
     findings = json.loads((case / "findings.json").read_text(encoding="utf-8"))
-    assert not any(f.get("id") == "F-003" for f in findings)
+    assert not any(f.get("finding_id") == "F-003" for f in findings)
 
 
 def test_reject_appends_finding_to_archived_with_provenance(tmp_path: Path) -> None:
@@ -169,7 +169,7 @@ def test_reject_appends_finding_to_archived_with_provenance(tmp_path: Path) -> N
     archived = json.loads((case / "findings.archived.json").read_text(encoding="utf-8"))
     assert len(archived) == 1
     rec = archived[0]
-    assert rec["id"] == "F-003"
+    assert rec["finding_id"] == "F-003"
     assert rec["status"] == "ARCHIVED"
     assert rec["critic_status"] == "REJECTED"
     assert rec["archival_reason"] == "hallucinated"
@@ -184,7 +184,7 @@ def test_reject_never_silently_deletes_archived_file_is_post_condition(tmp_path:
     handle_critic_verdicts(case, "aj", [_verdict("F-003", "REJECT")], [])
     assert (case / "findings.archived.json").exists()
     archived = json.loads((case / "findings.archived.json").read_text(encoding="utf-8"))
-    assert any(f.get("id") == "F-003" for f in archived)
+    assert any(f.get("finding_id") == "F-003" for f in archived)
 
 
 # ---------------------------------------------------------------------------
@@ -260,13 +260,13 @@ def test_agree_verdict_reason_preserved_in_audit_line(tmp_path: Path) -> None:
 def test_reject_preserves_existing_archived_entries(tmp_path: Path) -> None:
     """REJECT appends to findings.archived.json; does not overwrite prior entries."""
     case = _make_case(tmp_path)
-    prior = [{"id": "OLD-001", "status": "ARCHIVED", "critic_status": "REJECTED"}]
+    prior = [{"finding_id": "OLD-001", "status": "ARCHIVED", "critic_status": "REJECTED"}]
     (case / "findings.archived.json").write_text(json.dumps(prior), encoding="utf-8")
     _write_findings(case, [_f(3)])
     handle_critic_verdicts(case, "aj", [_verdict("F-003", "REJECT")], [])
     archived = json.loads((case / "findings.archived.json").read_text(encoding="utf-8"))
     assert len(archived) == 2
-    ids = {r.get("id") for r in archived}
+    ids = {r.get("finding_id") for r in archived}
     assert ids == {"OLD-001", "F-003"}
 
 
@@ -346,4 +346,4 @@ def test_multiple_rejects_in_one_batch(tmp_path: Path) -> None:
     assert len(archived) == 2
     remaining = json.loads((case / "findings.json").read_text(encoding="utf-8"))
     assert len(remaining) == 1
-    assert remaining[0]["id"] == "F-003"
+    assert remaining[0]["finding_id"] == "F-003"

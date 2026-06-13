@@ -152,6 +152,40 @@ def _ledger_info(ledger_dir: Path, case_id: str) -> tuple[int, str]:
         return 0, "????"
 
 
+def _render_report(case_dir: Path, examiner: str, *, err: Console) -> None:
+    """Compose report.md from APPROVED findings (replaces the old deferral).
+
+    ``ReportWriter.render()`` reads findings.json, partitions APPROVED Findings,
+    joins each to its observation/interpretation, and composes all sections via
+    the ``compose_*`` functions. Best-effort: a render failure must not undo the
+    committed approval (the HMAC ledger is authoritative)."""
+    try:
+        from silentwitness_agent.report.template import parse_frontmatter
+        from silentwitness_agent.report.writer import ReportWriter
+        from silentwitness_common.version import __version__ as sw_version
+
+        model_used = "unknown"
+        report_path = case_dir / "report.md"
+        if report_path.exists():
+            try:
+                frontmatter, _ = parse_frontmatter(report_path.read_text(encoding="utf-8"))
+                model_used = frontmatter.model_used or model_used
+            except (ValueError, OSError):
+                pass
+        ReportWriter(
+            case_dir,
+            examiner=examiner,
+            model_used=model_used,
+            silentwitness_version=sw_version,
+        ).render()
+    except Exception as exc:
+        err.print(
+            f"[yellow]![/yellow] report.md render skipped ({type(exc).__name__}: {exc}); "
+            "approval is committed to the ledger",
+            highlight=False,
+        )
+
+
 def run(
     case_dir: Path,
     case_id: str,
@@ -316,11 +350,12 @@ def run(
             return 2
         ledger_path = ledger_dir / f"{case_id}.jsonl"
         line_ref = f"#{line_no}" if line_no else ""
+        _render_report(case_dir, examiner, err=err)
         console.print(
             f"[green]✓[/green] {finding_id} APPROVED\n"
             f"       ledger:  {ledger_path}{line_ref}\n"
             f"       hmac:    sha256:{hmac_short}  (PBKDF2-SHA256, 600,000 iter)\n"
-            f"       report.md update deferred (Epic 11 not installed)",
+            f"       report.md updated",
             highlight=False,
         )
         return 0

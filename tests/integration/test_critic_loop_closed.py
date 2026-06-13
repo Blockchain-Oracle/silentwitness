@@ -16,21 +16,21 @@ from silentwitness_agent.critic_handler import handle_critic_verdicts
 def _make_findings(case_dir: Path) -> None:
     findings = [
         {
-            "id": "F-001",
+            "finding_id": "F-001",
             "status": "DRAFT",
             "observation_id": "O-001",
             "interpretation_id": "I-001",
             "title": "Lateral movement via PsExec",
         },
         {
-            "id": "F-002",
+            "finding_id": "F-002",
             "status": "DRAFT",
             "observation_id": "O-002",
             "interpretation_id": "I-002",
             "title": "C2 via HTTPS to 203.0.113.42",
         },
         {
-            "id": "F-003",
+            "finding_id": "F-003",
             "status": "DRAFT",
             "observation_id": "O-003",
             "interpretation_id": "I-003",
@@ -72,22 +72,22 @@ def test_critic_loop_closed_e2e(tmp_path: Path) -> None:
     # findings.json has exactly 2 entries (AGREE + CHALLENGE remain)
     findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
     assert len(findings) == 2
-    ids_remaining = {f["id"] for f in findings}
+    ids_remaining = {f["finding_id"] for f in findings}
     assert ids_remaining == {"F-001", "F-002"}
 
     # AGREE finding has critic_status=AGREED
-    f001 = next(f for f in findings if f["id"] == "F-001")
+    f001 = next(f for f in findings if f["finding_id"] == "F-001")
     assert f001["critic_status"] == "AGREED"
 
     # CHALLENGE finding has critic_status=CHALLENGED
-    f002 = next(f for f in findings if f["id"] == "F-002")
+    f002 = next(f for f in findings if f["finding_id"] == "F-002")
     assert f002["critic_status"] == "CHALLENGED"
     assert f002["critic_challenge_reason"] == verdicts[1].reason
 
     # findings.archived.json has exactly 1 entry (REJECT)
     archived = json.loads((case_dir / "findings.archived.json").read_text(encoding="utf-8"))
     assert len(archived) == 1
-    assert archived[0]["id"] == "F-003"
+    assert archived[0]["finding_id"] == "F-003"
     assert archived[0]["status"] == "ARCHIVED"
     assert archived[0]["critic_status"] == "REJECTED"
 
