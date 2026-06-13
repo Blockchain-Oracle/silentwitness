@@ -162,6 +162,28 @@ def test_reject_removes_finding_from_findings_json(tmp_path: Path) -> None:
     assert not any(f.get("finding_id") == "F-003" for f in findings)
 
 
+def test_reject_preserves_observation_records_in_mixed_array(tmp_path: Path) -> None:
+    """Regression: findings.json is a MIXED array (observations + findings). A
+    REJECT must remove only the rejected finding, NEVER the observation records.
+    The prior write-back rebuilt the file from a finding-only map and would have
+    dropped every observation."""
+    case = _make_case(tmp_path)
+    observation = {
+        "observation_id": "O-001",
+        "text": "weird.log shows a bad_HTTP_request",
+        "audit_ids": ["aid-1"],
+        "interpretations": [{"interpretation_id": "I-001", "text": "evasion"}],
+    }
+    narrative = {"narrative_id": "N-001", "section": "gaps", "text": "incomplete"}
+    _write_findings(case, [observation, _f(1), _f(3), narrative])  # type: ignore[list-item]
+    handle_critic_verdicts(case, "aj", [_verdict("F-003", "REJECT")], [])
+    findings = json.loads((case / "findings.json").read_text(encoding="utf-8"))
+    assert any(f.get("observation_id") == "O-001" for f in findings), "observation dropped!"
+    assert any(f.get("narrative_id") == "N-001" for f in findings), "narrative dropped!"
+    assert any(f.get("finding_id") == "F-001" for f in findings), "non-rejected finding dropped!"
+    assert not any(f.get("finding_id") == "F-003" for f in findings), "rejected finding kept!"
+
+
 def test_reject_appends_finding_to_archived_with_provenance(tmp_path: Path) -> None:
     case = _make_case(tmp_path)
     _write_findings(case, [_f(3)])

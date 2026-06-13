@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import logging
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -15,6 +16,8 @@ from typing import IO, Any, Final
 import yaml
 
 from silentwitness_common.atomic_io import write_json_atomic
+
+_LOG = logging.getLogger(__name__)
 
 _FINDINGS_FILENAME: Final = "findings.json"
 _CASE_YAML_FILENAME: Final = "CASE.yaml"
@@ -134,6 +137,15 @@ def materialize_findings(case_dir: Path) -> list[str]:
             interps = [i for i in item.get("interpretations", []) or [] if isinstance(i, dict)]
             iid = interps[-1].get("interpretation_id") if interps else None
             if not isinstance(iid, str):
+                # An observation WITH interpretations but no usable id is a schema
+                # drift worth surfacing (it would otherwise vanish from review with
+                # no signal). Zero interpretations is legitimate "not yet ready".
+                if interps:
+                    _LOG.warning(
+                        "materialize_findings: observation %s has interpretations but the "
+                        "latest lacks a string interpretation_id; no finding created",
+                        oid,
+                    )
                 continue
             seq += 1
             fid = f"F-{seq:03d}"

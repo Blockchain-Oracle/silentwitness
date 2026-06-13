@@ -217,25 +217,27 @@ def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
         )
     if not staged:
         return
+    # Best-effort applies ONLY to the model call (no key / offline → list anyway).
     try:
         report = asyncio.run(critique(case_dir, examiner, staged))
-        handle_critic_verdicts(case_dir, examiner, report.verdicts, [])
     except Exception as exc:
-        _LOG.warning("review: critic pass skipped (%s: %s)", type(exc).__name__, exc)
+        _LOG.warning("review: critic model unavailable (%s: %s)", type(exc).__name__, exc)
         err.print(
             f"[yellow]![/yellow] critic pass skipped ({type(exc).__name__}); "
             "listing un-reviewed findings",
             highlight=False,
         )
+        return
+    # Verdict routing writes findings.json/archived.json; a failure here is a
+    # data-integrity event and MUST surface (handle_critic_verdicts raises on
+    # persistence failure) — do not swallow it. pending_critiques is a throwaway
+    # list: the CLI review has no live investigator loop to feed CHALLENGEs back to.
+    handle_critic_verdicts(case_dir, examiner, report.verdicts, [])
 
 
 def run_list(case_dir: Path, status_filter: str, *, console: Console, err: Console) -> int:
-    # Materialize DRAFT Finding records from staged observation+interpretation
-    # pairs — without this the table is empty even though observations exist.
-    try:
-        materialize_findings(case_dir)
-    except (OSError, ValueError) as exc:
-        err.print(f"[yellow]![/yellow] finding materialization skipped: {exc}", highlight=False)
+    # NOTE: callers (run()) materialize DRAFT findings before delegating here,
+    # so the table is non-empty. run_list itself is pure read+render.
     try:
         findings = read_findings(case_dir)
     except (json.JSONDecodeError, ValueError, OSError) as exc:
@@ -351,12 +353,13 @@ def run(
 ) -> int:
     console, err = Console(no_color=no_color), Console(stderr=True, no_color=no_color)
     if finding_id is None:
-        # Materialize DRAFT findings, then run the critic over the un-reviewed
-        # ones, before listing — so the examiner sees critic-annotated DRAFTs.
+        # Materialize DRAFT findings once, then run the critic over the
+        # un-reviewed ones, before listing — so the examiner sees critic-annotated
+        # DRAFTs. run_list does NOT re-materialize (it is pure read+render).
         try:
             materialize_findings(case_dir)
-        except (OSError, ValueError):
-            pass
+        except (OSError, ValueError) as exc:
+            err.print(f"[yellow]![/yellow] finding materialization skipped: {exc}", highlight=False)
         _run_critic_pass(case_dir, examiner, err=err)
         return run_list(case_dir, status_filter, console=console, err=err)
     return run_detail(
