@@ -1,0 +1,190 @@
+"""SQLite FTS5 evidence index — the queryable store the agent searches.
+
+One ``index.db`` per case. Phase-1 parsers (plaso / regipy / Volatility3) ingest
+one :class:`IndexRecord` per evidence record — a timeline event, a registry
+value, a memory artifact. The agent then *queries* by keyword (FTS5, with
+optional host / source-tool filters) instead of streaming a 24 GB image into its
+context. Every row carries ``audit_id`` so a finding traces back to the exact
+tool execution that produced it (the audit-trail judging criterion).
+
+Design: an external-content FTS5 table over the ``text`` (and ``artifact_path``)
+columns of a plain ``record`` table. The plain table gives structured filtering
+(``WHERE host = ?``) and stable row ids; FTS5 gives ranked full-text MATCH. We
+only ever append (parsers produce immutable evidence rows), so there are no
+update/delete triggers to keep in sync — ``ingest`` writes both tables together.
+"""
+
+from __future__ import annotations
+
+import sqlite3
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from types import TracebackType
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS record(
+    id            INTEGER PRIMARY KEY,
+    host          TEXT NOT NULL DEFAULT '',
+    source_tool   TEXT NOT NULL DEFAULT '',
+    artifact_path TEXT NOT NULL DEFAULT '',
+    ts            TEXT NOT NULL DEFAULT '',
+    audit_id      TEXT NOT NULL DEFAULT '',
+    sha256        TEXT NOT NULL DEFAULT '',
+    text          TEXT NOT NULL DEFAULT ''
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS record_fts USING fts5(
+    text, artifact_path, content='record', content_rowid='id', tokenize='unicode61'
+);
+CREATE INDEX IF NOT EXISTS idx_record_host ON record(host);
+CREATE INDEX IF NOT EXISTS idx_record_source_tool ON record(source_tool);
+"""
+
+_COLUMNS = ("id", "host", "source_tool", "artifact_path", "ts", "audit_id", "sha256", "text")
+
+# Literal SQL (no f-strings → no spurious S608); filters below append only
+# constant fragments, every value still bound through a ? parameter.
+_SEARCH_BASE = (
+    "SELECT r.id, r.host, r.source_tool, r.artifact_path, r.ts, r.audit_id, "
+    "r.sha256, r.text FROM record_fts JOIN record r ON r.id = record_fts.rowid "
+    "WHERE record_fts MATCH ?"
+)
+_GET_SQL = (
+    "SELECT id, host, source_tool, artifact_path, ts, audit_id, sha256, text "
+    "FROM record WHERE id = ?"
+)
+
+
+class EvidenceIndexError(Exception):
+    """Raised on a bad query or an index that cannot be opened."""
+
+
+@dataclass(frozen=True)
+class IndexRecord:
+    """One searchable evidence row.
+
+    ``text`` is the human-readable, FTS-indexed content (a timeline line, a
+    registry value, a memory-plugin row). ``audit_id`` ties it to the tool
+    execution that produced it; ``id`` is assigned by the store on ingest."""
+
+    text: str
+    source_tool: str = ""
+    artifact_path: str = ""
+    host: str = ""
+    ts: str = ""
+    audit_id: str = ""
+    sha256: str = ""
+    id: int | None = None
+
+
+class EvidenceIndex:
+    """A per-case SQLite FTS5 index. Use as a context manager or call ``close()``."""
+
+    def __init__(self, db_path: Path) -> None:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self._conn = sqlite3.connect(str(db_path))
+            self._conn.executescript(_SCHEMA)
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"cannot open evidence index at {db_path}: {exc}") from exc
+
+    def ingest(self, records: Iterable[IndexRecord]) -> int:
+        """Append rows to the index; return the number written.
+
+        Writes the plain row and its FTS entry together in one transaction so a
+        crash leaves the index consistent (either both or neither)."""
+        written = 0
+        try:
+            with self._conn:  # transaction
+                for rec in records:
+                    cur = self._conn.execute(
+                        "INSERT INTO record(host, source_tool, artifact_path, ts, audit_id, "
+                        "sha256, text) VALUES(?, ?, ?, ?, ?, ?, ?)",
+                        (
+                            rec.host,
+                            rec.source_tool,
+                            rec.artifact_path,
+                            rec.ts,
+                            rec.audit_id,
+                            rec.sha256,
+                            rec.text,
+                        ),
+                    )
+                    self._conn.execute(
+                        "INSERT INTO record_fts(rowid, text, artifact_path) VALUES(?, ?, ?)",
+                        (cur.lastrowid, rec.text, rec.artifact_path),
+                    )
+                    written += 1
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"index ingest failed after {written} rows: {exc}") from exc
+        return written
+
+    def search(
+        self,
+        query: str,
+        *,
+        host: str | None = None,
+        source_tool: str | None = None,
+        limit: int = 50,
+    ) -> list[IndexRecord]:
+        """Full-text search ``query`` (FTS5 syntax), newest-relevant first.
+
+        ``host`` / ``source_tool`` apply exact-match structured filters on top of
+        the text match. Raises :class:`EvidenceIndexError` on malformed FTS5
+        syntax (so the agent gets a clear message, not a stack trace)."""
+        sql = _SEARCH_BASE
+        params: list[object] = [query]
+        if host is not None:
+            sql += " AND r.host = ?"
+            params.append(host)
+        if source_tool is not None:
+            sql += " AND r.source_tool = ?"
+            params.append(source_tool)
+        sql += " ORDER BY record_fts.rank LIMIT ?"
+        params.append(max(1, limit))
+        try:
+            rows = self._conn.execute(sql, params).fetchall()
+        except sqlite3.OperationalError as exc:
+            raise EvidenceIndexError(f"invalid search query {query!r}: {exc}") from exc
+        return [self._row_to_record(row) for row in rows]
+
+    def get(self, record_id: int) -> IndexRecord | None:
+        """Return the record with ``record_id``, or None if absent."""
+        row = self._conn.execute(_GET_SQL, (record_id,)).fetchone()
+        return self._row_to_record(row) if row is not None else None
+
+    def count(self) -> int:
+        """Total rows in the index."""
+        return int(self._conn.execute("SELECT COUNT(*) FROM record").fetchone()[0])
+
+    @staticmethod
+    def _row_to_record(row: tuple[object, ...]) -> IndexRecord:
+        data = dict(zip(_COLUMNS, row, strict=True))
+        raw_id = data["id"]
+        return IndexRecord(
+            id=int(raw_id) if isinstance(raw_id, int) else None,
+            host=str(data["host"]),
+            source_tool=str(data["source_tool"]),
+            artifact_path=str(data["artifact_path"]),
+            ts=str(data["ts"]),
+            audit_id=str(data["audit_id"]),
+            sha256=str(data["sha256"]),
+            text=str(data["text"]),
+        )
+
+    def close(self) -> None:
+        self._conn.close()
+
+    def __enter__(self) -> EvidenceIndex:
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        self.close()
+
+
+__all__ = ["EvidenceIndex", "EvidenceIndexError", "IndexRecord"]
