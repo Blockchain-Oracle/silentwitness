@@ -1,0 +1,1 @@
+{"audit_id": "sift-example-20260613-002", "backend": "disk", "elapsed_ms": 1800, "result_sha256": "570a2346932a1965265bb369e3eba94237744deda832b0abad87324125b7b4ae", "status": "OK", "stdout_lines": 14, "tool_name": "parse_mft", "ts": "2026-06-13T12:00:09Z"}
