@@ -19,6 +19,7 @@ from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
 
+from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
 from silentwitness_common.types import CriticVerdict
@@ -166,6 +167,7 @@ def build_investigator(
         system_prompt=_SYSTEM_PROMPT,
         toolsets=[mcp_server],
         capabilities=capabilities,
+        model_settings=cache_settings(resolved_model),
     )
     return _AgentConfig(agent=agent, model_str=model_str, max_iters=max_iters)
 
