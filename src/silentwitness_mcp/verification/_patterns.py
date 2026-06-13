@@ -122,6 +122,9 @@ TOOL_PATTERNS: dict[str, ToolPatternSet] = {
     "hayabusa_csv_timeline": EMPTY_PATTERNS,
     "zeek_run": EMPTY_PATTERNS,
     "suricata_run": EMPTY_PATTERNS,
+    # read_tool_output re-reads an already-normalised tool-output file so the
+    # agent can quote exact lines; universal rules only (no per-tool transform).
+    "read_tool_output": EMPTY_PATTERNS,
     # Explicit "universal rules only" sentinel — callers that don't need
     # per-tool transforms use this rather than a typo'd tool name silently
     # producing wrong output.

@@ -39,6 +39,7 @@ from silentwitness_agent.cli_commands._live_render import (
 )
 from silentwitness_agent.config import SilentWitnessConfig
 from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.evidence.registry import EvidenceRegistry
 
 # Held during an active investigation so tests can trigger cancellation.
 _active_agent_task: asyncio.Task[Any] | None = None
@@ -167,15 +168,28 @@ async def _do_agent_run(
     display_hooks = build_display_hooks(state, is_tty)
 
     cfg = build_investigator(
+        case_dir,
+        examiner,
         model=model,
         max_iterations=max_iterations,
         hooks=[audit_hooks, display_hooks],
     )
     deps = InvestigatorDeps(case_dir=case_dir, examiner=examiner, stack=stack, budget=budget)
 
+    # Surface the registered evidence (exact paths + types) in the opening
+    # prompt. Without this the agent has no way to discover what is registered
+    # or where it lives, and burns iterations guessing paths that fail
+    # EVIDENCE_NOT_REGISTERED.
+    evidence_records = EvidenceRegistry(case_dir=case_dir).list_all()
+    evidence_block = (
+        "\n".join(f"- {rec.path} ({rec.type.value})" for rec in evidence_records)
+        or "- (no evidence registered)"
+    )
     run_result = await cfg.agent.run(
-        f"Investigate case {case_dir.name}. "
-        "Review all registered evidence and form your first hypothesis.",
+        f"Investigate case {case_dir.name}.\n\n"
+        "Registered evidence — pass these EXACT paths as the path argument to "
+        f"tools (e.g. zeek_run pcap_path=...):\n{evidence_block}\n\n"
+        "Form your first hypothesis and analyse the evidence above.",
         deps=deps,
         usage_limits=UsageLimits(request_limit=cfg.max_iters),
     )

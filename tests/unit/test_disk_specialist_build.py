@@ -57,8 +57,8 @@ _BANNED_TOOLS = {
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_10_tools() -> None:
-    assert len(DISK_TOOL_ALLOWLIST) == 10
+def test_allowlist_has_11_tools() -> None:
+    assert len(DISK_TOOL_ALLOWLIST) == 11
 
 
 # ---------------------------------------------------------------------------

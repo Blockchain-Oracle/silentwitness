@@ -46,6 +46,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "record_interpretation",
         "record_pivot",
         "record_narrative",
+        "read_tool_output",
         "approve_finding",
         "register_evidence",
         "verify_evidence_hash",

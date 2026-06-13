@@ -8,6 +8,8 @@ instantiate its client (keys are validated at call-time, not construction-time).
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from silentwitness_agent.investigator import build_investigator
@@ -20,7 +22,10 @@ def test_anthropic_provider_selected_by_model_string(
     monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-for-construction")
 
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
 
     assert cfg.model_str == "anthropic:claude-opus-4-7"
     assert "anthropic" in repr(cfg.agent.model).lower()
@@ -33,7 +38,10 @@ def test_openai_provider_selected_by_model_string(
     monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5")
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-construction")
 
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
 
     assert cfg.model_str == "openai:gpt-5"
     assert "openai" in repr(cfg.agent.model).lower()

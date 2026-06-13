@@ -18,47 +18,7 @@ from silentwitness_agent.report.compose import (
     compose_methodology,
     compose_timeline,
 )
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _obs(
-    obs_id: str,
-    text: str,
-    audit_ids: list[str],
-    interp_id: str,
-    interp_text: str,
-    confidence: str = "HIGH",
-) -> dict:  # type: ignore[type-arg]
-    return {
-        "observation_id": obs_id,
-        "text": text,
-        "audit_ids": audit_ids,
-        "cited_spans": [],
-        "interpretations": [
-            {
-                "interpretation_id": interp_id,
-                "text": interp_text,
-                "confidence": confidence,
-                "justification": "test",
-                "what_would_change_this_confidence": "counter-evidence",
-                "recorded_at": "2026-06-13T14:00:00Z",
-            }
-        ],
-    }
-
-
-def _finding(fid: str, obs_id: str, interp_id: str, status: str = "APPROVED") -> dict:  # type: ignore[type-arg]
-    return {
-        "finding_id": fid,
-        "observation_id": obs_id,
-        "interpretation_id": interp_id,
-        "status": status,
-        "title": f"Title for {fid}",
-    }
-
+from tests.unit._compose_fixtures import _finding, _obs
 
 # ---------------------------------------------------------------------------
 # 1. compose_findings emits inline [verify:F-001/sift-aj-20260613-007]
@@ -82,6 +42,29 @@ def test_compose_findings_emits_verify_link() -> None:
 def test_compose_findings_empty_returns_placeholder() -> None:
     result = compose_findings([], {})
     assert result == "_No findings approved yet._"
+
+
+def test_compose_findings_renders_provisional_drafts_and_strips_markers() -> None:
+    obs_with_interp = _obs(
+        "O-001",
+        "Gmail mylady@example.com accessed from 10.0.0.5.",
+        ["sift-aj-20260613-009"],
+        "I-001",
+        "[UNTRUSTED EVIDENCE BEGIN]\nSuspect identified via webmail.\n[UNTRUSTED EVIDENCE END]",
+    )
+    obs_no_interp = {
+        "observation_id": "O-002",
+        "text": "SIP INVITE to 14153245805.",
+        "audit_ids": ["sift-aj-20260613-010"],
+    }
+    result = compose_findings([], {"O-001": obs_with_interp, "O-002": obs_no_interp})
+    assert "Provisional findings (DRAFT" in result
+    assert "O-001 — provisional (DRAFT)" in result
+    assert "O-002 — provisional (DRAFT)" in result
+    assert "Suspect identified via webmail." in result
+    assert "UNTRUSTED EVIDENCE" not in result  # sanitizer markers stripped for display
+    assert "[verify:O-001/sift-aj-20260613-009]" in result
+    assert "_No interpretation recorded yet._" in result  # O-002 has no interpretation
 
 
 # ---------------------------------------------------------------------------

@@ -48,8 +48,8 @@ _BANNED_TOOLS = {
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_7_tools() -> None:
-    assert len(LOG_TOOL_ALLOWLIST) == 7
+def test_allowlist_has_8_tools() -> None:
+    assert len(LOG_TOOL_ALLOWLIST) == 8
 
 
 # ---------------------------------------------------------------------------

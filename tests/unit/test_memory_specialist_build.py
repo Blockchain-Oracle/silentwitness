@@ -60,8 +60,8 @@ _BANNED_TOOLS = {
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_13_tools() -> None:
-    assert len(MEMORY_TOOL_ALLOWLIST) == 13
+def test_allowlist_has_14_tools() -> None:
+    assert len(MEMORY_TOOL_ALLOWLIST) == 14
 
 
 # ---------------------------------------------------------------------------
