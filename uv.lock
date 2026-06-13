@@ -3852,7 +3852,6 @@ name = "silentwitness"
 version = "1.4.5"
 source = { editable = "." }
 dependencies = [
-    { name = "dfvfs" },
     { name = "httpx" },
     { name = "matplotlib" },
     { name = "mcp" },
@@ -3864,6 +3863,11 @@ dependencies = [
     { name = "typer" },
     { name = "volatility3" },
     { name = "weasyprint" },
+]
+
+[package.optional-dependencies]
+forensics = [
+    { name = "dfvfs" },
 ]
 
 [package.dev-dependencies]
@@ -3885,7 +3889,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "dfvfs", specifier = ">=20240115" },
+    { name = "dfvfs", marker = "extra == 'forensics'", specifier = ">=20240115" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "matplotlib", specifier = ">=3.10,<3.11" },
     { name = "mcp", specifier = ">=1.23.0,<2.0" },
@@ -3898,6 +3902,7 @@ requires-dist = [
     { name = "volatility3", specifier = "==2.27.0" },
     { name = "weasyprint", specifier = ">=68.1,<70.0" },
 ]
+provides-extras = ["forensics"]
 
 [package.metadata.requires-dev]
 dev = [

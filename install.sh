@@ -184,6 +184,24 @@ install_suricata() {
 }
 
 # ---------------------------------------------------------------------------
+# Evidence-access stack (Phase 0) — open E01 images + decompress memory archives.
+# dfVFS is the opt-in `forensics` extra: its libyal C-extension bindings
+# (pytsk3/libvsgpt/libvshadow/...) compile from sdists, so the box needs a build
+# toolchain + pkg-config + python headers. p7zip-full unwraps the nested memory
+# capture (zip->7z->raw). dosfstools/mtools build the FAT fixtures the access
+# integration tests use. sleuthkit + libewf back dfVFS's E01 reading.
+# ---------------------------------------------------------------------------
+install_evidence_access() {
+    log "installing evidence-access apt deps (p7zip + dfVFS build toolchain + test tools)"
+    sudo apt-get update -q
+    sudo apt-get install -y --no-install-recommends \
+        p7zip-full build-essential pkg-config python3-dev \
+        sleuthkit libewf-dev dosfstools mtools
+    log "evidence-access apt deps installed — now install the Python extra:"
+    log "    uv sync --extra forensics   # builds dfVFS + libyal bindings on this Linux box"
+}
+
+# ---------------------------------------------------------------------------
 # Mermaid CLI (optional, --diagrams flag) — DOCS-TIME ONLY, NOT RUNTIME.
 #
 # Why this exists: SIFT 2026 ships dotnet 9 + Python but NOT Node.js
@@ -242,6 +260,7 @@ install_chainsaw
 install_sigma_rules
 install_zeek
 install_suricata
+install_evidence_access
 [ "$DIAGRAMS" = "1" ] && install_mermaid_cli
 
 log "all tools provisioned successfully"

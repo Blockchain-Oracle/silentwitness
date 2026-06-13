@@ -42,12 +42,20 @@ dependencies = [
     "spacy>=3.8.10,<3.9",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
     "volatility3==2.27.0",
-    # Evidence access: open E01/raw images, resolve partitions + filesystems
-    # in-process (story-evidence-access). Apache-2.0; ships on the SIFT
-    # Workstation as a plaso dependency. Pulls pytsk3 + libyal Python bindings.
-    "dfvfs>=20240115",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
     "matplotlib>=3.10,<3.11",
+]
+
+[project.optional-dependencies]
+# Forensic evidence-access stack — installed on the Linux analysis box (SIFT /
+# VPS) only via `uv sync --extra forensics`. dfVFS pulls pytsk3 + libyal
+# C-extension bindings (libvsgpt/libvshadow/libvhdi/...) that need a build
+# toolchain + libyal headers and do NOT build on macOS dev machines. Keeping it
+# an opt-in extra leaves the base package cross-platform installable so the agent
+# loop, MCP server, and their tests run anywhere; the dfVFS-backed evidence path
+# (silentwitness_mcp/evidence/access.py) is exercised on the Linux box. Apache-2.0.
+forensics = [
+    "dfvfs>=20240115",
 ]
 
 [dependency-groups]

@@ -19,6 +19,10 @@ from pathlib import Path
 
 import pytest
 
+# dfVFS is the opt-in `forensics` extra (libyal C-extensions; Linux analysis box
+# only). Skip the whole module when it is absent rather than failing collection.
+pytest.importorskip("dfvfs", reason="forensics extra not installed (uv sync --extra forensics)")
+
 from silentwitness_mcp.evidence import access
 
 _TOOLS = ("dd", "mkfs.vfat", "mmd", "mcopy")
