@@ -167,6 +167,8 @@ async def _do_agent_run(
     display_hooks = build_display_hooks(state, is_tty)
 
     cfg = build_investigator(
+        case_dir,
+        examiner,
         model=model,
         max_iterations=max_iterations,
         hooks=[audit_hooks, display_hooks],

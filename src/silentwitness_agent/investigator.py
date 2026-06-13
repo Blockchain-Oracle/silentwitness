@@ -22,6 +22,7 @@ from pydantic_ai.usage import UsageLimits
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
 from silentwitness_common.types import CriticVerdict
+from silentwitness_mcp._case_env import build_server_env
 
 _LOG = logging.getLogger(__name__)
 
@@ -119,6 +120,8 @@ def _resolve_model(model_str: str) -> Model:
 
 
 def build_investigator(
+    case_dir: Path,
+    examiner: str,
     model: str | None = None,
     max_iterations: int | None = None,
     hooks: list[Any] | None = None,
@@ -128,6 +131,11 @@ def build_investigator(
     Reads ``SILENTWITNESS_MODEL`` (default ``anthropic:claude-opus-4-7``) and
     ``SILENTWITNESS_MAX_ITERS`` (default 50) at call time.  Constructor args
     override env values.
+
+    ``case_dir`` / ``examiner`` are passed to the spawned MCP server via
+    ``build_server_env`` so the server binds to this case (see
+    :mod:`silentwitness_mcp._case_env`) — without it the server runs case-less
+    and every evidence-bound tool refuses.
 
     ``hooks`` is optional so the agent can run without emitting per-step audit events.
     """
@@ -145,6 +153,7 @@ def build_investigator(
     mcp_server = MCPServerStdio(
         "python",
         ["-m", "silentwitness_mcp"],
+        env=build_server_env(case_dir, examiner, model_str),
         sampling_model=resolved_model,
     )
 
@@ -178,7 +187,9 @@ async def investigate(
     """
     from pydantic_ai.exceptions import UsageLimitExceeded
 
-    cfg = build_investigator(model=model, max_iterations=max_iterations, hooks=hooks)
+    cfg = build_investigator(
+        case_dir, examiner, model=model, max_iterations=max_iterations, hooks=hooks
+    )
     stack = HypothesisStack(case_dir=case_dir, examiner=examiner)
     budget = BudgetEnforcer()
     deps = InvestigatorDeps(

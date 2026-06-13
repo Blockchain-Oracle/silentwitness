@@ -63,7 +63,10 @@ def test_system_prompt_excludes_forbidden_phrases(forbidden: str) -> None:
 
 def test_factory_reads_model_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
     assert cfg.model_str == "test"
 
 
@@ -73,7 +76,7 @@ def test_factory_default_model_string() -> None:
 
 def test_factory_direct_model_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7")
-    cfg = build_investigator(model="test")
+    cfg = build_investigator(Path("sw-test-case"), "tester", model="test")
     assert cfg.model_str == "test"
 
 
@@ -85,7 +88,10 @@ def test_factory_direct_model_param_overrides_env(monkeypatch: pytest.MonkeyPatc
 def test_factory_honours_max_iters_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "25")
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
     assert cfg.max_iters == 25
 
 
@@ -96,7 +102,7 @@ def test_factory_default_max_iters() -> None:
 def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "99")
-    cfg = build_investigator(max_iterations=7)
+    cfg = build_investigator(Path("sw-test-case"), "tester", max_iterations=7)
     assert cfg.max_iters == 7
 
 
@@ -119,7 +125,10 @@ def test_factory_zero_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_mcp_toolset_is_mcpserverstdio(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
     toolsets = cfg.agent._user_toolsets
     assert len(toolsets) == 1
     assert isinstance(toolsets[0], MCPServerStdio)
@@ -127,7 +136,10 @@ def test_mcp_toolset_is_mcpserverstdio(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_mcp_toolset_command_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
     ts: MCPServerStdio = cfg.agent._user_toolsets[0]  # type: ignore[assignment]
     assert ts.command == "python"
     assert ts.args == ["-m", "silentwitness_mcp"]
@@ -136,7 +148,10 @@ def test_mcp_toolset_command_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_mcp_sampling_model_is_model_instance(monkeypatch: pytest.MonkeyPatch) -> None:
     """sampling_model must be a Model instance (not a raw string) to avoid AttributeError."""
     monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
-    cfg = build_investigator()
+    cfg = build_investigator(
+        Path("sw-test-case"),
+        "tester",
+    )
     ts: MCPServerStdio = cfg.agent._user_toolsets[0]  # type: ignore[assignment]
     assert isinstance(ts.sampling_model, Model)
 

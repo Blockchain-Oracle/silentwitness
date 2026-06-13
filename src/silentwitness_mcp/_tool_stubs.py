@@ -39,30 +39,6 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     register_real_tools(mcp, guard_mount)
 
     @mcp.tool()
-    def record_observation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Record a verifiable observation (§4.5/§4.7). Stub."""
-        guard_mount("record_observation", ctx)
-        raise NotImplementedError("record_observation is registered but not yet implemented")
-
-    @mcp.tool()
-    def record_interpretation(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Link observations to a hypothesis. Stub."""
-        guard_mount("record_interpretation", ctx)
-        raise NotImplementedError("record_interpretation is registered but not yet implemented")
-
-    @mcp.tool()
-    def record_pivot(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Pivot the active hypothesis. Stub."""
-        guard_mount("record_pivot", ctx)
-        raise NotImplementedError("record_pivot is registered but not yet implemented")
-
-    @mcp.tool()
-    def record_narrative(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Append a narrative section to the case report. Stub."""
-        guard_mount("record_narrative", ctx)
-        raise NotImplementedError("record_narrative is registered but not yet implemented")
-
-    @mcp.tool()
     def approve_finding(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
         """Examiner-only HMAC-ledger approval. Stub."""
         guard_mount("approve_finding", ctx)
