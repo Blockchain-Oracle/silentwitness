@@ -16,19 +16,14 @@ from typing import Any
 
 import yaml
 
+from silentwitness_agent.report._compose_iocs import compose_iocs
+
 _LOG = logging.getLogger(__name__)
 
 _RECOMMENDATIONS_PLACEHOLDER = "_To be populated by examiner._\n"
 _NO_GAPS_PLACEHOLDER = "(no gaps identified)"
 _NO_FINDINGS_PLACEHOLDER = "_No findings approved yet._"
 
-# IOC patterns — conservative to avoid false positives in prose
-_RE_IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
-_RE_MD5 = re.compile(r"\b[a-fA-F0-9]{32}\b")
-_RE_SHA1 = re.compile(r"\b[a-fA-F0-9]{40}\b")
-_RE_SHA256 = re.compile(r"\b[a-fA-F0-9]{64}\b")
-_RE_DOMAIN = re.compile(r"\b(?:[a-zA-Z0-9-]{1,63}\.)+(?:com|net|org|io|ru|cn|info|biz|gov|mil)\b")
-_RE_REGKEY = re.compile(r"HKEY_[A-Z_]+(?:\\[^\\\"<>\|\n]+)+", re.IGNORECASE)
 
 _EXEC_SUMMARY_WORD_LIMIT = 500
 _TRUNCATION_MARKER = "\n\n[...truncated — see Findings below.]"
@@ -39,6 +34,15 @@ _TRUNCATION_MARKER = "\n\n[...truncated — see Findings below.]"
 # ---------------------------------------------------------------------------
 
 
+def _unwrap_evidence(text: str) -> str:
+    """Strip the sanitizer's ``[UNTRUSTED EVIDENCE BEGIN/END]`` wrap markers for
+    display. The markers are a hot-path injection-defense seam, not report prose —
+    the examiner-facing report shows the agent's clean interpretation text."""
+    cleaned = text.replace("[UNTRUSTED EVIDENCE BEGIN]", "")
+    cleaned = cleaned.replace("[UNTRUSTED EVIDENCE END]", "")
+    return cleaned.strip()
+
+
 def _get_interp(obs: dict[str, Any], interp_id: str) -> dict[str, Any] | None:
     """Return the interpretation sub-record matching interp_id from an obs record."""
     for interp in obs.get("interpretations") or []:
@@ -47,32 +51,6 @@ def _get_interp(obs: dict[str, Any], interp_id: str) -> dict[str, Any] | None:
         if interp.get("interpretation_id") == interp_id:
             return interp
     return None
-
-
-def _extract_iocs(text: str) -> dict[str, list[str]]:
-    """Extract IOC candidates from observation text grouped by type."""
-    result: dict[str, list[str]] = {}
-
-    def _add(key: str, matches: list[str]) -> None:
-        unique = list(dict.fromkeys(matches))
-        if unique:
-            result[key] = unique
-
-    # Order matters: try longest patterns first to avoid partial matches
-    sha256_matches = _RE_SHA256.findall(text)
-    sha1_matches = [m for m in _RE_SHA1.findall(text) if m not in sha256_matches]
-    md5_matches = [
-        m for m in _RE_MD5.findall(text) if m not in sha256_matches and m not in sha1_matches
-    ]
-
-    _add("SHA-256", sha256_matches)
-    _add("SHA-1", sha1_matches)
-    _add("MD5", md5_matches)
-    _add("IP", _RE_IPV4.findall(text))
-    _add("Domain", _RE_DOMAIN.findall(text))
-    _add("RegistryKey", _RE_REGKEY.findall(text))
-
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -185,10 +163,12 @@ def compose_findings(
     approved: list[dict[str, Any]],
     observations: dict[str, dict[str, Any]],
 ) -> str:
-    """Per-finding subsections with inline [verify:F-id/audit_id] references."""
-    if not approved:
-        return _NO_FINDINGS_PLACEHOLDER
+    """Approved findings + provisional (DRAFT) findings from staged observations.
 
+    The report drafts itself as the case unfolds: examiner-approved findings get
+    the full signed treatment, and observations the agent has staged (with their
+    interpretation, if recorded) render as clearly-marked provisional findings so
+    the report is never empty mid-investigation."""
     parts: list[str] = []
     for finding in approved:
         fid = finding.get("finding_id", "F-???")
@@ -199,7 +179,7 @@ def compose_findings(
         interp = _get_interp(obs, interp_id)
         confidence = interp.get("confidence", "MEDIUM") if interp else "MEDIUM"
         _no_interp = "_No interpretation recorded._"
-        interp_text = interp.get("text", _no_interp) if interp else _no_interp
+        interp_text = _unwrap_evidence(interp.get("text", _no_interp)) if interp else _no_interp
         audit_ids: list[str] = obs.get("audit_ids") or []
         obs_text = obs.get("text", "_No observation text._")
 
@@ -220,6 +200,39 @@ def compose_findings(
         )
         parts.append(section)
 
+    # Provisional (DRAFT) findings — staged observations not yet approved.
+    approved_obs = {f.get("observation_id") for f in approved}
+    provisional: list[str] = []
+    for oid, obs in observations.items():
+        if oid in approved_obs:
+            continue
+        interps = [i for i in (obs.get("interpretations") or []) if isinstance(i, dict)]
+        interp = interps[0] if interps else None
+        confidence = interp.get("confidence", "MEDIUM") if interp else "—"
+        interp_text = (
+            _unwrap_evidence(interp["text"])
+            if (interp and interp.get("text"))
+            else "_No interpretation recorded yet._"
+        )
+        obs_text = obs.get("text", "_No observation text._")
+        obs_audit_ids = obs.get("audit_ids") or []
+        verify_links = " ".join(f"[verify:{oid}/{aid}]" for aid in obs_audit_ids)
+        evidence_line = f"- {obs_text}" + (f"  {verify_links}" if verify_links else "")
+        provisional.append(
+            f"### {oid} — provisional (DRAFT)\n\n"
+            f"**Confidence:** {confidence}  \n"
+            f"**Status:** DRAFT — not yet examiner-approved\n\n"
+            f"{interp_text}\n\n"
+            f"**Supporting evidence:**\n\n{evidence_line}\n"
+        )
+    if provisional:
+        parts.append(
+            "## Provisional findings (DRAFT — pending examiner approval)\n\n"
+            + "\n".join(provisional)
+        )
+
+    if not parts:
+        return _NO_FINDINGS_PLACEHOLDER
     return "\n".join(parts)
 
 
@@ -253,46 +266,6 @@ def compose_timeline(
         f"| {ts} | {src} | {event} | {aref} | {fid} |" for ts, src, event, aref, fid in rows
     ]
     return header + sep + "\n".join(body_lines) + "\n"
-
-
-def compose_iocs(
-    approved: list[dict[str, Any]],
-    observations: dict[str, dict[str, Any]],
-) -> str:
-    """Groups IOC candidates by type with audit_id citations."""
-    if not approved:
-        return "_No approved findings to extract IOCs from._\n"
-
-    # {ioc_type: {ioc_value: [audit_id, ...]}}
-    grouped: dict[str, dict[str, list[str]]] = {}
-
-    for finding in approved:
-        obs_id = finding.get("observation_id", "")
-        obs = observations.get(obs_id, {})
-        text = obs.get("text", "")
-        audit_ids: list[str] = obs.get("audit_ids") or []
-        if not text:
-            continue
-        for ioc_type, values in _extract_iocs(text).items():
-            bucket = grouped.setdefault(ioc_type, {})
-            for val in values:
-                bucket.setdefault(val, []).extend(audit_ids)
-
-    if not grouped:
-        return "_No IOC candidates extracted from approved findings._\n"
-
-    parts: list[str] = []
-    for ioc_type in sorted(grouped):
-        parts.append(f"**{ioc_type}**\n")
-        for val, aids in sorted(grouped[ioc_type].items()):
-            # Deduplicate audit_ids while preserving order
-            seen: dict[str, None] = {}
-            for a in aids:
-                seen[a] = None
-            citations = " ".join(f"[{a}]" for a in seen)
-            parts.append(f"- `{val}` — {citations}\n")
-
-    return "\n".join(parts)
 
 
 def compose_recommendations() -> str:
