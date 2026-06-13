@@ -103,6 +103,17 @@ def test_get_by_id_and_absent(tmp_path: Path) -> None:
         assert idx.get(999999) is None
 
 
+def test_recent_orders_by_ts_desc_with_filter(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        idx.ingest(_records())
+        all_recent = idx.recent()
+        ts_order = [r.ts for r in all_recent]
+        assert ts_order == sorted(ts_order, reverse=True)  # newest first
+        dc1 = idx.recent(host="DC1")
+        assert {r.host for r in dc1} == {"DC1"}
+        assert len(idx.recent(limit=1)) == 1
+
+
 def test_persists_across_reopen(tmp_path: Path) -> None:
     db = tmp_path / "index.db"
     with EvidenceIndex(db) as idx:

@@ -63,6 +63,9 @@ EXPECTED_TOOL_NAMES = frozenset(
         "vol_pslist",
         "vol_psscan",
         "vol_pstree",
+        "search_evidence",
+        "get_record",
+        "timeline",
     }
 )
 

@@ -53,6 +53,10 @@ _GET_SQL = (
     "SELECT id, host, source_tool, artifact_path, ts, audit_id, sha256, text "
     "FROM record WHERE id = ?"
 )
+_RECENT_BASE = (
+    "SELECT id, host, source_tool, artifact_path, ts, audit_id, sha256, text "
+    "FROM record WHERE 1 = 1"
+)
 
 
 class EvidenceIndexError(Exception):
@@ -152,6 +156,30 @@ class EvidenceIndex:
         """Return the record with ``record_id``, or None if absent."""
         row = self._conn.execute(_GET_SQL, (record_id,)).fetchone()
         return self._row_to_record(row) if row is not None else None
+
+    def recent(
+        self,
+        *,
+        host: str | None = None,
+        source_tool: str | None = None,
+        limit: int = 50,
+    ) -> list[IndexRecord]:
+        """Return records newest-first by timestamp (the timeline view), filtered.
+
+        Unlike :meth:`search` this needs no text query — it answers "what happened,
+        in order" with optional host / source-tool narrowing."""
+        sql = _RECENT_BASE
+        params: list[object] = []
+        if host is not None:
+            sql += " AND host = ?"
+            params.append(host)
+        if source_tool is not None:
+            sql += " AND source_tool = ?"
+            params.append(source_tool)
+        sql += " ORDER BY ts DESC LIMIT ?"
+        params.append(max(1, limit))
+        rows = self._conn.execute(sql, params).fetchall()
+        return [self._row_to_record(row) for row in rows]
 
     def count(self) -> int:
         """Total rows in the index."""

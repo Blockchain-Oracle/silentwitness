@@ -27,7 +27,7 @@ from mcp.client.stdio import stdio_client
 
 from silentwitness_mcp._case_env import build_server_env
 
-_EXPECTED_TOOL_COUNT = 21
+_EXPECTED_TOOL_COUNT = 24  # +search_evidence +get_record +timeline (index query tools)
 # Tools still intentionally stubbed (suricata: rules-as-evidence; approve_finding:
 # CLI/examiner-only). Everything else must be real.
 _STILL_STUBBED = frozenset({"suricata_run", "approve_finding"})
