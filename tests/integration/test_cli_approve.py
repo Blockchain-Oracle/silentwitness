@@ -128,7 +128,7 @@ def test_approve_wrong_once_then_correct(tmp_path: Path, monkeypatch: pytest.Mon
     calls: list[str] = [_WRONG_PW, _CORRECT_PW]
     monkeypatch.setattr(
         "silentwitness_agent.cli_commands.approve._read_password",
-        lambda prompt="examiner password: ": calls.pop(0),
+        lambda prompt="examiner password: ", **_k: calls.pop(0),
     )
     result = runner.invoke(
         app,
@@ -160,7 +160,7 @@ def test_approve_wrong_three_times(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     ledger_dir = _make_ledger_dir(tmp_path)
     monkeypatch.setattr(
         "silentwitness_agent.cli_commands.approve._read_password",
-        lambda prompt="examiner password: ": _WRONG_PW,
+        lambda prompt="examiner password: ", **_k: _WRONG_PW,
     )
     result = runner.invoke(
         app,
@@ -188,7 +188,7 @@ def test_approve_sigint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     _write_draft_finding(case_dir)
     ledger_dir = _make_ledger_dir(tmp_path)
 
-    def _raise_interrupt(prompt: str = "examiner password: ") -> str:
+    def _raise_interrupt(prompt: str = "examiner password: ", **_kwargs: object) -> str:
         raise KeyboardInterrupt()
 
     monkeypatch.setattr("silentwitness_agent.cli_commands.approve._read_password", _raise_interrupt)
@@ -356,7 +356,7 @@ def test_approve_no_tty(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     _write_draft_finding(case_dir)
     ledger_dir = _make_ledger_dir(tmp_path)
 
-    def _raise_no_tty(prompt: str = "examiner password: ") -> str:
+    def _raise_no_tty(prompt: str = "examiner password: ", **_kwargs: object) -> str:
         raise _NoTTYError()
 
     monkeypatch.setattr("silentwitness_agent.cli_commands.approve._read_password", _raise_no_tty)

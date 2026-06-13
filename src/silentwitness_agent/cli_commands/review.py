@@ -202,6 +202,15 @@ def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
         obs_text, interp_text = obs.get("text"), interp.get("text")
         if not obs_text or not interp_text:
             continue
+        # The critic judges a finding against its CITED EVIDENCE. If none of the
+        # cited blobs are on disk (e.g. zeek/read_tool_output don't write
+        # audit/blobs/), the critic would be judging blind and REJECT what it
+        # can't see. Skip those — they stay DRAFT for the examiner rather than
+        # being archived on missing evidence the critic never received.
+        audit_ids = list(obs.get("audit_ids") or [])
+        blobs_dir = case_dir / "audit" / "blobs"
+        if not any((blobs_dir / f"{aid}.txt").exists() for aid in audit_ids):
+            continue
         try:
             confidence = Confidence(str(interp.get("confidence", "LOW")).upper())
         except ValueError:

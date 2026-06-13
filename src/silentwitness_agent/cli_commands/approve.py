@@ -52,11 +52,23 @@ class _VerifierCorruptError(Exception):
     """CASE.yaml has verifier fields that exist but are unreadable or malformed."""
 
 
-def _read_password(prompt: str = "examiner password: ") -> str:
+class _NoPasswordEnvError(Exception):
+    """--non-interactive was used but SILENTWITNESS_APPROVE_PASSWORD is unset."""
+
+
+def _read_password(prompt: str = "examiner password: ", *, non_interactive: bool = False) -> str:
     # _SILENTWITNESS_TEST_PASSWORD: test-only bypass for TTY requirement.
     # Only active when pytest is loaded — never in production.
     if "pytest" in sys.modules and (tp := os.environ.get("_SILENTWITNESS_TEST_PASSWORD")):
         return tp
+    # Headless/scripted approve: take the password (the HMAC key) from the env
+    # instead of a TTY prompt. The password still gates the verifier and derives
+    # the ledger HMAC — it is not bypassed, just supplied non-interactively.
+    if non_interactive:
+        pw = os.environ.get("SILENTWITNESS_APPROVE_PASSWORD")
+        if not pw:
+            raise _NoPasswordEnvError()
+        return pw
     if not sys.stdin.isatty():
         raise _NoTTYError()
     return getpass.getpass(prompt)
@@ -202,6 +214,7 @@ def run(
     note: str | None,
     no_color: bool,
     examiner: str,
+    non_interactive: bool = False,
 ) -> int:
     console = Console(no_color=no_color)
     err = Console(stderr=True, no_color=no_color)
@@ -255,15 +268,22 @@ def run(
     interp = _find_interp(obs, finding.get("interpretation_id", ""))
     _print_block(finding, obs, interp, 1, 1, console=console)
 
-    # Password loop — max 3 attempts.
-    attempts_remaining = _MAX_ATTEMPTS
+    # Password loop — max 3 interactive attempts; --non-interactive is one-shot.
+    attempts_remaining = 1 if non_interactive else _MAX_ATTEMPTS
     while attempts_remaining > 0:
         try:
-            password = _read_password()
+            password = _read_password(non_interactive=non_interactive)
         except _NoTTYError:
             err.print(
                 "[red]✗[/red] approve requires a TTY (use: silentwitness approve "
-                f"{case_id} {finding_id} < /dev/tty)",
+                f"{case_id} {finding_id} < /dev/tty, or --non-interactive with "
+                "SILENTWITNESS_APPROVE_PASSWORD set)",
+                highlight=False,
+            )
+            return 2
+        except _NoPasswordEnvError:
+            err.print(
+                "[red]✗[/red] --non-interactive requires SILENTWITNESS_APPROVE_PASSWORD to be set",
                 highlight=False,
             )
             return 2

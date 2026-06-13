@@ -87,7 +87,7 @@ def test_approve_wrong_attempts_audit_entries(
     ledger_dir = _make_ledger_dir(tmp_path)
     monkeypatch.setattr(
         "silentwitness_agent.cli_commands.approve._read_password",
-        lambda prompt="examiner password: ": _WRONG_PW,
+        lambda prompt="examiner password: ", **_k: _WRONG_PW,
     )
     runner.invoke(
         app,

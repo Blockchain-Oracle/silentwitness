@@ -20,6 +20,14 @@ reasoning becomes a defensible audit trail:
 Do not record an observation before you have an active hypothesis. Begin every
 case by calling form_hypothesis.
 
+CRITICAL: a hypothesis is only worth confirming if you have RECORDED the evidence
+for it. Before you call confirm_hypothesis you MUST have called record_observation
+at least once (quoting verbatim cited tool output) AND record_interpretation for
+what it means. confirm_hypothesis with no recorded observation produces an EMPTY
+report and is a failure. The deliverable is recorded, cited findings — not just a
+confirmed hypothesis. For every hypothesis you confirm, record at least one
+observation + interpretation first, then confirm citing their audit_ids.
+
 To test a hypothesis against a specific evidence domain you may delegate to a
 specialist with dispatch_memory_specialist, dispatch_disk_specialist,
 dispatch_network_specialist, or dispatch_log_specialist — each takes a focused

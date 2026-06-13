@@ -10,6 +10,16 @@ A hypothesis-first IR investigator (Custom MCP Server + Pydantic AI reference ag
 4. **One task at a time.** Sub-agents are for *research assistance*, not for parallel implementation. Eggs in one basket per task.
 5. **≤400 LOC per Python file** (CI gate). Split at natural module boundaries.
 
+## Wiring discipline — recurring mistakes, do NOT repeat (learned 2026-06-13)
+This codebase's chronic failure mode is **building a component, unit-testing it in isolation, and never connecting it to the live runtime** — green CI over a disconnected system. When you add/touch any `build_*` / `register_*` / factory / tool:
+- **WIRE IT, then prove it from a live entrypoint.** "Done" = reachable at runtime from `cli_commands/`, `silentwitness_mcp/server.py`, or a `harness/*/runner.py` `main()` — NOT `__all__` exports + passing unit tests. `grep` call sites; if the only refs are in `tests/`, it is NOT wired.
+- **An allowlist is not a wiring.** A specialist's `*_TOOL_ALLOWLIST` advertising a tool name means nothing unless that name is in `WIRED_TOOLS` and registered on the server. After wiring an agent, verify every tool/name it references resolves to a real registered impl (I shipped a disk specialist whose 6 tools didn't exist).
+- **"Run it for real" is the definition of done**, not "tests pass." Prefer a non-skippable end-to-end test (FunctionModel/TestModel, no key) over more unit tests.
+- **Pre-commit reflows files → commit aborts silently.** Run `uv run ruff format <files>` BEFORE `git add`. If a commit "succeeds" but `git log` is unchanged / push says "Everything up-to-date", the ruff-format hook re-modified a staged file — re-format, re-stage, re-commit.
+- **`file-size-guard` counts ALL physical lines, fails at ≥401.** `wc -l` touched `.py` before committing; split or move tests to a sibling file.
+- **A new required dataclass field breaks test constructors.** Adding e.g. `_AgentConfig.mcp_server` breaks every direct `_AgentConfig(...)` in `tests/` — grep and fix them all in the same change.
+- **Don't chase the last 0.1% coverage** with contrived mocks; write the valuable tests, `# pragma: no cover` genuinely integration-only paths.
+
 ## Vocab discipline (CI grep gate)
 Never: "Ralph Wiggum Loop", "court-admissible", "autonomous SOC", "eliminates hallucinations", "find evil" as marketing.
 Use: "defensible audit trail", "senior-analyst sequencing", "hypothesis pivot", "self-correct".

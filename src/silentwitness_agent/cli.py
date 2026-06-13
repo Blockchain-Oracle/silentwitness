@@ -247,6 +247,11 @@ def approve(
     finding_id: str = typer.Argument(...),
     note: str | None = typer.Option(None, "--note"),
     ledger: Path | None = typer.Option(None, "--ledger"),
+    non_interactive: bool = typer.Option(
+        False,
+        "--non-interactive",
+        help="Read the examiner password from SILENTWITNESS_APPROVE_PASSWORD, not a TTY prompt.",
+    ),
 ) -> None:
     from silentwitness_agent.cli_commands.approve import (
         _DEFAULT_LEDGER_DIR,
@@ -268,6 +273,7 @@ def approve(
         note=note,
         no_color=cli_ctx.no_color,
         examiner=examiner,
+        non_interactive=non_interactive,
     )
     raise typer.Exit(code=code)
 

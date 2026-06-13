@@ -25,7 +25,6 @@ from silentwitness_mcp.audit.ledger import (
     HMACLedger,
     InterpretationParts,
     LedgerComposer,
-    LedgerCompositionError,
     LedgerCorruptionError,
     LedgerKeyError,
     LedgerSecurityError,
@@ -280,47 +279,57 @@ def test_read_all_blank_line_raises_corruption(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_compose_observation_sorts_audit_ids() -> None:
-    parts = ObservationParts(text="evil.exe ran", audit_ids=("zzz", "aaa", "mmm"))
-    assert LedgerComposer.observation(parts) == b"evil.exe ran|aaa,mmm,zzz"
+def _lp(value: str) -> bytes:
+    encoded = value.encode("utf-8")
+    return len(encoded).to_bytes(8, "big") + encoded
 
 
-def test_compose_interpretation_uses_pipe_separators() -> None:
+def test_compose_observation_is_order_independent_and_length_prefixed() -> None:
+    a = LedgerComposer.observation(
+        ObservationParts(text="evil.exe ran", audit_ids=("zzz", "aaa", "mmm"))
+    )
+    b = LedgerComposer.observation(
+        ObservationParts(text="evil.exe ran", audit_ids=("mmm", "aaa", "zzz"))
+    )
+    assert a == b  # audit_ids sorted → order-independent
+    assert a == _lp("evil.exe ran") + (3).to_bytes(8, "big") + _lp("aaa") + _lp("mmm") + _lp("zzz")
+
+
+def test_compose_interpretation_length_prefixed() -> None:
     parts = InterpretationParts(
         observation_id="O-042", text="malware detonated", confidence=Confidence.HIGH
     )
-    assert LedgerComposer.interpretation(parts) == b"O-042|malware detonated|HIGH"
+    assert LedgerComposer.interpretation(parts) == _lp("O-042") + _lp("malware detonated") + _lp(
+        "HIGH"
+    )
 
 
-def test_compose_finding_joins_with_nul() -> None:
+def test_compose_finding_concatenates_self_delimiting_parts() -> None:
     obs = ObservationParts(text="ran", audit_ids=("a",))
     interp = InterpretationParts(observation_id="O-1", text="bad", confidence=Confidence.MEDIUM)
-    assert LedgerComposer.finding(obs, interp) == b"ran|a\x00O-1|bad|MEDIUM"
+    assert LedgerComposer.finding(obs, interp) == LedgerComposer.observation(
+        obs
+    ) + LedgerComposer.interpretation(interp)
 
 
-@pytest.mark.parametrize("forbidden", ["|", ",", "\x00"])
-def test_compose_observation_rejects_separator_in_text(forbidden: str) -> None:
-    """Silent-failure C2: ``|`` / ``,`` / NUL in text would let two distinct
-    inputs collapse to the same canonical bytes — the composer rejects."""
-    parts = ObservationParts(text=f"a{forbidden}b", audit_ids=("a",))
-    with pytest.raises(LedgerCompositionError, match="separator"):
-        LedgerComposer.observation(parts)
-
-
-@pytest.mark.parametrize("forbidden", ["|", ",", "\x00"])
-def test_compose_observation_rejects_separator_in_audit_id(forbidden: str) -> None:
-    parts = ObservationParts(text="ok", audit_ids=(f"audit{forbidden}id",))
-    with pytest.raises(LedgerCompositionError, match="separator"):
-        LedgerComposer.observation(parts)
-
-
-@pytest.mark.parametrize("forbidden", ["|", ",", "\x00"])
-def test_compose_interpretation_rejects_separator(forbidden: str) -> None:
-    parts = InterpretationParts(
-        observation_id="O-1", text=f"a{forbidden}b", confidence=Confidence.HIGH
+@pytest.mark.parametrize("ch", ["|", ",", "\x00", "\t", "\n"])
+def test_compose_accepts_arbitrary_chars_in_free_text(ch: str) -> None:
+    """Length-prefixing lets observation/interpretation text contain ANY char —
+    commas/pipes/tabs from forensic tool output no longer break approval (the
+    old separator scheme rejected them, making approval impossible for real
+    findings)."""
+    LedgerComposer.observation(ObservationParts(text=f"a{ch}b", audit_ids=(f"x{ch}y",)))
+    LedgerComposer.interpretation(
+        InterpretationParts(observation_id="O-1", text=f"a{ch}b", confidence=Confidence.HIGH)
     )
-    with pytest.raises(LedgerCompositionError, match="separator"):
-        LedgerComposer.interpretation(parts)
+
+
+def test_compose_is_unambiguous_across_field_boundaries() -> None:
+    """Distinct field splits must NOT collapse to identical bytes — the property
+    length-prefixing guarantees (and the old separator scheme attempted)."""
+    a = LedgerComposer.observation(ObservationParts(text="ab", audit_ids=("c",)))
+    b = LedgerComposer.observation(ObservationParts(text="a", audit_ids=("bc",)))
+    assert a != b
 
 
 def test_construction_accepts_setgid_plus_0700_directory(tmp_path: Path) -> None:
