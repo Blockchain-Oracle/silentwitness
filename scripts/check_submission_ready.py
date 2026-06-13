@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Pre-submission gate: confirm all 8 PRD §10 deliverables + license + vocab + URL.
 
-Modes: --all (default), --deliverables, --vocab, --video-url <url>, --license,
---placeholder-swap. Each prints ✓/✗ per rule and exits 0/1.
+CLI: ``--mode {all,deliverables,vocab,license,placeholder-swap,video-url}``
+(default ``all``). Each rule prints ✓/✗ to stderr; exit 0 if all pass.
 
-Carve-out: the §14 banned-vocab list is EXPECTED to appear inside this script
-itself (as the list of banned terms) and inside docs/devpost-submission-checklist.md
-(as the documentation of the gate). Both files are excluded from the vocab scan.
+Carve-out: meta-docs that document the §14 banned-vocab list (this script, the
+checklist, PRD/CICD/architecture/epics specs, etc.) are excluded from the vocab
+scan. The authoritative carve-out lists are ``_VOCAB_EXCLUDE_FILES`` and
+``_VOCAB_EXCLUDE_PREFIXES`` below.
 """
 
 from __future__ import annotations
@@ -48,10 +49,17 @@ _VOCAB_EXCLUDE_PREFIXES = (
     "docs/.audit/",
     "docs/EXAMPLE_EXECUTION_LOGS/",
 )
-_YT_RE = re.compile(
-    r"https://(youtu\.be/[A-Za-z0-9_-]{11}"
-    r"|(www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11})"
+_YT_URL_PATTERN = (
+    r"https://(?:youtu\.be/[A-Za-z0-9_-]{11}"
+    r"|(?:www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11})"
 )
+# Anchored at both ends — used by --video-url for strict validation. The 11-char
+# ID upper bound (no trailing junk) matches swap_demo_video_url._YT_PATTERNS so
+# the two scripts agree on what counts as a valid YouTube URL.
+_YT_RE_STRICT = re.compile(rf"^{_YT_URL_PATTERN}$")
+# Search variant: used to detect a YouTube URL anywhere in README.md prose. The
+# trailing word-boundary stops the ID match from accepting `abcdefghijkEXTRA`.
+_YT_RE_SEARCH = re.compile(rf"{_YT_URL_PATTERN}(?=\b|$)")
 
 
 class Check:
@@ -94,10 +102,11 @@ def _check_deliverables(root: Path) -> list[Check]:
     if not readme.exists():
         chk.fail("README.md missing")
     else:
-        head = "\n".join(readme.read_text(encoding="utf-8").splitlines()[:100])
-        if "PLACEHOLDER" in head or "DEMO_VIDEO_URL" in head:
-            chk.fail("README still contains PLACEHOLDER / DEMO_VIDEO_URL marker")
-        elif not _YT_RE.search(head):
+        full = readme.read_text(encoding="utf-8")
+        head = "\n".join(full.splitlines()[:100])
+        if "youtu.be/PLACEHOLDER" in full or "<!-- DEMO_VIDEO_URL -->" in full:
+            chk.fail("README still contains demo-video placeholder marker")
+        elif not _YT_RE_SEARCH.search(head):
             chk.fail("no YouTube URL in first 100 lines")
     checks.append(chk)
 
@@ -189,8 +198,10 @@ def _check_vocab(root: Path) -> Check:
         if path.suffix not in (".py", ".md", ".sh", ".yaml", ".yml", ".toml"):
             continue
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
+            text = path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            print(f"WARN: vocab-scan failed to read {rel}: {exc}", file=sys.stderr)
+            hits.append(rel)
             continue
         if _BANNED_RE.search(text):
             hits.append(rel)
@@ -201,20 +212,24 @@ def _check_vocab(root: Path) -> Check:
 
 def _check_placeholder_swap(root: Path) -> Check:
     chk = Check("README + TRY_IT_OUT: demo-video placeholder swapped")
+    offenders: list[str] = []
     for target in (root / "README.md", root / "docs" / "TRY_IT_OUT.md"):
         if not target.exists():
             chk.fail(f"{target.relative_to(root)} missing")
             return chk
         text = target.read_text(encoding="utf-8")
-        if "PLACEHOLDER" in text and "youtu.be/PLACEHOLDER" in text:
-            chk.fail(f"{target.relative_to(root)} still contains placeholder URL")
-            return chk
+        # Each marker is checked independently — a half-swap (one marker remains)
+        # must still fail the gate, otherwise stale placeholders ship to judges.
+        if "youtu.be/PLACEHOLDER" in text or "<!-- DEMO_VIDEO_URL -->" in text:
+            offenders.append(target.relative_to(root).as_posix())
+    if offenders:
+        chk.fail(f"placeholder remains in: {offenders}")
     return chk
 
 
 def _check_video_url(url: str) -> Check:
     chk = Check(f"Video URL well-formed: {url}")
-    if not _YT_RE.match(url):
+    if not _YT_RE_STRICT.fullmatch(url):
         chk.fail("not a recognized youtu.be/ or youtube.com/watch URL")
     return chk
 

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Swap the demo-video placeholder for the real YouTube URL at submission time.
 
-Validates a YouTube Unlisted URL form, then atomic-renames in-place across
-README.md + docs/TRY_IT_OUT.md. Refuses if either marker is missing
-(probably already swapped — refuse-by-default rather than overwrite).
+Validates a YouTube Unlisted URL form, then writes each target via tempfile +
+atomic ``Path.replace`` (per-file atomic, no cross-file rollback — submission
+is a single-operator one-shot, the gate catches half-swapped state on re-run).
+Refuses on a target that contains neither the marker comment nor the
+placeholder URL (refuse-by-default rather than overwrite).
 """
 
 from __future__ import annotations
@@ -37,8 +39,11 @@ def _atomic_write(path: Path, text: str) -> None:
     except OSError:
         try:
             os.unlink(tmp)
-        except OSError:
-            pass
+        except OSError as cleanup_exc:
+            print(
+                f"WARN: failed to clean up tmp file {tmp}: {cleanup_exc}",
+                file=sys.stderr,
+            )
         raise
 
 
@@ -51,7 +56,10 @@ def swap(url: str, targets: tuple[Path, ...] = _TARGETS) -> int:
             file=sys.stderr,
         )
         return 1
-    changed: list[Path] = []
+    # Two-pass: validate every target has a placeholder before mutating any
+    # file. Avoids the half-swapped state where target[0] writes succeed and
+    # target[1] is missing the marker — observed as a confusing partial-swap.
+    pending: list[tuple[Path, str, str]] = []
     for target in targets:
         if not target.exists():
             print(f"ERROR: {target} does not exist", file=sys.stderr)
@@ -68,6 +76,9 @@ def swap(url: str, targets: tuple[Path, ...] = _TARGETS) -> int:
             return 1
         new_text = text.replace(_PLACEHOLDER_URL, url)
         new_text = new_text.replace(_PLACEHOLDER_MARKER, f"<!-- demo-video: {url} -->")
+        pending.append((target, text, new_text))
+    changed: list[Path] = []
+    for target, text, new_text in pending:
         if new_text != text:
             _atomic_write(target, new_text)
             changed.append(target)

@@ -91,6 +91,33 @@ class TestVideoUrl:
         r = _run_gate("--mode", "video-url", "--video-url", "https://example.com/video.mp4")
         assert r.returncode == 1
 
+    def test_trailing_junk_after_id_fails(self) -> None:
+        # Anchor-mismatch regression: pre-fix, `_YT_RE` lacked end-anchor and
+        # accepted IDs followed by arbitrary junk — divergent from the swap
+        # script's _YT_PATTERNS which correctly rejected it.
+        r = _run_gate(
+            "--mode",
+            "video-url",
+            "--video-url",
+            "https://youtu.be/aaaaaaaaaaaEXTRA_GARBAGE",
+        )
+        assert r.returncode == 1
+
+    def test_id_too_short_fails(self) -> None:
+        r = _run_gate("--mode", "video-url", "--video-url", "https://youtu.be/aaaa")
+        assert r.returncode == 1
+
+    def test_id_too_long_fails(self) -> None:
+        r = _run_gate("--mode", "video-url", "--video-url", "https://youtu.be/aaaaaaaaaaaa")
+        assert r.returncode == 1
+
+
+class TestVideoUrlMissingArg:
+    def test_video_url_mode_without_arg_fails(self) -> None:
+        r = _run_gate("--mode", "video-url")
+        assert r.returncode == 1
+        assert "ERROR" in r.stderr or "--video-url" in r.stderr
+
 
 class TestPlaceholderSwap:
     def test_readme_with_placeholder_fails(self, tmp_path: Path) -> None:
@@ -115,6 +142,37 @@ class TestVocab:
     def test_vocab_detects_banned_in_docs(self, tmp_path: Path) -> None:
         root = _make_minimal_fixture(tmp_path)
         (root / "docs" / "BAD.md").write_text("This is court-admissible content.\n")
+        r = _run_gate("--mode", "vocab", "--root", str(root))
+        assert r.returncode == 1
+
+    def test_vocab_case_insensitive(self, tmp_path: Path) -> None:
+        root = _make_minimal_fixture(tmp_path)
+        (root / "docs" / "BAD.md").write_text("RALPH WIGGUM in shouty case.\n")
+        r = _run_gate("--mode", "vocab", "--root", str(root))
+        assert r.returncode == 1
+
+    def test_vocab_carve_out_for_stories_prefix(self, tmp_path: Path) -> None:
+        # docs/stories/ legitimately documents the banned vocab as part of the
+        # story-spec text; the carve-out must keep the gate green there.
+        root = _make_minimal_fixture(tmp_path)
+        (root / "docs" / "stories").mkdir()
+        (root / "docs" / "stories" / "spec.md").write_text(
+            "Banned per §14: court-admissible, autonomous SOC.\n"
+        )
+        r = _run_gate("--mode", "vocab", "--root", str(root))
+        assert r.returncode == 0, r.stderr
+
+    def test_vocab_carve_out_for_prd_meta_doc(self, tmp_path: Path) -> None:
+        root = _make_minimal_fixture(tmp_path)
+        (root / "docs" / "PRD.md").write_text("§14 bans court-admissible.\n")
+        r = _run_gate("--mode", "vocab", "--root", str(root))
+        assert r.returncode == 0, r.stderr
+
+    def test_vocab_detects_banned_in_src(self, tmp_path: Path) -> None:
+        # src/ has no carve-out — banned vocab in code must fail loud.
+        root = _make_minimal_fixture(tmp_path)
+        (root / "src").mkdir()
+        (root / "src" / "bad.py").write_text("# court-admissible marketing\n")
         r = _run_gate("--mode", "vocab", "--root", str(root))
         assert r.returncode == 1
 
