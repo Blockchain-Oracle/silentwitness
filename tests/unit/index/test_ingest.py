@@ -48,6 +48,14 @@ def test_long_message_is_truncated() -> None:
     assert rec is not None and len(rec.text) == _MAX_TEXT
 
 
+def test_strip_prefix_removes_mount_root() -> None:
+    mount = "/mnt/sw-fs-abc"
+    event = {"message": "x", "display_name": f"{mount}/Windows/System32/config/SOFTWARE"}
+    rec = _plaso_event_to_record(event, audit_id="a", host="", strip_prefix=mount)
+    assert rec is not None
+    assert rec.artifact_path == "/Windows/System32/config/SOFTWARE"
+
+
 def test_iter_json_lines_skips_junk(tmp_path: Path) -> None:
     f = tmp_path / "out.jsonl"
     f.write_text(

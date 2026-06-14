@@ -196,7 +196,8 @@ install_evidence_access() {
     sudo apt-get update -q
     sudo apt-get install -y --no-install-recommends \
         p7zip-full build-essential pkg-config python3-dev \
-        sleuthkit libewf-dev dosfstools mtools
+        sleuthkit libewf-dev dosfstools mtools \
+        ewf-tools ntfs-3g fuse3
     log "evidence-access apt deps installed — now install the Python extra:"
     log "    uv sync --extra forensics   # builds dfVFS + libyal bindings on this Linux box"
 }
