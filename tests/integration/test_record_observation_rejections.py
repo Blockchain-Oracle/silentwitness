@@ -94,9 +94,9 @@ def test_hallucinated_entities_carries_suggested(tmp_path: Path) -> None:
     assert envelope.data.reason == ObservationRejectReason.HALLUCINATED_ENTITIES
     suggested = envelope.data.suggested or ""
     # The hint must NAME the offending (hallucinated) entity and give the
-    # actionable re-cite path, so the agent corrects by construction.
+    # actionable re-cite path (index-query tools), so the agent corrects by construction.
     assert "1111222233334444" in suggested
-    assert "read_tool_output" in suggested
+    assert "search_evidence" in suggested or "record_id" in suggested
 
 
 def test_agent_self_correction_after_hallucination(tmp_path: Path) -> None:

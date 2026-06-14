@@ -48,11 +48,11 @@ class CitationResult(BaseModel):
     ``success=True`` ⇒ ``span`` is the original ``CitedSpan`` echoed
     back, ``reason`` is ``None``, ``context`` is empty. ``success=False``
     ⇒ ``reason`` names the failure and ``context`` carries structured
-    self-correction data the agent needs (expected/actual hash, line
-    range checked, errno of the underlying OSError, etc.). The
-    ``@model_validator`` enforces the discriminator invariant; the
-    ``.accept`` / ``.reject`` classmethods are the only construction
-    paths code should use.
+    self-correction data the agent needs: ``record_id`` for
+    RECORD_NOT_FOUND, and ``record_id`` + ``span_text`` for
+    SPAN_NOT_IN_RECORD. The ``@model_validator`` enforces the
+    discriminator invariant; the ``.accept`` / ``.reject`` classmethods
+    are the only construction paths code should use.
 
     Note: a Pydantic-v2 native discriminated union via
     ``Annotated[Union[CitationAccept, CitationReject], Field(discriminator="kind")]``

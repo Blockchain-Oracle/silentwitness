@@ -125,7 +125,7 @@ def _collect_output_paths(obj: Any) -> list[str]:
 
     Tools that decompose evidence into files (zeek -> conn.log/http.log/...) report
     those files as ``path`` entries. Surfacing them lets the wrapper tell the agent
-    EXACTLY which files to read_tool_output for citation."""
+    which files it can read_tool_output for additional context."""
     found: list[str] = []
     if isinstance(obj, dict):
         for key, value in obj.items():
@@ -153,15 +153,16 @@ def _augment_advisories(dumped: dict[str, Any], *extra: str | None) -> dict[str,
 
 
 def _read_to_cite_advisory(dumped: dict[str, Any]) -> str | None:
-    """Advisory pointing the agent at read_tool_output for the output files this
-    tool produced. ``None`` when the response carries no file paths."""
+    """Advisory listing the output files this tool produced, for context-gathering
+    via read_tool_output. ``None`` when the response carries no file paths."""
     paths = _collect_output_paths(dumped)
     if not paths:
         return None
     return (
-        "These fields are an INVENTORY of output files, not their content. To cite a "
-        "specific event in record_observation, call read_tool_output(output_path="
-        f"<one of these>) and quote the exact line verbatim: {paths}"
+        "These fields are an INVENTORY of output files, not their content. "
+        "read_tool_output(output_path=<one of these>) shows a file's raw bytes; "
+        "to CITE evidence in record_observation, pass {record_id, span_text} from a "
+        f"search_evidence / get_record hit (citations resolve against index records): {paths}"
     )
 
 

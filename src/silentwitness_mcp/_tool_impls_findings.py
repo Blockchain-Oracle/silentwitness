@@ -30,7 +30,7 @@ from silentwitness_mcp.findings.observation import (
     record_observation as _impl_record_observation,
 )
 from silentwitness_mcp.findings.pivot import PivotInput, record_pivot as _impl_record_pivot
-from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
+from silentwitness_mcp.index.store import EvidenceIndex, EvidenceIndexError, IndexRecord
 
 FINDING_TOOLS: frozenset[str] = frozenset(
     {"record_observation", "record_interpretation", "record_narrative", "record_pivot"}
@@ -95,10 +95,21 @@ def register_finding_recorders(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         except (ValidationError, ValueError) as exc:
             return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
         cited_ids = {span.record_id for span in payload.cited_spans}
+        try:
+            records = _cited_records(case_dir, cited_ids)
+        except EvidenceIndexError as exc:
+            # A present-but-unreadable index (corrupt image / locked file) is a
+            # pre-pipeline failure — return a structured reject (mirrors the
+            # INVALID_INPUT early return) so the agent gets a reason, not a crash.
+            return {
+                "success": False,
+                "reason": "FINDINGS_STORE_CORRUPTED",
+                "detail": f"evidence index unreadable: {exc}",
+            }
         resp = _impl_record_observation(
             payload,
             case_dir=case_dir,
-            records=_cited_records(case_dir, cited_ids),
+            records=records,
             audit_logger=audit,
             model_used=model,
         )

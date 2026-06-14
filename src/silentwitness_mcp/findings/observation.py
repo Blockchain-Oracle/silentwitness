@@ -148,10 +148,11 @@ def _suggested_for_hallucination(hallucinated_texts: tuple[str, ...]) -> str | N
     return (
         f"Entity gate: {offending} do not appear verbatim in any span you cited "
         "— you are likely describing evidence you read but did not cite. Fix by "
-        "EITHER (a) for each entity, add a cited_span whose span_text is the exact "
-        "line containing it (use read_tool_output to locate that line), OR (b) "
-        "remove the entity from observation_text. Quote every entity you name "
-        "byte-for-byte; do not paraphrase it."
+        "EITHER (a) for each entity, add a cited_span {record_id, span_text} whose "
+        "span_text is the exact text containing it — use search_evidence (or "
+        "get_record) to find that record_id — OR (b) remove the entity from "
+        "observation_text. Quote every entity you name byte-for-byte; do not "
+        "paraphrase it."
     )
 
 
