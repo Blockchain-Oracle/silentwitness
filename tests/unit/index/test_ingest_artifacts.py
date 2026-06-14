@@ -28,6 +28,7 @@ from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
         (EvidenceType.OTHER, "srudb.DAT", "srum"),
         (EvidenceType.OTHER, "$MFT", "mft"),
         (EvidenceType.OTHER, "_MFT", "mft"),
+        (EvidenceType.OTHER, "_UsnJrnl", "usnjrnl"),
         (EvidenceType.OTHER, "UsrClass.dat", None),  # unmapped OTHER -> not ingested
         (EvidenceType.DISK_IMAGE, "img.e01", None),  # plaso path, not a targeted feeder
     ],

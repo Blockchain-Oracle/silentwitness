@@ -39,6 +39,7 @@ from silentwitness_mcp.index.feeders_evtx import evtx_file_records
 from silentwitness_mcp.index.feeders_mft import mft_entry_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
 from silentwitness_mcp.index.feeders_srum import srum_records
+from silentwitness_mcp.index.feeders_usnjrnl import usnjrnl_records
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -49,7 +50,7 @@ _PREPARED = "prepared"
 
 # Closed set of artifact kinds; a Literal so a typo'd label is a type error, not a
 # silent misroute.
-Kind = Literal["evtx", "registry", "srum", "mft"]
+Kind = Literal["evtx", "registry", "srum", "mft", "usnjrnl"]
 # Direct artifact-type -> kind mapping.
 _KINDS: dict[EvidenceType, Kind] = {
     EvidenceType.EVTX: "evtx",
@@ -60,6 +61,8 @@ _OTHER_BY_NAME: dict[str, Kind] = {
     "SRUDB.DAT": "srum",
     "$MFT": "mft",
     "_MFT": "mft",
+    "_USNJRNL": "usnjrnl",
+    "$USNJRNL": "usnjrnl",
 }
 
 
@@ -107,6 +110,7 @@ def _feeder_for(kind: Kind) -> Feeder:
         "registry": registry_hive_records,
         "srum": srum_records,
         "mft": mft_entry_records,
+        "usnjrnl": usnjrnl_records,
     }
     return feeders[kind]
 

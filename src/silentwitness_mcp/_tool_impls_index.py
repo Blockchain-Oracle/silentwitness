@@ -22,24 +22,42 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
+from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_mcp._lifecycle import AppContext
 from silentwitness_mcp._tool_impls import _case_deps, _GuardFn, _refuse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.index.store import EvidenceIndex, EvidenceIndexError, IndexRecord
+from silentwitness_mcp.verification.sanitizer import StripEvent, StripEventWriter, sanitize
 
 INDEX_TOOLS: frozenset[str] = frozenset({"search_evidence", "get_record", "timeline"})
 
 _INDEX_DB = "index.db"
 _DEFAULT_LIMIT = 50
 _MAX_LIMIT = 500
+_SANITIZER_LOG = "index_sanitizer.jsonl"
 _NO_INDEX = (
     "no evidence index for this case — run `silentwitness prepare <case>` then "
     "index ingest to build it before searching"
 )
 
 
-def _record_dict(rec: IndexRecord) -> dict[str, Any]:
-    """The LLM-facing shape of one index record (provenance-complete)."""
+class _StripWriter(StripEventWriter):
+    """Append sanitizer strip events to the case's index-sanitizer audit log."""
+
+    def __init__(self, log_path: Path) -> None:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        self._path = log_path
+
+    def emit(self, event: StripEvent) -> None:
+        append_jsonl_line(self._path, event.model_dump_json())
+
+
+def _record_dict(rec: IndexRecord, *, sanitize_text: str | None = None) -> dict[str, Any]:
+    """The LLM-facing shape of one index record (provenance-complete).
+
+    ``sanitize_text`` replaces the raw ``text`` with its sanitized+wrapped form — index
+    rows are evidence-derived free text the agent reads, i.e. a prompt-injection surface,
+    so the query boundary (where rows reach the LLM) sanitizes them."""
     return {
         "id": rec.id,
         "ts": rec.ts,
@@ -47,8 +65,19 @@ def _record_dict(rec: IndexRecord) -> dict[str, Any]:
         "source_tool": rec.source_tool,
         "artifact_path": rec.artifact_path,
         "audit_id": rec.audit_id,
-        "text": rec.text,
+        "text": rec.text if sanitize_text is None else sanitize_text,
     }
+
+
+def _sanitized_records(
+    records: list[IndexRecord], *, audit_id: str, case_dir: Path
+) -> list[dict[str, Any]]:
+    """Sanitize each record's evidence text before it reaches the LLM-bound response."""
+    writer = _StripWriter(case_dir / "audit" / _SANITIZER_LOG)
+    return [
+        _record_dict(r, sanitize_text=sanitize(r.text, audit_id, audit_writer=writer).wrapped_text)
+        for r in records
+    ]
 
 
 def _emit(
@@ -102,7 +131,7 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
                 )
         except EvidenceIndexError as exc:
             return _refuse("INVALID_QUERY", str(exc))
-        results = [_record_dict(h) for h in hits]
+        results = _sanitized_records(hits, audit_id=audit_id, case_dir=case_dir)
         _emit(
             audit,
             "search_evidence",
@@ -128,12 +157,14 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         if not index_path.exists():
             return _refuse("INDEX_NOT_BUILT", _NO_INDEX)
         t0 = time.monotonic()
+        audit_id = audit.next_audit_id()
         with EvidenceIndex(index_path) as idx:
             rec = idx.get(record_id)
         if rec is None:
             return _refuse("RECORD_NOT_FOUND", f"no evidence-index record id={record_id}")
         _emit(audit, "get_record", {"record_id": record_id}, {"found": True}, index_path, t0, model)
-        return {"success": True, "record": _record_dict(rec)}
+        record = _sanitized_records([rec], audit_id=audit_id, case_dir=case_dir)[0]
+        return {"success": True, "record": record}
 
     @mcp.tool()
     async def timeline(
@@ -150,9 +181,10 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         if not index_path.exists():
             return _refuse("INDEX_NOT_BUILT", _NO_INDEX)
         t0 = time.monotonic()
+        audit_id = audit.next_audit_id()
         with EvidenceIndex(index_path) as idx:
             rows = idx.recent(host=host, source_tool=source_tool, limit=min(limit, _MAX_LIMIT))
-        results = [_record_dict(r) for r in rows]
+        results = _sanitized_records(rows, audit_id=audit_id, case_dir=case_dir)
         _emit(
             audit,
             "timeline",
