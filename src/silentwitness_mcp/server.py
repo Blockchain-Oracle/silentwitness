@@ -54,24 +54,15 @@ from silentwitness_mcp._tool_stubs import register_finding_tool_stubs
 # Tools touching /evidence refuse on bad mount (architecture §4.11).
 # Lifespan still registers them so clients can introspect; each call
 # returns MOUNT_NOT_RO_NOEXEC_NOSUID until the mount is fixed.
+# The raw-evidence tools (vol_*/zeek/chainsaw/hayabusa/suricata) were demoted to ingest
+# feeders (firewall layer #1) and are no longer registered, so only the case-bound tools
+# that still touch /evidence remain. The index query tools (search_evidence/get_record/
+# timeline) read the parsed index, not a mounted path, so they are not mount-bound.
 EVIDENCE_BOUND_TOOLS: Final[frozenset[str]] = frozenset(
     {
         "record_observation",
         "register_evidence",
         "verify_evidence_hash",
-        "vol_cmdline",
-        "vol_dlllist",
-        "vol_handles",
-        "vol_lsadump",
-        "vol_malfind",
-        "vol_netscan",
-        "vol_pslist",
-        "vol_psscan",
-        "vol_pstree",
-        "chainsaw_hunt",
-        "hayabusa_csv_timeline",
-        "zeek_run",
-        "suricata_run",
     }
 )
 

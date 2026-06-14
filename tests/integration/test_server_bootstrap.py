@@ -40,6 +40,9 @@ from silentwitness_mcp.server import (
     create_server,
 )
 
+# Firewall layer #1: the agent's discovery surface is the parsed-evidence INDEX, not
+# raw-evidence-producing tools. The memory (vol_*), log (chainsaw/hayabusa) and network
+# (zeek/suricata) wrappers are demoted to ingest feeders and are NO LONGER registered.
 EXPECTED_TOOL_NAMES = frozenset(
     {
         "record_observation",
@@ -50,19 +53,6 @@ EXPECTED_TOOL_NAMES = frozenset(
         "approve_finding",
         "register_evidence",
         "verify_evidence_hash",
-        "chainsaw_hunt",
-        "hayabusa_csv_timeline",
-        "zeek_run",
-        "suricata_run",
-        "vol_cmdline",
-        "vol_dlllist",
-        "vol_handles",
-        "vol_lsadump",
-        "vol_malfind",
-        "vol_netscan",
-        "vol_pslist",
-        "vol_psscan",
-        "vol_pstree",
         "search_evidence",
         "get_record",
         "timeline",
@@ -313,19 +303,6 @@ def test_evidence_bound_tools_set_matches_architecture_4_11() -> None:
             "record_observation",
             "register_evidence",
             "verify_evidence_hash",
-            "chainsaw_hunt",
-            "hayabusa_csv_timeline",
-            "zeek_run",
-            "suricata_run",
-            "vol_cmdline",
-            "vol_dlllist",
-            "vol_handles",
-            "vol_lsadump",
-            "vol_malfind",
-            "vol_netscan",
-            "vol_pslist",
-            "vol_psscan",
-            "vol_pstree",
         }
     )
 

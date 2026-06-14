@@ -44,11 +44,5 @@ def register_finding_tool_stubs(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         guard_mount("approve_finding", ctx)
         raise NotImplementedError("approve_finding is registered but not yet implemented")
 
-    @mcp.tool()
-    def suricata_run(ctx: Context[ServerSession, AppContext]) -> dict[str, str]:
-        """Suricata IDS rule replay against a pcap — EVE JSON event tally. Stub."""
-        guard_mount("suricata_run", ctx)
-        raise NotImplementedError("suricata_run is registered but not yet implemented")
-
 
 __all__ = ["register_finding_tool_stubs"]

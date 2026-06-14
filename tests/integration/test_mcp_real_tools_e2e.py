@@ -27,10 +27,12 @@ from mcp.client.stdio import stdio_client
 
 from silentwitness_mcp._case_env import build_server_env
 
-_EXPECTED_TOOL_COUNT = 24  # +search_evidence +get_record +timeline (index query tools)
-# Tools still intentionally stubbed (suricata: rules-as-evidence; approve_finding:
-# CLI/examiner-only). Everything else must be real.
-_STILL_STUBBED = frozenset({"suricata_run", "approve_finding"})
+# Firewall layer #1: the raw-evidence tools (vol_*/zeek/chainsaw/hayabusa/suricata) are
+# demoted to ingest feeders and no longer advertised. The agent's surface is the index
+# query tools + finding recorders + evidence register/verify + read_tool_output.
+_EXPECTED_TOOL_COUNT = 11
+# approve_finding stays a stub (CLI/examiner-only HMAC approval). Everything else is real.
+_STILL_STUBBED = frozenset({"approve_finding"})
 
 
 def _payload(result: object) -> dict[str, Any]:

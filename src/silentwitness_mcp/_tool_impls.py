@@ -15,9 +15,11 @@ Returning a plain ``dict`` (not the generic ``ToolResponse[T]``) keeps FastMCP's
 output-schema generation simple and gives the agent a stable JSON envelope with
 ``audit_id`` / ``advisories`` intact for the self-correction loop.
 
-``WIRED_TOOLS`` is the set of names registered here; :mod:`_tool_stubs` registers
-``NotImplementedError`` stubs only for the names NOT in this set, so the surface
-can be wired incrementally while every tool name stays advertised.
+``WIRED_TOOLS`` is the agent's tool surface registered here + the finding/index
+sub-modules. The raw-evidence wrappers (vol_*/zeek/chainsaw/hayabusa/suricata) are
+NOT registered — they are demoted to ingest feeders (firewall layer #1), so the agent
+discovers evidence by querying the index, not by free-reading. :mod:`_tool_stubs`
+registers only the ``approve_finding`` examiner-approval stub.
 """
 
 from __future__ import annotations
@@ -41,41 +43,32 @@ from silentwitness_mcp.evidence.registry import (
     EvidenceRegistry,
     EvidenceRegistryError,
 )
-from silentwitness_mcp.tools.network import zeek_run as _impl_zeek_run
 from silentwitness_mcp.verification.normalizer import normalize_output
 
 _CaseDeps = tuple[Path, EvidenceRegistry, AuditLogger, str]
 
 _GuardFn = Callable[[str, "Context[ServerSession, AppContext]"], None]
 
-# All tool names wired to real implementations across this module + the per-domain
-# sub-modules (_tool_impls_memory, _tool_impls_log, _tool_impls_findings). Listed
-# explicitly (not imported from the sub-modules) to avoid an import cycle, since
-# those modules import helpers from here. A registration-time assertion (see
-# register_real_tools) enforces that the live tool surface == WIRED_TOOLS | the
-# _tool_stubs complement (currently suricata_run + approve_finding), so this list
-# cannot silently drift from what is actually registered.
+# All tool names wired to real implementations across this module + the finding/index
+# sub-modules (_tool_impls_findings, _tool_impls_index). Listed explicitly (not imported
+# from the sub-modules) to avoid an import cycle, since those modules import helpers from
+# here. A registration-time assertion (see register_real_tools) enforces that the live
+# tool surface == WIRED_TOOLS | the _tool_stubs complement (just approve_finding), so
+# this list cannot silently drift from what is actually registered.
+# Firewall layer #1: the agent's discovery surface is the parsed evidence INDEX
+# (search_evidence / timeline / get_record), not raw-evidence-producing tools. The
+# memory (vol_*), log (chainsaw/hayabusa) and network (zeek/suricata) wrappers are
+# DEMOTED to ingest feeders (impl funcs reused by index/ingest_*), so the agent cannot
+# free-read raw evidence. read_tool_output stays only to fetch a cited raw blob.
 WIRED_TOOLS: frozenset[str] = frozenset(
     {
         "register_evidence",
         "verify_evidence_hash",
-        "zeek_run",
         "record_observation",
         "record_interpretation",
         "record_narrative",
         "record_pivot",
         "read_tool_output",
-        "vol_pslist",
-        "vol_psscan",
-        "vol_pstree",
-        "vol_malfind",
-        "vol_netscan",
-        "vol_cmdline",
-        "vol_dlllist",
-        "vol_handles",
-        "vol_lsadump",
-        "chainsaw_hunt",
-        "hayabusa_csv_timeline",
         "search_evidence",
         "get_record",
         "timeline",
@@ -85,7 +78,7 @@ WIRED_TOOLS: frozenset[str] = frozenset(
 # Tools registered directly in this module (the rest live in the sub-modules);
 # used by register_real_tools to assert WIRED_TOOLS hasn't drifted.
 _CORE_TOOLS: frozenset[str] = frozenset(
-    {"register_evidence", "verify_evidence_hash", "zeek_run", "read_tool_output"}
+    {"register_evidence", "verify_evidence_hash", "read_tool_output"}
 )
 
 
@@ -239,28 +232,6 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         }
 
     @mcp.tool()
-    async def zeek_run(
-        ctx: Context[ServerSession, AppContext],
-        pcap_path: str,
-        timeout_s: float = 900.0,
-    ) -> dict[str, Any]:
-        """Zeek offline pcap replay — decomposes a pcap into structured logs."""
-        guard_mount("zeek_run", ctx)
-        case_dir, registry, audit, model = _case_deps(ctx)
-        out_dir = _tool_out_dir(case_dir, "zeek", pcap_path)
-        resp = await _impl_zeek_run(
-            Path(pcap_path),
-            out_dir,
-            case_dir=case_dir,
-            evidence_registry=registry,
-            audit_logger=audit,
-            model_used=model,
-            timeout_s=timeout_s,
-        )
-        dumped = resp.model_dump(mode="json")
-        return _augment_advisories(dumped, _read_to_cite_advisory(dumped))
-
-    @mcp.tool()
     async def read_tool_output(
         ctx: Context[ServerSession, AppContext],
         output_path: str,
@@ -330,21 +301,19 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         register_finding_recorders,
     )
     from silentwitness_mcp._tool_impls_index import INDEX_TOOLS, register_index_tools
-    from silentwitness_mcp._tool_impls_log import LOG_TOOLS, register_log_tools
-    from silentwitness_mcp._tool_impls_memory import MEMORY_TOOLS, register_memory_tools
 
     # Make WIRED_TOOLS load-bearing: it must equal the union of what this module
     # and the sub-modules actually register, or the hand-maintained list has
     # drifted (a tool added to a sub-module but not advertised, or vice versa).
-    expected = _CORE_TOOLS | FINDING_TOOLS | MEMORY_TOOLS | LOG_TOOLS | INDEX_TOOLS
+    # The memory/log/network wrappers are NOT registered — they are demoted to ingest
+    # feeders (firewall layer #1); the agent queries the index instead.
+    expected = _CORE_TOOLS | FINDING_TOOLS | INDEX_TOOLS
     if WIRED_TOOLS != expected:
         raise ServerConfigurationError(
             f"WIRED_TOOLS drifted from the registered tool sets: {WIRED_TOOLS ^ expected}"
         )
 
     register_finding_recorders(mcp, guard_mount)
-    register_memory_tools(mcp, guard_mount)
-    register_log_tools(mcp, guard_mount)
     register_index_tools(mcp, guard_mount)
 
 
