@@ -16,6 +16,11 @@ and returned** (:class:`IngestResult.failures`) so the caller can surface it in 
 operator summary and the audit trail. A green result with hidden skips is exactly what
 this guards against. Both the parallel and in-process (``max_workers=1``) paths use the
 same broad ``except Exception`` so the tested path matches the shipped path.
+
+Observability note: the authoritative failure signal is this **returned, structured**
+:class:`IngestResult.failures` (not log scraping) — it survives the subprocess boundary,
+where a worker's ``logging`` output may not reach the operator. Finer-grained
+per-record / per-plugin diagnostics inside a worker are best-effort.
 """
 
 from __future__ import annotations
@@ -31,7 +36,9 @@ from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.index._feeder_util import Feeder
 from silentwitness_mcp.index.feeders_evtx import evtx_file_records
+from silentwitness_mcp.index.feeders_mft import mft_entry_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
+from silentwitness_mcp.index.feeders_srum import srum_records
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -41,12 +48,29 @@ _LOG = logging.getLogger(__name__)
 _PREPARED = "prepared"
 
 # Closed set of artifact kinds; a Literal so a typo'd label is a type error, not a
-# silent misroute. Artifact type -> kind.
-Kind = Literal["evtx", "registry"]
+# silent misroute.
+Kind = Literal["evtx", "registry", "srum", "mft"]
+# Direct artifact-type -> kind mapping.
 _KINDS: dict[EvidenceType, Kind] = {
     EvidenceType.EVTX: "evtx",
     EvidenceType.HIVE: "registry",
 }
+# Artifacts registered as OTHER are disambiguated by filename.
+_OTHER_BY_NAME: dict[str, Kind] = {
+    "SRUDB.DAT": "srum",
+    "$MFT": "mft",
+    "_MFT": "mft",
+}
+
+
+def _kind_for(artifact_type: EvidenceType, name: str) -> Kind | None:
+    """Resolve an artifact's feeder kind from its type (and filename for OTHER)."""
+    direct = _KINDS.get(artifact_type)
+    if direct is not None:
+        return direct
+    if artifact_type == EvidenceType.OTHER:
+        return _OTHER_BY_NAME.get(name.upper())
+    return None
 
 
 @dataclass
@@ -61,11 +85,16 @@ class IngestResult:
 
 
 def _citation_path(path: Path) -> str:
-    """Path relative to the ``prepared/`` root, for a stable, portable citation."""
+    """Path relative to the ``prepared/`` root, for a stable, portable citation.
+
+    Prepared artifacts always contain a ``prepared/`` segment, so the relative path is
+    used. As a defensive fallback (path outside a prepared tree) we keep the last few
+    components rather than a bare filename, so two same-named hives don't collide on an
+    ambiguous citation."""
     parts = path.parts
     if _PREPARED in parts:
         return str(Path(*parts[parts.index(_PREPARED) + 1 :]))
-    return path.name
+    return str(Path(*parts[-3:])) if len(parts) >= 3 else path.name
 
 
 def _feeder_for(kind: Kind) -> Feeder:
@@ -76,6 +105,8 @@ def _feeder_for(kind: Kind) -> Feeder:
     feeders: dict[Kind, Feeder] = {
         "evtx": evtx_file_records,
         "registry": registry_hive_records,
+        "srum": srum_records,
+        "mft": mft_entry_records,
     }
     return feeders[kind]
 
@@ -104,7 +135,7 @@ def ingest_prepared_artifacts(
     deferred FTS build, and MUST surface :attr:`IngestResult.failures`."""
     tasks: list[tuple[Kind, Path, str]] = []
     for rec in registry.list_all():
-        kind = _KINDS.get(rec.type)
+        kind = _kind_for(rec.type, rec.path.name)
         if kind is not None:
             tasks.append((kind, rec.path, _citation_path(rec.path)))
     result = IngestResult()

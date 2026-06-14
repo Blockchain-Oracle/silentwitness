@@ -67,6 +67,8 @@ forensics = [
     "regipy>=5.0",
     "evtx>=0.8",
     "python-evtx>=0.7",
+    # Rust-backed $MFT parser (fast, MIT). pyesedb (SRUM) arrives via plaso/libesedb.
+    "mft>=0.6",
 ]
 
 [dependency-groups]

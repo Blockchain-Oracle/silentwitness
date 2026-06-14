@@ -43,8 +43,11 @@ def test_citation_path_is_relative_to_prepared() -> None:
     assert _citation_path(p) == "rocba-cdrive/evtx/Windows/Logs/Security.evtx"
 
 
-def test_citation_path_falls_back_to_name() -> None:
-    assert _citation_path(Path("/somewhere/odd/Security.evtx")) == "Security.evtx"
+def test_citation_path_fallback_keeps_context_to_avoid_collisions() -> None:
+    # Outside a prepared/ tree: keep the last few components so two same-named hives
+    # don't collide on a bare-filename citation.
+    assert _citation_path(Path("/somewhere/odd/Security.evtx")) == "somewhere/odd/Security.evtx"
+    assert _citation_path(Path("SOFTWARE")) == "SOFTWARE"
 
 
 def test_evtx_and_hive_dispatched_and_counted(
