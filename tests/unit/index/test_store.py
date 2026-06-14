@@ -45,6 +45,28 @@ def test_ingest_and_count(tmp_path: Path) -> None:
         assert idx.count() == 3
 
 
+def test_bulk_ingest_then_rebuild_fts_is_searchable(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        idx.begin_bulk()
+        assert idx.bulk_ingest(_records(), batch=2) == 3  # batch < len exercises chunking
+        assert idx.count() == 3
+        # Before rebuild, the deferred FTS has no rows -> search finds nothing.
+        assert idx.search("powershell") == []
+        idx.rebuild_fts()
+        hits = idx.search("powershell")
+        assert len(hits) == 1 and "powershell.exe" in hits[0].text
+
+
+def test_bulk_and_per_row_ingest_mix_is_consistent_after_rebuild(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        idx.ingest(_records()[:1])  # per-row path keeps its own FTS entry
+        idx.bulk_ingest(_records()[1:])  # bulk path defers FTS
+        idx.rebuild_fts()  # reconstructs FTS for ALL content rows
+        assert idx.count() == 3
+        assert len(idx.search("evil")) == 1
+        assert len(idx.search("powershell")) == 1
+
+
 def test_search_matches_keyword(tmp_path: Path) -> None:
     with EvidenceIndex(tmp_path / "index.db") as idx:
         idx.ingest(_records())

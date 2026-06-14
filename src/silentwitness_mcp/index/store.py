@@ -96,7 +96,8 @@ class EvidenceIndex:
         """Append rows to the index; return the number written.
 
         Writes the plain row and its FTS entry together in one transaction so a
-        crash leaves the index consistent (either both or neither)."""
+        crash leaves the index consistent (either both or neither). For high-volume
+        ingest prefer :meth:`bulk_ingest` + :meth:`rebuild_fts`."""
         written = 0
         try:
             with self._conn:  # transaction
@@ -122,6 +123,69 @@ class EvidenceIndex:
         except sqlite3.Error as exc:
             raise EvidenceIndexError(f"index ingest failed after {written} rows: {exc}") from exc
         return written
+
+    def bulk_ingest(self, records: Iterable[IndexRecord], *, batch: int = 10_000) -> int:
+        """Append rows fast via batched ``executemany``, deferring the FTS index.
+
+        Skips per-row FTS maintenance (the dominant cost on million-row ingests); callers
+        MUST call :meth:`rebuild_fts` once after all bulk_ingest calls so search works.
+        Returns the number written. Content and FTS stay consistent because ``rebuild``
+        reconstructs the FTS from the ``record`` table."""
+        insert = (
+            "INSERT INTO record(host, source_tool, artifact_path, ts, audit_id, sha256, text) "
+            "VALUES(?, ?, ?, ?, ?, ?, ?)"
+        )
+        written = 0
+        chunk: list[tuple[str, str, str, str, str, str, str]] = []
+        try:
+            for rec in records:
+                chunk.append(
+                    (
+                        rec.host,
+                        rec.source_tool,
+                        rec.artifact_path,
+                        rec.ts,
+                        rec.audit_id,
+                        rec.sha256,
+                        rec.text,
+                    )
+                )
+                if len(chunk) >= batch:
+                    with self._conn:
+                        self._conn.executemany(insert, chunk)
+                    written += len(chunk)
+                    chunk.clear()
+            if chunk:
+                with self._conn:
+                    self._conn.executemany(insert, chunk)
+                written += len(chunk)
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"bulk ingest failed after {written} rows: {exc}") from exc
+        return written
+
+    def begin_bulk(self) -> None:
+        """Apply PRAGMAs that speed a large one-shot load (durability relaxed for build).
+
+        Safe for an index rebuilt from immutable evidence: if the load crashes we just
+        re-run ``index``; :meth:`rebuild_fts` restores full searchability."""
+        for pragma in (
+            "PRAGMA journal_mode=WAL",
+            "PRAGMA synchronous=NORMAL",
+            "PRAGMA temp_store=MEMORY",
+            "PRAGMA cache_size=-262144",  # ~256 MB page cache
+        ):
+            self._conn.execute(pragma)
+
+    def rebuild_fts(self) -> None:
+        """Rebuild the FTS index from the ``record`` content table in one pass.
+
+        Call once after :meth:`bulk_ingest` loads. Idempotent: it reconstructs the whole
+        FTS from content, so mixing ``ingest`` and ``bulk_ingest`` rows stays correct."""
+        try:
+            with self._conn:
+                self._conn.execute("INSERT INTO record_fts(record_fts) VALUES('rebuild')")
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"FTS rebuild failed: {exc}") from exc
 
     def search(
         self,
