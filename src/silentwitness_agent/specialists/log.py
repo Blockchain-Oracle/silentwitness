@@ -23,11 +23,14 @@ _LOG = logging.getLogger(__name__)
 # Tool allowlist — architecture §5.2
 # ---------------------------------------------------------------------------
 
+# Firewall #1: the log specialist is a domain-scoped INDEX querier — it discovers via the
+# parsed index (EVTX rows: source_tool="evtx:*"), not raw evtx/chainsaw/hayabusa tools.
+# Its domain focus (logons / RDP / PowerShell / service installs) is in its prompt.
 LOG_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "parse_evtx",
-        "hayabusa_csv_timeline",
-        "chainsaw_hunt",
+        "search_evidence",
+        "timeline",
+        "get_record",
         "record_observation",
         "record_interpretation",
         "read_tool_output",

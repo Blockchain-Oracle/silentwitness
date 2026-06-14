@@ -151,10 +151,12 @@ omit = [
     "src/silentwitness_mcp/index/ingest.py",
     "src/silentwitness_agent/cli_commands/index_case.py",
     "src/silentwitness_agent/cli_commands/prepare.py",
-    # Demoted off the agent surface (Phase 2, firewall #1): their @mcp.tool registrants
-    # are no longer called; kept as feeder impls pending Phase-3 disposition.
-    "src/silentwitness_mcp/_tool_impls_memory.py",
-    "src/silentwitness_mcp/_tool_impls_log.py",
+    # Dataset-manifest CLI scripts: exercised behaviorally by
+    # tests/integration/test_harness_dataset_manifests.py, which runs them as
+    # subprocesses — so their lines aren't instrumented in-process. Same
+    # integration-only rationale as cli.py.
+    "harness/datasets/recompute_manifest.py",
+    "harness/datasets/verify_manifest.py",
 ]
 
 [tool.coverage.report]

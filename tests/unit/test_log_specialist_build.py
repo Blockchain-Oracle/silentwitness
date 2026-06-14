@@ -21,7 +21,9 @@ from silentwitness_agent.specialists.log import (
     register_as_investigator_tool,
 )
 
-_EXPECTED_LOG_TOOLS = {"parse_evtx", "hayabusa_csv_timeline", "chainsaw_hunt"}
+# Firewall #1 (Phase 2/3): the specialist is an INDEX querier — it has the index query
+# tools, not the raw evtx/chainsaw/hayabusa tools (those are demoted to ingest feeders).
+_EXPECTED_INDEX_TOOLS = {"search_evidence", "timeline", "get_record"}
 _EXPECTED_RECORD_TOOLS = {
     "record_observation",
     "record_interpretation",
@@ -29,6 +31,9 @@ _EXPECTED_RECORD_TOOLS = {
     "verify_evidence_hash",
 }
 _BANNED_TOOLS = {
+    "parse_evtx",
+    "hayabusa_csv_timeline",
+    "chainsaw_hunt",
     "parse_mft",
     "parse_amcache",
     "parse_shimcache",
@@ -57,8 +62,8 @@ def test_allowlist_has_8_tools() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_contains_all_log_tools() -> None:
-    assert _EXPECTED_LOG_TOOLS <= LOG_TOOL_ALLOWLIST
+def test_allowlist_contains_index_query_tools() -> None:
+    assert _EXPECTED_INDEX_TOOLS <= LOG_TOOL_ALLOWLIST
 
 
 def test_allowlist_contains_all_record_tools() -> None:

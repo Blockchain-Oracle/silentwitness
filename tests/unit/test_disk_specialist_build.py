@@ -21,14 +21,9 @@ from silentwitness_agent.specialists.disk import (
     register_as_investigator_tool,
 )
 
-_EXPECTED_DISK_TOOLS = {
-    "parse_mft",
-    "parse_amcache",
-    "parse_shimcache",
-    "parse_prefetch",
-    "parse_shellbags",
-    "regripper_run",
-}
+# Firewall #1 (Phase 2/3): the specialist is an INDEX querier — it has the index query
+# tools, not the raw parse_* tools (those are demoted to ingest feeders).
+_EXPECTED_INDEX_TOOLS = {"search_evidence", "timeline", "get_record"}
 _EXPECTED_RECORD_TOOLS = {
     "record_observation",
     "record_interpretation",
@@ -36,6 +31,12 @@ _EXPECTED_RECORD_TOOLS = {
     "verify_evidence_hash",
 }
 _BANNED_TOOLS = {
+    "parse_mft",
+    "parse_amcache",
+    "parse_shimcache",
+    "parse_prefetch",
+    "parse_shellbags",
+    "regripper_run",
     "vol_pslist",
     "vol_pstree",
     "vol_psscan",
@@ -53,21 +54,21 @@ _BANNED_TOOLS = {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Allowlist — exact count
+# 1. Allowlist — exact count (the shared index-query surface)
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_11_tools() -> None:
-    assert len(DISK_TOOL_ALLOWLIST) == 11
+def test_allowlist_has_8_tools() -> None:
+    assert len(DISK_TOOL_ALLOWLIST) == 8
 
 
 # ---------------------------------------------------------------------------
-# 2. Allowlist — all disk and record tools present
+# 2. Allowlist — index query + record tools present
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_contains_all_disk_tools() -> None:
-    assert _EXPECTED_DISK_TOOLS <= DISK_TOOL_ALLOWLIST
+def test_allowlist_contains_index_query_tools() -> None:
+    assert _EXPECTED_INDEX_TOOLS <= DISK_TOOL_ALLOWLIST
 
 
 def test_allowlist_contains_all_record_tools() -> None:
@@ -75,7 +76,7 @@ def test_allowlist_contains_all_record_tools() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Allowlist — no memory/log/network tools
+# 3. Allowlist — NO raw-evidence tools (firewall #1)
 # ---------------------------------------------------------------------------
 
 
