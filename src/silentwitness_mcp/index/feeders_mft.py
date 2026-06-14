@@ -2,21 +2,21 @@
 
 The $MFT records every file/dir on the volume with its path, size and MACB timestamps —
 the backbone for "what files existed, where, and when" (staged archives, project files,
-tools dropped in user dirs). Parsed with the Rust ``mft`` library (``PyMftParser``, MIT,
-same fast/permissive lineage as the EVTX reader).
+tools dropped in user dirs). Parsed with the Rust ``mft`` library (``PyMftParser``, MIT).
 
-Each entry with a resolved ``full_path`` becomes one searchable row; the timestamp is the
-``$STANDARD_INFORMATION`` modified time. Entries the parser yields as errors, and entries
-with no path (unallocated/corrupt records carrying no useful filename), are skipped.
+Each entry with a resolved ``full_path`` becomes one searchable row; the ``ts`` is the
+``$STANDARD_INFORMATION`` modified time, or empty when SI is unavailable (the row is
+still indexed on its path). Entries the parser yields as errors, and entries with no path
+(unallocated/corrupt records carrying no useful filename), are skipped.
 
-``_entry_to_record`` is a pure, unit-tested mapper; ``mft_entry_records`` drives the Rust
-parser (forensics box).
+The pure mappers (``_entry_to_record``, ``_pick_std_info_modified``, ``_modified_iso``)
+are unit-tested; ``mft_entry_records`` drives the Rust parser (forensics box).
 """
 
 from __future__ import annotations
 
 import logging
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -54,26 +54,40 @@ def _entry_to_record(
     )
 
 
+def _modified_iso(modified: Any) -> str:
+    """ISO string from a datetime-like ``modified`` value, or "" if absent/unusable."""
+    if modified is None:
+        return ""
+    try:
+        return str(modified.isoformat())
+    except (AttributeError, ValueError):
+        return ""
+
+
+def _pick_std_info_modified(attrs: Iterable[tuple[int, Any]]) -> str:
+    """From ``(type_code, content)`` pairs, the $STANDARD_INFORMATION modified time."""
+    for type_code, content in attrs:
+        if type_code == _STD_INFO:
+            return _modified_iso(getattr(content, "modified", None))
+    return ""
+
+
 def _std_info_modified(entry: Any) -> str:
-    """ISO modified time from the entry's $STANDARD_INFORMATION, or "" if unavailable."""
+    """ISO $STANDARD_INFORMATION modified time for an MFT entry, or "" if unavailable."""
     try:
         attributes = entry.attributes()
-    except Exception:  # entry with an unreadable attribute list
+    except Exception:  # best-effort: a bad attribute list costs only the timestamp
         return ""
-    for attr in attributes:
-        if isinstance(attr, Exception):
-            continue
-        if getattr(attr, "type_code", None) != _STD_INFO:
-            continue
-        content = getattr(attr, "attribute_content", None)
-        modified = getattr(content, "modified", None)
-        if modified is not None:
-            try:
-                return str(modified.isoformat())
-            except (AttributeError, ValueError):
-                return ""
-        return ""
-    return ""
+
+    def _pairs() -> Iterator[tuple[int, Any]]:
+        for attr in attributes:
+            if isinstance(attr, Exception):
+                continue
+            type_code = getattr(attr, "type_code", None)
+            if type_code is not None:
+                yield type_code, getattr(attr, "attribute_content", None)
+
+    return _pick_std_info_modified(_pairs())
 
 
 def mft_entry_records(

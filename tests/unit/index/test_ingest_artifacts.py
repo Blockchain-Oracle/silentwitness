@@ -11,8 +11,29 @@ import pytest
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.index import ingest_artifacts
-from silentwitness_mcp.index.ingest_artifacts import _citation_path, ingest_prepared_artifacts
+from silentwitness_mcp.index.ingest_artifacts import (
+    _citation_path,
+    _kind_for,
+    ingest_prepared_artifacts,
+)
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
+
+
+@pytest.mark.parametrize(
+    ("evidence_type", "name", "expected"),
+    [
+        (EvidenceType.EVTX, "Security.evtx", "evtx"),
+        (EvidenceType.HIVE, "SOFTWARE", "registry"),
+        (EvidenceType.OTHER, "SRUDB.dat", "srum"),  # case-insensitive match
+        (EvidenceType.OTHER, "srudb.DAT", "srum"),
+        (EvidenceType.OTHER, "$MFT", "mft"),
+        (EvidenceType.OTHER, "_MFT", "mft"),
+        (EvidenceType.OTHER, "UsrClass.dat", None),  # unmapped OTHER -> not ingested
+        (EvidenceType.DISK_IMAGE, "img.e01", None),  # plaso path, not a targeted feeder
+    ],
+)
+def test_kind_for_routing(evidence_type: EvidenceType, name: str, expected: str | None) -> None:
+    assert _kind_for(evidence_type, name) == expected
 
 
 @dataclass(frozen=True)

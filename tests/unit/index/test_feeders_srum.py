@@ -5,13 +5,17 @@ from __future__ import annotations
 import struct
 
 from silentwitness_mcp.index._feeder_util import MAX_TEXT
-from silentwitness_mcp.index.feeders_srum import _net_row_to_record, _ole_to_iso
+from silentwitness_mcp.index.feeders_srum import (
+    _appid_map_from_rows,
+    _decode_idblob,
+    _net_row_to_record,
+    _ole_to_iso,
+)
 
 
-def test_ole_date_decodes_to_real_timestamp() -> None:
-    # ~44000 days after 1899-12-30 lands in 2020 (the ROCBA incident era).
-    iso = _ole_to_iso(struct.pack("<d", 44000.0))
-    assert iso.startswith("2020-") and "T" in iso
+def test_ole_date_decodes_to_exact_timestamp() -> None:
+    # 44000 days after 1899-12-30 is a fixed point — pin it exactly, not just "2020".
+    assert _ole_to_iso(struct.pack("<d", 44000.0)) == "2020-06-18T00:00:00+00:00"
 
 
 def test_ole_date_rejects_garbage() -> None:
@@ -20,6 +24,27 @@ def test_ole_date_rejects_garbage() -> None:
     assert _ole_to_iso(struct.pack("<d", 0.0)) == ""  # 0 days -> unusable
     assert _ole_to_iso(struct.pack("<d", 1e9)) == ""  # absurdly far future -> rejected
     assert _ole_to_iso(struct.pack("<d", float("nan"))) == ""
+    assert _ole_to_iso(struct.pack("<d", float("inf"))) == ""
+
+
+def test_ole_date_boundary() -> None:
+    assert _ole_to_iso(struct.pack("<d", 400_001.0)) == ""  # past cutoff -> rejected
+    assert _ole_to_iso(struct.pack("<d", 399_999.0)) != ""  # within cutoff -> accepted
+
+
+def test_decode_idblob_utf16_and_hex_fallback() -> None:
+    assert _decode_idblob("Dropbox.exe\x00".encode("utf-16-le")) == "Dropbox.exe"
+    # An odd-length / non-UTF16 blob can't decode -> hex fallback (never raises).
+    assert _decode_idblob(b"\xff\xfe\xfa") == "fffefa"
+
+
+def test_appid_map_skips_null_index_and_blob() -> None:
+    rows = [
+        (3, "lsass.exe\x00".encode("utf-16-le")),
+        (None, "x\x00".encode("utf-16-le")),  # null index -> skipped
+        (5, None),  # null blob -> skipped
+    ]
+    assert _appid_map_from_rows(rows) == {3: "lsass.exe"}
 
 
 def test_net_row_is_searchable_and_provenanced() -> None:

@@ -6,18 +6,24 @@ ties an app (resolved via ``SruDbIdMapTable``) to a byte count and a timestamp, 
 keyword query (an app name, ``bytes_sent``) surfaces large outbound transfers.
 
 Parsed with ``pyesedb`` (libesedb, permissive) — note this is the *libesedb* stack, not
-libevtx, so it reads the ROCBA ESE database cleanly. The ``TimeStamp`` column is an OLE
-automation date (an 8-byte double, days since 1899-12-30), decoded by ``_ole_to_iso``.
+libevtx, so it reads the ROCBA ESE database cleanly. On this Win10 SRUDB.dat the network
+table ``TimeStamp`` is an OLE automation date (8-byte double, days since 1899-12-30):
+empirically verified — decoding the column as a double yields the 2020 incident dates,
+whereas reading it as a 64-bit integer yields garbage. The column ordinals below are an
+undocumented invariant of the SRUM schema version.
 
-``_ole_to_iso`` and ``_net_row_to_record`` are pure, unit-tested; ``srum_records`` opens
-a real SRUDB.dat (forensics box).
+The pure helpers (``_ole_to_iso``, ``_decode_idblob``, ``_appid_map_from_rows``,
+``_net_row_to_record``) are unit-tested; ``srum_records`` drives a real SRUDB.dat
+(forensics box). A missing *primary* (network) table raises :class:`SrumError` so the
+ingest counts it as a failed artifact rather than presenting a silent "no exfil"; a
+single unreadable record is skipped (best-effort) with a per-artifact warning.
 """
 
 from __future__ import annotations
 
 import logging
 import struct
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -27,11 +33,16 @@ from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
 
-# Network Data Usage Monitor table GUID (the per-app bytes-sent/received table).
+# Network Data Usage Monitor table (the per-app bytes-sent/received table); _NET_TABLE
+# is the single source of truth for the GUID.
 _NET_TABLE = "{973F5D5C-1D90-4944-BE8E-24B94231A174}"
 _IDMAP_TABLE = "SruDbIdMapTable"
 # OLE automation date epoch.
 _OLE_EPOCH = datetime(1899, 12, 30, tzinfo=UTC)
+
+
+class SrumError(Exception):
+    """Raised on a structural SRUM problem (e.g. the primary table is absent)."""
 
 
 def _ole_to_iso(raw: bytes | None) -> str:
@@ -79,26 +90,39 @@ def _net_row_to_record(
     )
 
 
-def _build_appid_map(esedb_file: Any) -> dict[int, str]:
-    """Map ``SruDbIdMapTable`` IdIndex -> app/path string (UTF-16LE ``IdBlob``)."""
+def _decode_idblob(blob: bytes) -> str:
+    """Decode a ``SruDbIdMapTable`` IdBlob (UTF-16LE app/path), hex on failure."""
+    try:
+        return blob.decode("utf-16-le").rstrip("\x00").strip()
+    except (UnicodeDecodeError, ValueError):
+        return blob[:32].hex()
+
+
+def _appid_map_from_rows(rows: Iterable[tuple[int | None, bytes | None]]) -> dict[int, str]:
+    """Build the IdIndex -> app string map, skipping null index/blob rows."""
     appmap: dict[int, str] = {}
-    table = _get_table(esedb_file, _IDMAP_TABLE)
-    if table is None:
-        return appmap
-    for ridx in range(table.number_of_records):
-        try:
-            record = table.get_record(ridx)
-            id_index = record.get_value_data_as_integer(1)
-            blob = record.get_value_data(2)
-        except OSError:
-            continue
+    for id_index, blob in rows:
         if id_index is None or not blob:
             continue
-        try:
-            appmap[id_index] = blob.decode("utf-16-le").rstrip("\x00").strip()
-        except (UnicodeDecodeError, ValueError):
-            appmap[id_index] = blob[:32].hex()
+        appmap[id_index] = _decode_idblob(blob)
     return appmap
+
+
+def _build_appid_map(esedb_file: Any) -> dict[int, str]:
+    """Map ``SruDbIdMapTable`` IdIndex -> app/path string. Best-effort per record."""
+    table = _get_table(esedb_file, _IDMAP_TABLE)
+    if table is None:
+        return {}
+
+    def _rows() -> Iterator[tuple[int | None, bytes | None]]:
+        for ridx in range(table.number_of_records):
+            try:
+                record = table.get_record(ridx)
+                yield record.get_value_data_as_integer(1), record.get_value_data(2)
+            except (OSError, ValueError) as exc:  # pyesedb raises ValueError on type/width
+                _LOG.debug("srum: skipped idmap record %d: %s", ridx, exc)
+
+    return _appid_map_from_rows(_rows())
 
 
 def _get_table(esedb_file: Any, name: str) -> Any:
@@ -124,7 +148,13 @@ def srum_records(
         appmap = _build_appid_map(esedb_file)
         table = _get_table(esedb_file, _NET_TABLE)
         if table is None:
-            return
+            # A missing primary table is a structural anomaly, NOT "no exfil" — raise so
+            # the ingest records a failed artifact instead of a silent empty result.
+            present = [esedb_file.get_table(i).name for i in range(esedb_file.number_of_tables)]
+            raise SrumError(
+                f"SRUM network table {_NET_TABLE} not found in {cite}; tables present: {present}"
+            )
+        skipped = 0
         for ridx in range(table.number_of_records):
             try:
                 record = table.get_record(ridx)
@@ -133,11 +163,12 @@ def srum_records(
                 sent = record.get_value_data_as_integer(7) or 0
                 recvd = record.get_value_data_as_integer(8) or 0
                 luid = record.get_value_data_as_integer(4) or 0
-            except OSError as exc:  # a single unreadable page must not kill the table
-                _LOG.debug("srum: skipped record %d: %s", ridx, exc)
+            except (OSError, ValueError):  # pyesedb raises ValueError; skip just this row
+                skipped += 1
                 continue
+            app = appmap.get(app_id, f"appid:{app_id if app_id is not None else 'unknown'}")
             yield _net_row_to_record(
-                app=appmap.get(app_id, f"appid:{app_id}"),
+                app=app,
                 bytes_sent=sent,
                 bytes_recvd=recvd,
                 interface_luid=luid,
@@ -148,6 +179,8 @@ def srum_records(
                 host=host,
                 sha256=sha,
             )
+        if skipped:
+            _LOG.warning("srum: skipped %d unreadable record(s) in %s", skipped, cite)
     finally:
         esedb_file.close()
 
