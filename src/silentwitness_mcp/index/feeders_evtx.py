@@ -118,6 +118,8 @@ def _rust_evtx_records(
     from evtx import PyEvtxParser  # lazy: forensics extra only
 
     for record in PyEvtxParser(str(path)).records():
+        if record is None:  # the binding types records() as Optional; never None in practice
+            continue
         rec = _event_xml_to_record(
             record["data"], source_path=cite, sha256=sha, audit_id=audit_id, host=host
         )

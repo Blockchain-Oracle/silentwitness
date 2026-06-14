@@ -142,11 +142,13 @@ omit = [
     # run only against real evidence on the SIFT box (their pure mappers ARE unit-tested
     # in tests/unit/index/test_feeders_*). Same integration-only rationale as cli.py.
     "src/silentwitness_mcp/evidence/artifacts.py",
+    "src/silentwitness_mcp/evidence/access.py",
     "src/silentwitness_mcp/index/feeders_evtx.py",
     "src/silentwitness_mcp/index/feeders_registry.py",
     "src/silentwitness_mcp/index/feeders_srum.py",
     "src/silentwitness_mcp/index/feeders_mft.py",
     "src/silentwitness_mcp/index/feeders_usnjrnl.py",
+    "src/silentwitness_agent/cli_commands/index_case.py",
 ]
 
 [tool.coverage.report]
