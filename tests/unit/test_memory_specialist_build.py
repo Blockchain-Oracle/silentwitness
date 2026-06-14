@@ -89,6 +89,14 @@ def test_allowlist_excludes_banned_tools() -> None:
     )
 
 
+def test_allowlist_is_exactly_index_plus_record_tools() -> None:
+    # Exact-equality is the real firewall-#1 guard: a future demoted tool that is not
+    # in _BANNED_TOOLS could not slip in undetected, unlike a count + finite denylist.
+    assert MEMORY_TOOL_ALLOWLIST == (
+        _EXPECTED_INDEX_TOOLS | _EXPECTED_RECORD_TOOLS | {"read_tool_output"}
+    )
+
+
 # ---------------------------------------------------------------------------
 # 4. Default model constant is haiku
 # ---------------------------------------------------------------------------

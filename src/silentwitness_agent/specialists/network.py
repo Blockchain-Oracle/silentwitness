@@ -24,7 +24,7 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Firewall #1: the network specialist is a domain-scoped INDEX querier — it discovers via
-# the parsed index (zeek rows: source_tool="zeek*"), not raw zeek/suricata tools. Its
+# full-text search over the parsed evidence index, not raw zeek/suricata tools. Its
 # domain focus (connections / DNS / cloud-sync destinations) is in its prompt.
 NETWORK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {

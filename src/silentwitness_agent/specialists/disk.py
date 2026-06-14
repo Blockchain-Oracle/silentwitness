@@ -24,8 +24,8 @@ _LOG = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 # Firewall #1: the disk specialist is a domain-scoped INDEX querier — it discovers via
-# the parsed index ($MFT / registry / amcache / shimcache / shellbags / UsnJrnl rows),
-# not raw parse_* tools. Its domain focus is in its prompt.
+# full-text search over the parsed evidence index ($MFT / registry / SRUM / UsnJrnl plus
+# plaso-derived rows), not raw parse_* tools. Its domain focus is in its prompt.
 DISK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
         "search_evidence",

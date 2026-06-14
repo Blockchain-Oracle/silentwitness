@@ -33,7 +33,7 @@ def test_filter_blocks_disk_tools() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Filter function passes all 13 MEMORY_TOOL_ALLOWLIST names
+# 3. Filter function passes every MEMORY_TOOL_ALLOWLIST name
 # ---------------------------------------------------------------------------
 
 
