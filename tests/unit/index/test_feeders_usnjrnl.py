@@ -78,6 +78,22 @@ def test_bogus_length_resyncs() -> None:
     assert fields is None and nxt == 8
 
 
+def test_record_at_exact_end_of_buffer() -> None:
+    # Header-only record (empty name) ending exactly at len(buf): every fixed-offset
+    # field read (up to 0x3C) must stay in bounds with no trailing slack.
+    rec = _pack_usn(usn=7, ft=0, reason=0x00000100, attrs=0, name="")
+    assert rec[-4:] == b"\x00\x00\x00\x00"  # 8-byte alignment padding, still parseable
+    fields, nxt = _parse_usn_record(rec, 0)
+    assert fields is not None and fields.usn == 7 and nxt == len(rec)
+
+
+def test_name_offset_overlapping_header_rejected() -> None:
+    rec = bytearray(_pack_usn(usn=1, ft=0, reason=0, attrs=0, name="ok"))
+    struct.pack_into("<H", rec, 0x3A, 0x10)  # name_offset inside the header -> reject
+    fields, _ = _parse_usn_record(bytes(rec), 0)
+    assert fields is None
+
+
 def test_iterates_records_separated_by_padding() -> None:
     r1 = _pack_usn(
         usn=1,

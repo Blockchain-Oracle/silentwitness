@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Any
@@ -29,12 +30,18 @@ from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.index.store import EvidenceIndex, EvidenceIndexError, IndexRecord
 from silentwitness_mcp.verification.sanitizer import StripEvent, StripEventWriter, sanitize
 
+_LOG = logging.getLogger(__name__)
+
 INDEX_TOOLS: frozenset[str] = frozenset({"search_evidence", "get_record", "timeline"})
 
 _INDEX_DB = "index.db"
 _DEFAULT_LIMIT = 50
 _MAX_LIMIT = 500
+# Sanitizer strip-event log lives OUTSIDE audit/ so the audit-logger's backend scan
+# (which globs audit/*.jsonl) never mistakes these StripEvents for tool-execution records.
+_SANITIZER_DIR = "sanitizer"
 _SANITIZER_LOG = "index_sanitizer.jsonl"
+_REDACTED = "[sanitizer error — record withheld from the model, see sanitizer log]"
 _NO_INDEX = (
     "no evidence index for this case — run `silentwitness prepare <case>` then "
     "index ingest to build it before searching"
@@ -72,12 +79,21 @@ def _record_dict(rec: IndexRecord, *, sanitize_text: str | None = None) -> dict[
 def _sanitized_records(
     records: list[IndexRecord], *, audit_id: str, case_dir: Path
 ) -> list[dict[str, Any]]:
-    """Sanitize each record's evidence text before it reaches the LLM-bound response."""
-    writer = _StripWriter(case_dir / "audit" / _SANITIZER_LOG)
-    return [
-        _record_dict(r, sanitize_text=sanitize(r.text, audit_id, audit_writer=writer).wrapped_text)
-        for r in records
-    ]
+    """Sanitize each record's evidence text before it reaches the LLM-bound response.
+
+    Sanitization is guarded PER RECORD: if ``sanitize`` raises on one row (e.g. a bad
+    injection-catalog reload), that single row is withheld with a redaction marker rather
+    than failing the whole query and silently erasing every other hit."""
+    writer = _StripWriter(case_dir / _SANITIZER_DIR / _SANITIZER_LOG)
+    out: list[dict[str, Any]] = []
+    for rec in records:
+        try:
+            text = sanitize(rec.text, audit_id, audit_writer=writer).wrapped_text
+        except Exception:  # one record's sanitizer failure must not drop the whole result set
+            _LOG.warning("index sanitizer failed on record id=%s — withholding it", rec.id)
+            text = _REDACTED
+        out.append(_record_dict(rec, sanitize_text=text))
+    return out
 
 
 def _emit(
@@ -150,8 +166,10 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
 
     @mcp.tool()
     async def get_record(ctx: Context[ServerSession, AppContext], record_id: int) -> dict[str, Any]:
-        """Re-fetch one evidence-index record by ``record_id`` (from a search hit) —
-        e.g. to quote its full text verbatim when recording an observation."""
+        """Re-fetch one evidence-index record by ``record_id`` (from a search hit) to
+        inspect its full text. The returned text is sanitized + wrapped (untrusted
+        evidence), so it is NOT a byte-for-byte copy; citation verification resolves a
+        finding to the stored tool-output bytes via ``audit_id``, not this string."""
         case_dir, _registry, audit, model = _case_deps(ctx)
         index_path = case_dir / _INDEX_DB
         if not index_path.exists():

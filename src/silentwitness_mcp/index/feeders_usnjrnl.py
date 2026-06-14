@@ -98,8 +98,8 @@ def _parse_usn_record(buf: bytes | mmap.mmap, offset: int) -> tuple[_UsnFields |
         return None, offset + 8
     name_length = struct.unpack_from("<H", buf, offset + 0x38)[0]
     name_offset = struct.unpack_from("<H", buf, offset + 0x3A)[0]
-    if name_offset + name_length > record_length:
-        return None, offset + record_length  # malformed name span -> skip this record
+    if name_offset < _MIN_RECORD or name_offset + name_length > record_length:
+        return None, offset + record_length  # name span overlaps header / overflows -> skip
     fields = _UsnFields(
         usn=struct.unpack_from("<Q", buf, offset + 0x18)[0],
         timestamp=struct.unpack_from("<Q", buf, offset + 0x20)[0],
@@ -146,16 +146,30 @@ def usnjrnl_records(
         with mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ) as buf:
             size = len(buf)
             offset = 0
+            yielded = 0
+            resyncs = 0  # non-zero regions that failed to parse (potential desync)
             while offset < size:
                 if buf[offset : offset + 4] == b"\x00\x00\x00\x00":
                     block = buf[offset : offset + _ZERO_SKIP]
                     offset += len(block) if block.count(0) == len(block) else 8
                     continue
                 fields, offset = _parse_usn_record(buf, offset)
-                if fields is not None:
-                    yield _record_from_fields(
-                        fields, cite=cite, audit_id=audit_id, host=host, sha256=sha
-                    )
+                if fields is None:
+                    resyncs += 1
+                    continue
+                yielded += 1
+                yield _record_from_fields(
+                    fields, cite=cite, audit_id=audit_id, host=host, sha256=sha
+                )
+            # A large malformed-resync count relative to records signals a desync /
+            # partial parse — surface it so a degraded $J doesn't read as a clean one.
+            if resyncs > 100 and resyncs > yielded // 10:
+                _LOG.warning(
+                    "usnjrnl: %d malformed regions vs %d records in %s — possible desync",
+                    resyncs,
+                    yielded,
+                    cite,
+                )
 
 
 # Compile-time assertion that the feeder still matches the shared contract.
