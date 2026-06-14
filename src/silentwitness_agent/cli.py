@@ -396,6 +396,45 @@ def register_evidence(
     raise typer.Exit(code=code)
 
 
+@app.command("prepare")
+def prepare(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+) -> None:
+    """Extract artifacts from registered disk images and decompress memory archives."""
+    from silentwitness_agent.cli_commands.prepare import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = _console(cli_ctx.no_color, stderr=True)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
+    code = _run(case_dir, case_id, examiner=examiner, no_color=cli_ctx.no_color)
+    raise typer.Exit(code=code)
+
+
+@app.command("index")
+def index(
+    ctx: typer.Context,
+    case_id: str = typer.Argument(...),
+    host: str = typer.Option("", "--host", help="Host label stamped on indexed rows (multi-host)."),
+) -> None:
+    """Parse the prepared artifacts into the case's searchable evidence index."""
+    from silentwitness_agent.cli_commands.index_case import run as _run
+
+    cli_ctx: _CliCtx = ctx.obj
+    err = _console(cli_ctx.no_color, stderr=True)
+    case_dir = _resolve_case_dir(case_id)
+    if not case_dir.exists():
+        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
+        raise typer.Exit(code=1)
+    examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
+    code = _run(case_dir, case_id, examiner=examiner, host=host, no_color=cli_ctx.no_color)
+    raise typer.Exit(code=code)
+
+
 @app.command("baseline-comparison")
 def baseline_comparison(
     ctx: typer.Context,

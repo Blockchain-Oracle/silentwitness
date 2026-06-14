@@ -76,6 +76,9 @@ WIRED_TOOLS: frozenset[str] = frozenset(
         "vol_lsadump",
         "chainsaw_hunt",
         "hayabusa_csv_timeline",
+        "search_evidence",
+        "get_record",
+        "timeline",
     }
 )
 
@@ -326,13 +329,14 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         FINDING_TOOLS,
         register_finding_recorders,
     )
+    from silentwitness_mcp._tool_impls_index import INDEX_TOOLS, register_index_tools
     from silentwitness_mcp._tool_impls_log import LOG_TOOLS, register_log_tools
     from silentwitness_mcp._tool_impls_memory import MEMORY_TOOLS, register_memory_tools
 
     # Make WIRED_TOOLS load-bearing: it must equal the union of what this module
     # and the sub-modules actually register, or the hand-maintained list has
     # drifted (a tool added to a sub-module but not advertised, or vice versa).
-    expected = _CORE_TOOLS | FINDING_TOOLS | MEMORY_TOOLS | LOG_TOOLS
+    expected = _CORE_TOOLS | FINDING_TOOLS | MEMORY_TOOLS | LOG_TOOLS | INDEX_TOOLS
     if WIRED_TOOLS != expected:
         raise ServerConfigurationError(
             f"WIRED_TOOLS drifted from the registered tool sets: {WIRED_TOOLS ^ expected}"
@@ -341,6 +345,7 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     register_finding_recorders(mcp, guard_mount)
     register_memory_tools(mcp, guard_mount)
     register_log_tools(mcp, guard_mount)
+    register_index_tools(mcp, guard_mount)
 
 
 __all__ = ["WIRED_TOOLS", "register_real_tools"]

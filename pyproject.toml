@@ -40,10 +40,38 @@ dependencies = [
     "httpx>=0.27",
     # NER for entity gate
     "spacy>=3.8.10,<3.9",
+    # Hardened XML parsing for evidence-derived EVTX renders (index feeder)
+    "defusedxml>=0.7,<0.8",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
     "volatility3==2.27.0",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
     "matplotlib>=3.10,<3.11",
+]
+
+[project.optional-dependencies]
+# Forensic evidence-access stack — installed on the Linux analysis box (SIFT /
+# VPS) only via `uv sync --extra forensics`. dfVFS pulls pytsk3 + libyal
+# C-extension bindings (libvsgpt/libvshadow/libvhdi/...) that need a build
+# toolchain + libyal headers and do NOT build on macOS dev machines. Keeping it
+# an opt-in extra leaves the base package cross-platform installable so the agent
+# loop, MCP server, and their tests run anywhere; the dfVFS-backed evidence path
+# (silentwitness_mcp/evidence/access.py) is exercised on the Linux box. Apache-2.0.
+forensics = [
+    "dfvfs>=20240115",
+    # Parsing/indexing layer (Phase 1). plaso = super-timeline (100s of artifact
+    # parsers + the libyal stack); regipy = pure-Python offline registry. EVTX uses
+    # a hybrid: `evtx` (Rust, fast, MIT) for the bulk + `python-evtx` (pure-Python,
+    # Apache-2.0) as the tolerant fallback for malformed-chunk files that crash the
+    # Rust/libevtx parsers. All Apache-2.0 / MIT.
+    "plaso>=20240308",
+    "regipy>=5.0",
+    "evtx>=0.8",
+    "python-evtx>=0.7",
+    # Rust-backed $MFT parser (fast, MIT). pyesedb (SRUM) arrives via plaso/libesedb.
+    "mft>=0.6",
+    # libfwps (Windows property store) — regipy's shellbags plugins need it to decode
+    # folder-access shell items; without it regipy silently skips those plugins.
+    "libfwps-python>=20240101",
 ]
 
 [dependency-groups]
@@ -110,6 +138,19 @@ data_file = ".coverage"
 omit = [
     "src/silentwitness_agent/cli.py",
     "src/silentwitness_agent/report/pdf.py",
+    # Forensic parser feeders + dfVFS artifact extraction: the parser-driving bodies
+    # run only against real evidence on the SIFT box (their pure mappers ARE unit-tested
+    # in tests/unit/index/test_feeders_*). Same integration-only rationale as cli.py.
+    "src/silentwitness_mcp/evidence/artifacts.py",
+    "src/silentwitness_mcp/evidence/access.py",
+    "src/silentwitness_mcp/index/feeders_evtx.py",
+    "src/silentwitness_mcp/index/feeders_registry.py",
+    "src/silentwitness_mcp/index/feeders_srum.py",
+    "src/silentwitness_mcp/index/feeders_mft.py",
+    "src/silentwitness_mcp/index/feeders_usnjrnl.py",
+    "src/silentwitness_mcp/index/ingest.py",
+    "src/silentwitness_agent/cli_commands/index_case.py",
+    "src/silentwitness_agent/cli_commands/prepare.py",
 ]
 
 [tool.coverage.report]
