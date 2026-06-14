@@ -67,6 +67,28 @@ def test_bulk_and_per_row_ingest_mix_is_consistent_after_rebuild(tmp_path: Path)
         assert len(idx.search("powershell")) == 1
 
 
+def test_bulk_ingest_exact_batch_multiple_and_empty(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        # exact multiple of batch -> the trailing `if chunk:` flush must be skipped
+        recs = _records()[:2]
+        assert idx.bulk_ingest(recs, batch=2) == 2
+        assert idx.count() == 2
+        # empty input writes nothing and returns 0
+        assert idx.bulk_ingest([]) == 0
+        assert idx.count() == 2
+
+
+def test_rebuild_fts_is_idempotent_across_incremental_loads(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        idx.bulk_ingest(_records()[:1])
+        idx.rebuild_fts()
+        idx.bulk_ingest(_records()[1:])
+        idx.rebuild_fts()  # second rebuild must not duplicate or drop FTS rows
+        assert idx.count() == 3
+        assert len(idx.search("powershell")) == 1
+        assert len(idx.search("chrome")) == 1
+
+
 def test_search_matches_keyword(tmp_path: Path) -> None:
     with EvidenceIndex(tmp_path / "index.db") as idx:
         idx.ingest(_records())

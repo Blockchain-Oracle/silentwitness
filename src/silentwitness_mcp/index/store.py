@@ -125,12 +125,14 @@ class EvidenceIndex:
         return written
 
     def bulk_ingest(self, records: Iterable[IndexRecord], *, batch: int = 10_000) -> int:
-        """Append rows fast via batched ``executemany``, deferring the FTS index.
+        """Append rows fast via batched ``executemany`` in ONE transaction, deferring FTS.
 
-        Skips per-row FTS maintenance (the dominant cost on million-row ingests); callers
-        MUST call :meth:`rebuild_fts` once after all bulk_ingest calls so search works.
-        Returns the number written. Content and FTS stay consistent because ``rebuild``
-        reconstructs the FTS from the ``record`` table."""
+        Atomic per call: every row commits together or none does, so a mid-load
+        ``sqlite3.Error`` can't leave a half-ingested artifact in the index (the caller
+        skips the artifact cleanly). Skips per-row FTS maintenance (the dominant cost on
+        million-row ingests); callers MUST call :meth:`rebuild_fts` once after all
+        bulk_ingest calls so search works — ``rebuild`` reconstructs the FTS from the
+        ``record`` content table, so content and FTS stay consistent."""
         insert = (
             "INSERT INTO record(host, source_tool, artifact_path, ts, audit_id, sha256, text) "
             "VALUES(?, ?, ?, ?, ?, ?, ?)"
@@ -138,29 +140,28 @@ class EvidenceIndex:
         written = 0
         chunk: list[tuple[str, str, str, str, str, str, str]] = []
         try:
-            for rec in records:
-                chunk.append(
-                    (
-                        rec.host,
-                        rec.source_tool,
-                        rec.artifact_path,
-                        rec.ts,
-                        rec.audit_id,
-                        rec.sha256,
-                        rec.text,
+            with self._conn:  # single transaction: all rows of this call, or none
+                for rec in records:
+                    chunk.append(
+                        (
+                            rec.host,
+                            rec.source_tool,
+                            rec.artifact_path,
+                            rec.ts,
+                            rec.audit_id,
+                            rec.sha256,
+                            rec.text,
+                        )
                     )
-                )
-                if len(chunk) >= batch:
-                    with self._conn:
+                    if len(chunk) >= batch:
                         self._conn.executemany(insert, chunk)
-                    written += len(chunk)
-                    chunk.clear()
-            if chunk:
-                with self._conn:
+                        written += len(chunk)
+                        chunk.clear()
+                if chunk:
                     self._conn.executemany(insert, chunk)
-                written += len(chunk)
+                    written += len(chunk)
         except sqlite3.Error as exc:
-            raise EvidenceIndexError(f"bulk ingest failed after {written} rows: {exc}") from exc
+            raise EvidenceIndexError(f"bulk ingest failed: {exc}") from exc
         return written
 
     def begin_bulk(self) -> None:

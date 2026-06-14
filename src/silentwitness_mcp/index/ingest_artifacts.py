@@ -5,29 +5,31 @@ artifacts** (regular files), using purpose-built parsers per artifact type. This
 the spine, not plaso: plaso's libevtx-backed ``winevtx`` parser extracts 0 events from
 the ROCBA EVTX (libevtx crashes on them), whereas the EVTX feeder reads them cleanly.
 
-Performance (the build is offline but must not waste the box): artifacts are parsed
-**in parallel across the cores** — registry hives are CPU-bound in regipy (~minutes
-each) and would otherwise pin a single core while the rest idle. Each worker parses one
-artifact and returns its rows; the main process ``bulk_ingest``s them (single SQLite
-writer) as each future completes, so peak memory is bounded by the few in-flight
-artifacts, not the whole ~1M-row corpus. Correctness is never traded for speed: every
-record is kept; only the *order* of work changes.
+Performance: artifacts are parsed **in parallel across the cores** — registry hives are
+CPU-bound in regipy and would otherwise pin a single core while the rest idle. Each
+worker parses one artifact and returns its rows; the main process ``bulk_ingest``s them
+(single SQLite writer, atomic per artifact) as each future completes.
 
-A parser failure on one artifact is logged and skipped so one bad file can't abort the
-whole ingest. Returns per-type row counts. Callers wrap this in
-``begin_bulk()`` / ``rebuild_fts()`` (see ``cli_commands/index_case``).
+Evidence integrity (CLAUDE.md: silently dropping evidence is the worst-case bug): a
+feeder that raises on one artifact does NOT abort the run, but the failure is **counted
+and returned** (:class:`IngestResult.failures`) so the caller can surface it in the
+operator summary and the audit trail. A green result with hidden skips is exactly what
+this guards against. Both the parallel and in-process (``max_workers=1``) paths use the
+same broad ``except Exception`` so the tested path matches the shipped path.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable, Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Literal
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
+from silentwitness_mcp.index._feeder_util import Feeder
 from silentwitness_mcp.index.feeders_evtx import evtx_file_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
@@ -38,15 +40,24 @@ _LOG = logging.getLogger(__name__)
 # stable regardless of where the case tree lives (dev box vs VPS vs OVA).
 _PREPARED = "prepared"
 
-# A feeder streams index rows from one artifact; all share this keyword signature.
-_Feeder = Callable[..., Iterator[IndexRecord]]
-
-# Artifact type -> (label, feeder). Resolved via module globals so the in-process
-# (max_workers=1) path stays monkeypatchable in tests.
-_KINDS: dict[EvidenceType, str] = {
+# Closed set of artifact kinds; a Literal so a typo'd label is a type error, not a
+# silent misroute. Artifact type -> kind.
+Kind = Literal["evtx", "registry"]
+_KINDS: dict[EvidenceType, Kind] = {
     EvidenceType.EVTX: "evtx",
     EvidenceType.HIVE: "registry",
 }
+
+
+@dataclass
+class IngestResult:
+    """Outcome of an ingest: rows per kind, plus every artifact that failed to parse.
+
+    ``failures`` is the load-bearing half — the caller MUST surface it (operator summary
+    + audit advisories) so a skipped artifact never hides behind a green result."""
+
+    counts: dict[str, int] = field(default_factory=dict)
+    failures: list[tuple[str, str, str]] = field(default_factory=list)  # (kind, name, error)
 
 
 def _citation_path(path: Path) -> str:
@@ -57,13 +68,20 @@ def _citation_path(path: Path) -> str:
     return path.name
 
 
-def _feeder_for(kind: str) -> _Feeder:
-    """Resolve the feeder for an artifact ``kind`` from the (monkeypatchable) globals."""
-    return registry_hive_records if kind == "registry" else evtx_file_records
+def _feeder_for(kind: Kind) -> Feeder:
+    """Resolve the feeder for ``kind`` from the (monkeypatchable) module globals.
+
+    Built per call so tests can monkeypatch the feeder globals; an unknown kind raises
+    ``KeyError`` rather than silently defaulting to one parser."""
+    feeders: dict[Kind, Feeder] = {
+        "evtx": evtx_file_records,
+        "registry": registry_hive_records,
+    }
+    return feeders[kind]
 
 
 def _parse_artifact(
-    kind: str, path_str: str, cite: str, audit_id: str, host: str
+    kind: Kind, path_str: str, cite: str, audit_id: str, host: str
 ) -> list[IndexRecord]:
     """Worker entry point: parse one artifact into a list of rows (runs in a subprocess)."""
     feeder = _feeder_for(kind)
@@ -77,28 +95,26 @@ def ingest_prepared_artifacts(
     audit_id: str,
     host: str = "",
     max_workers: int | None = None,
-) -> dict[str, int]:
-    """Parse every registered prepared artifact into ``index``; return per-type counts.
+) -> IngestResult:
+    """Parse every registered prepared artifact into ``index``; return counts + failures.
 
-    Parses artifacts in parallel (default: cores-1) and bulk-inserts each artifact's
-    rows as it completes. ``max_workers=1`` runs in-process (used by tests). The caller
-    must wrap this in ``index.begin_bulk()`` / ``index.rebuild_fts()`` for the deferred
-    FTS build. A feeder that raises on one artifact is logged and skipped."""
-    tasks: list[tuple[str, Path, str]] = []
+    Parses artifacts in parallel (default: cores-1) and bulk-inserts each artifact's rows
+    (atomically) as it completes. ``max_workers=1`` runs in-process (used by tests). The
+    caller must wrap this in ``index.begin_bulk()`` / ``index.rebuild_fts()`` for the
+    deferred FTS build, and MUST surface :attr:`IngestResult.failures`."""
+    tasks: list[tuple[Kind, Path, str]] = []
     for rec in registry.list_all():
         kind = _KINDS.get(rec.type)
         if kind is not None:
             tasks.append((kind, rec.path, _citation_path(rec.path)))
+    result = IngestResult()
     if not tasks:
-        return {}
+        return result
     workers = max_workers if max_workers is not None else max(1, (os.cpu_count() or 2) - 1)
-    counts: dict[str, int] = {}
     if workers == 1:
         for kind, path, cite in tasks:
-            counts[kind] = counts.get(kind, 0) + _ingest_one(
-                index, kind, path, cite, audit_id, host
-            )
-        return counts
+            _ingest_one(index, kind, path, cite, audit_id, host, result)
+        return result
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
         futures = {
@@ -108,24 +124,37 @@ def ingest_prepared_artifacts(
         for future in as_completed(futures):
             kind, path = futures[future]
             try:
-                records = future.result()
-            except Exception as exc:  # any worker parse failure -> skip that artifact
+                written = index.bulk_ingest(future.result())
+            except Exception as exc:  # parse OR bulk-insert failure -> skip + record
                 _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
+                result.failures.append((kind, path.name, str(exc)))
                 continue
-            counts[kind] = counts.get(kind, 0) + index.bulk_ingest(records)
-    return counts
+            result.counts[kind] = result.counts.get(kind, 0) + written
+    return result
 
 
 def _ingest_one(
-    index: EvidenceIndex, kind: str, path: Path, cite: str, audit_id: str, host: str
-) -> int:
-    """In-process parse + bulk-ingest of one artifact (the ``max_workers=1`` path)."""
-    feeder = _feeder_for(kind)
+    index: EvidenceIndex,
+    kind: Kind,
+    path: Path,
+    cite: str,
+    audit_id: str,
+    host: str,
+    result: IngestResult,
+) -> None:
+    """In-process parse + atomic bulk-ingest of one artifact (the ``max_workers=1`` path).
+
+    Same broad failure handling as the parallel path so the tested behaviour matches the
+    shipped behaviour."""
     try:
-        return index.bulk_ingest(feeder(path, audit_id=audit_id, host=host, source_path=cite))
-    except (OSError, ValueError) as exc:
+        written = index.bulk_ingest(
+            _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite)
+        )
+    except Exception as exc:  # parse OR bulk-insert failure -> skip + record
         _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
-        return 0
+        result.failures.append((kind, path.name, str(exc)))
+        return
+    result.counts[kind] = result.counts.get(kind, 0) + written
 
 
-__all__ = ["ingest_prepared_artifacts"]
+__all__ = ["IngestResult", "Kind", "ingest_prepared_artifacts"]

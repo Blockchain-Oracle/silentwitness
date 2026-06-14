@@ -5,9 +5,11 @@ Two spines feed ``cases/<id>/index.db`` (which the agent then queries via
 ``search_evidence`` / ``timeline`` instead of raw-reading artifacts):
 
 1. **Targeted parsers (the reliable spine)** over the extracted ``prepared/``
-   artifacts — ``python-evtx`` for EVTX, etc. This is load-bearing: plaso's
-   libevtx-backed ``winevtx`` parser extracts 0 events from the ROCBA EVTX (libevtx
-   crashes on them), so the targeted feeders are what actually populate the index.
+   artifacts — a hybrid Rust-``evtx`` / ``python-evtx`` reader for EVTX, ``regipy`` for
+   hives (see ``index.feeders_*``). This is load-bearing: plaso's libevtx-backed
+   ``winevtx`` parser extracts 0 events from the ROCBA EVTX (libevtx crashes on them),
+   so the targeted feeders are what actually populate the index. Any artifact that fails
+   to parse is reported (operator summary + audit advisories), never silently dropped.
 2. **plaso super-timeline (best-effort breadth)** by mounting each registered E01.
    This adds timeline breadth where it works but is treated as non-fatal — a plaso
    failure must not zero out the index the targeted spine already filled.
@@ -68,7 +70,11 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
         )
         with EvidenceIndex(case_dir / _INDEX_DB) as idx:
             idx.begin_bulk()  # bulk-load PRAGMAs; FTS is built once at the end
-            counts = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
+            ingested = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
+            counts = ingested.counts
+            for kind, name, message in ingested.failures:
+                advisories.append(f"{kind} parse FAILED on {name}: {message}")
+                err.print(f"[red]✗[/red] {kind} parse FAILED on {name}: {message}", highlight=False)
 
             images = [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE]
             for rec in images:
@@ -93,6 +99,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
             "rows": total,
             "targeted_counts": counts,
             "plaso_rows": plaso_rows,
+            "failed_artifacts": len(ingested.failures),
             "host": host,
             "advisories": advisories,
         }
@@ -118,9 +125,12 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
         )
         return 1
     detail = ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "none"
+    failed = len(ingested.failures)
+    mark = "[yellow]✓[/yellow]" if failed else "[green]✓[/green]"
+    suffix = f" — [yellow]{failed} artifact(s) FAILED (see advisories)[/yellow]" if failed else ""
     out.print(
-        f"[green]✓[/green] indexed {total} records "
-        f"(targeted: {detail}; plaso: {plaso_rows}) into {case_dir / _INDEX_DB}",
+        f"{mark} indexed {total} records "
+        f"(targeted: {detail}; plaso: {plaso_rows}) into {case_dir / _INDEX_DB}{suffix}",
         highlight=False,
     )
     return 0

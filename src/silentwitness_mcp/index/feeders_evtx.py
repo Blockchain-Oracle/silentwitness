@@ -2,18 +2,17 @@
 
 Hybrid parser, chosen by measurement on the real ROCBA EVTX:
 
-* **Fast path — Rust ``evtx`` (``PyEvtxParser``)**: parses 198/208 ROCBA logs (~1.14M
-  events) in seconds.
-* **Tolerant fallback — pure-Python ``python-evtx`` (``Evtx``)**: the remaining 10 files
-  have malformed chunks that crash *both* the Rust parser (``Failed to parse chunk
-  header``) and libevtx/pyevtx — and therefore plaso's libevtx-backed ``winevtx``
-  parser, which extracts 0 events. ``python-evtx`` reads them anyway.
+* **Fast path — Rust ``evtx`` (``PyEvtxParser``)**: parses the large majority of the
+  case's logs in seconds.
+* **Tolerant fallback — pure-Python ``python-evtx`` (``Evtx``)**: a tail of files have
+  malformed chunks that crash *both* the Rust parser (a ``Failed to parse chunk
+  header``-class error) and libevtx/pyevtx — and therefore plaso's libevtx-backed
+  ``winevtx`` parser, which extracts 0 events. ``python-evtx`` reads them anyway.
 
 So we get full recall *and* a fast build: try Rust per file, buffer its output, and on
 any parse error fall back to ``python-evtx`` for that file (no partial+duplicate
-emission). Both parsers yield per-record XML, so the single pure mapper handles both.
-EVTX is the highest-value artifact set (logons, RDP/WinRM, PowerShell, service
-installs), so this feeder is load-bearing.
+emission). A missing Rust parser (``ImportError``) is re-raised rather than masked as a
+slow fallback. Both parsers yield per-record XML, so the single pure mapper handles both.
 
 ``_event_xml_to_record`` is a pure, unit-tested mapper; the file readers are exercised
 on the forensic box (both parsers installed via the forensics extra).
@@ -28,13 +27,10 @@ from xml.etree.ElementTree import Element, ParseError
 
 from defusedxml.ElementTree import fromstring
 
-from silentwitness_mcp.index._feeder_util import sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
-
-# Cap per-event text so a pathological EventData blob can't bloat the DB / a query.
-_MAX_TEXT = 8192
 
 
 def _local(tag: object) -> str:
@@ -105,7 +101,7 @@ def _event_xml_to_record(
     record_id = system.get("EventRecordID", "")
     path = f"{source_path}#{record_id}" if record_id else source_path
     return IndexRecord(
-        text=text[:_MAX_TEXT],
+        text=text[:MAX_TEXT],
         source_tool=f"evtx:{channel}" if channel else "evtx",
         artifact_path=path,
         host=host,
@@ -161,11 +157,16 @@ def evtx_file_records(
     cite = source_path if source_path is not None else str(path)
     try:
         records = list(_rust_evtx_records(path, sha=sha, cite=cite, audit_id=audit_id, host=host))
-    except Exception as exc:  # any Rust parse error → tolerant python-evtx fallback
-        _LOG.info("evtx: rust parser failed on %s (%s) — using python-evtx", path.name, exc)
+    except ImportError:
+        raise  # a missing Rust parser is an environment defect — surface it, don't mask it
+    except Exception as exc:  # a real parse error → tolerant python-evtx fallback
+        _LOG.warning("evtx: rust parser failed on %s (%s) — using python-evtx", path.name, exc)
         yield from _python_evtx_records(path, sha=sha, cite=cite, audit_id=audit_id, host=host)
         return
     yield from records
 
+
+# Compile-time assertion that the feeder still matches the shared contract.
+_: Feeder = evtx_file_records
 
 __all__ = ["evtx_file_records"]

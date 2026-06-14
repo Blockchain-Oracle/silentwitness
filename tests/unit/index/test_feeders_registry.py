@@ -7,7 +7,8 @@ searchable, provenance-complete index row.
 
 from __future__ import annotations
 
-from silentwitness_mcp.index.feeders_registry import _MAX_TEXT, _entry_to_record
+from silentwitness_mcp.index._feeder_util import MAX_TEXT
+from silentwitness_mcp.index.feeders_registry import _entry_to_record
 
 
 def test_run_key_entry_maps_to_record() -> None:
@@ -23,6 +24,7 @@ def test_run_key_entry_maps_to_record() -> None:
         hive_path="img/hive/SOFTWARE",
         audit_id="sift-r-1",
         host="ROCBA",
+        sha256="b" * 64,
     )
     assert rec is not None
     assert "name=Updater" in rec.text
@@ -33,6 +35,7 @@ def test_run_key_entry_maps_to_record() -> None:
     assert rec.artifact_path == "img/hive/SOFTWARE"
     assert rec.audit_id == "sift-r-1"
     assert rec.host == "ROCBA"
+    assert rec.sha256 == "b" * 64
 
 
 def test_nested_and_list_values_are_flattened() -> None:
@@ -41,7 +44,9 @@ def test_nested_and_list_values_are_flattened() -> None:
         "config": {"Start": 2, "ImagePath": "svc.exe"},
         "tags": ["a", "b"],
     }
-    rec = _entry_to_record(entry, plugin="services", hive_path="SYSTEM", audit_id="a", host="")
+    rec = _entry_to_record(
+        entry, plugin="services", hive_path="SYSTEM", audit_id="a", host="", sha256="s"
+    )
     assert rec is not None
     assert "service=RemoteSvc" in rec.text
     assert "ImagePath=svc.exe" in rec.text
@@ -50,7 +55,9 @@ def test_nested_and_list_values_are_flattened() -> None:
 
 
 def test_empty_entry_is_dropped() -> None:
-    assert _entry_to_record({}, plugin="p", hive_path="h", audit_id="a", host="") is None
+    assert (
+        _entry_to_record({}, plugin="p", hive_path="h", audit_id="a", host="", sha256="s") is None
+    )
 
 
 def test_timestamp_key_variants_are_picked_up() -> None:
@@ -61,12 +68,18 @@ def test_timestamp_key_variants_are_picked_up() -> None:
             hive_path="h",
             audit_id="a",
             host="",
+            sha256="s",
         )
         assert rec is not None and rec.ts == "2020-01-02T03:04:05+00:00"
 
 
 def test_long_entry_text_is_truncated() -> None:
     rec = _entry_to_record(
-        {"blob": "z" * (_MAX_TEXT + 500)}, plugin="p", hive_path="h", audit_id="a", host=""
+        {"blob": "z" * (MAX_TEXT + 500)},
+        plugin="p",
+        hive_path="h",
+        audit_id="a",
+        host="",
+        sha256="s",
     )
-    assert rec is not None and len(rec.text) == _MAX_TEXT
+    assert rec is not None and len(rec.text) == MAX_TEXT

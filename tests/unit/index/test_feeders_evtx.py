@@ -14,7 +14,8 @@ from pathlib import Path
 import pytest
 
 from silentwitness_mcp.index import feeders_evtx
-from silentwitness_mcp.index.feeders_evtx import _MAX_TEXT, _event_xml_to_record, evtx_file_records
+from silentwitness_mcp.index._feeder_util import MAX_TEXT
+from silentwitness_mcp.index.feeders_evtx import _event_xml_to_record, evtx_file_records
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOGON_4624 = """<?xml version="1.0" encoding="utf-8"?>
@@ -79,13 +80,13 @@ def test_namespaceless_event_still_parses() -> None:
 
 
 def test_long_text_is_truncated() -> None:
-    big = "<Data Name='Blob'>" + "z" * (_MAX_TEXT + 500) + "</Data>"
+    big = "<Data Name='Blob'>" + "z" * (MAX_TEXT + 500) + "</Data>"
     xml = (
         "<Event><System><EventID>1</EventID><Channel>App</Channel></System>"
         f"<EventData>{big}</EventData></Event>"
     )
     rec = _event_xml_to_record(xml, source_path="p", sha256="s", audit_id="a", host="")
-    assert rec is not None and len(rec.text) == _MAX_TEXT
+    assert rec is not None and len(rec.text) == MAX_TEXT
 
 
 def test_rust_failure_falls_back_to_python_evtx(
@@ -123,3 +124,24 @@ def test_rust_success_does_not_invoke_fallback(
     monkeypatch.setattr(feeders_evtx, "_python_evtx_records", fallback_must_not_run)
     out = list(evtx_file_records(f, audit_id="a", host=""))
     assert len(out) == 1 and out[0].text == "from rust"
+
+
+def test_rust_importerror_is_reraised_not_masked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A missing Rust parser is an environment defect — surface it, don't silently
+    # degrade to the slow fallback (which would mask a broken install).
+    f = tmp_path / "x.evtx"
+    f.write_bytes(b"evtx-bytes")
+
+    def missing(path: Path, **_: object) -> Iterator[IndexRecord]:
+        raise ImportError("No module named 'evtx'")
+        yield  # pragma: no cover
+
+    def fallback_must_not_run(path: Path, **_: object) -> Iterator[IndexRecord]:
+        raise AssertionError("fallback must not run on ImportError")
+
+    monkeypatch.setattr(feeders_evtx, "_rust_evtx_records", missing)
+    monkeypatch.setattr(feeders_evtx, "_python_evtx_records", fallback_must_not_run)
+    with pytest.raises(ImportError):
+        list(evtx_file_records(f, audit_id="a", host=""))
