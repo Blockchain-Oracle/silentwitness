@@ -1,7 +1,6 @@
 """Report module — Markdown template + YAML frontmatter for report-as-state."""
 
 from silentwitness_agent.report.audit_index import AuditEntryRef, AuditIndex
-from silentwitness_agent.report.events import FindingEvent, ReportSubscriber
 from silentwitness_agent.report.template import (
     Frontmatter,
     ReportTemplate,
@@ -21,11 +20,9 @@ __all__ = [
     "AuditEntryRef",
     "AuditIndex",
     "BrokenVerifyLink",
-    "FindingEvent",
     "Frontmatter",
     "ReportRenderResult",
     "ReportSection",
-    "ReportSubscriber",
     "ReportTemplate",
     "ReportWriter",
     "ValidationReport",

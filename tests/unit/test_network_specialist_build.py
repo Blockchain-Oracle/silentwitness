@@ -21,7 +21,9 @@ from silentwitness_agent.specialists.network import (
     register_as_investigator_tool,
 )
 
-_EXPECTED_NETWORK_TOOLS = {"zeek_run", "suricata_run"}
+# Firewall #1 (Phase 2/3): the specialist is an INDEX querier — it has the index query
+# tools, not the raw zeek/suricata tools (those are demoted to ingest feeders).
+_EXPECTED_INDEX_TOOLS = {"search_evidence", "timeline", "get_record"}
 _EXPECTED_RECORD_TOOLS = {
     "record_observation",
     "record_interpretation",
@@ -29,6 +31,8 @@ _EXPECTED_RECORD_TOOLS = {
     "verify_evidence_hash",
 }
 _BANNED_TOOLS = {
+    "zeek_run",
+    "suricata_run",
     "parse_mft",
     "parse_amcache",
     "parse_shimcache",
@@ -45,21 +49,21 @@ _BANNED_TOOLS = {
 }
 
 # ---------------------------------------------------------------------------
-# 1. Allowlist — exact count
+# 1. Allowlist — exact count (the shared index-query surface)
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_7_tools() -> None:
-    assert len(NETWORK_TOOL_ALLOWLIST) == 7
+def test_allowlist_has_8_tools() -> None:
+    assert len(NETWORK_TOOL_ALLOWLIST) == 8
 
 
 # ---------------------------------------------------------------------------
-# 2. Allowlist — all network and record tools present
+# 2. Allowlist — index query + record tools present
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_contains_all_network_tools() -> None:
-    assert _EXPECTED_NETWORK_TOOLS <= NETWORK_TOOL_ALLOWLIST
+def test_allowlist_contains_index_query_tools() -> None:
+    assert _EXPECTED_INDEX_TOOLS <= NETWORK_TOOL_ALLOWLIST
 
 
 def test_allowlist_contains_all_record_tools() -> None:
@@ -74,6 +78,14 @@ def test_allowlist_contains_all_record_tools() -> None:
 def test_allowlist_excludes_banned_tools() -> None:
     assert not (NETWORK_TOOL_ALLOWLIST & _BANNED_TOOLS), (
         f"Banned tools leaked into allowlist: {NETWORK_TOOL_ALLOWLIST & _BANNED_TOOLS}"
+    )
+
+
+def test_allowlist_is_exactly_index_plus_record_tools() -> None:
+    # Exact-equality is the real firewall-#1 guard: a future demoted tool that is not
+    # in _BANNED_TOOLS could not slip in undetected, unlike a count + finite denylist.
+    assert NETWORK_TOOL_ALLOWLIST == (
+        _EXPECTED_INDEX_TOOLS | _EXPECTED_RECORD_TOOLS | {"read_tool_output"}
     )
 
 

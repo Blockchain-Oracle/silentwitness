@@ -23,10 +23,14 @@ _LOG = logging.getLogger(__name__)
 # Tool allowlist — architecture §5.2
 # ---------------------------------------------------------------------------
 
+# Firewall #1: the network specialist is a domain-scoped INDEX querier — it discovers via
+# full-text search over the parsed evidence index, not raw zeek/suricata tools. Its
+# domain focus (connections / DNS / cloud-sync destinations) is in its prompt.
 NETWORK_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "zeek_run",
-        "suricata_run",
+        "search_evidence",
+        "timeline",
+        "get_record",
         "record_observation",
         "record_interpretation",
         "read_tool_output",

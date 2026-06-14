@@ -23,17 +23,14 @@ _LOG = logging.getLogger(__name__)
 # Tool allowlist — architecture §5.2
 # ---------------------------------------------------------------------------
 
+# Firewall #1: the memory specialist is a domain-scoped INDEX querier — it discovers via
+# full-text search over the parsed evidence index, not raw Volatility tools. Its domain
+# focus (processes / netconns / malfind from the memory image) is in its prompt.
 MEMORY_TOOL_ALLOWLIST: frozenset[str] = frozenset(
     {
-        "vol_pslist",
-        "vol_pstree",
-        "vol_psscan",
-        "vol_malfind",
-        "vol_netscan",
-        "vol_cmdline",
-        "vol_dlllist",
-        "vol_handles",
-        "vol_lsadump",
+        "search_evidence",
+        "timeline",
+        "get_record",
         "record_observation",
         "record_interpretation",
         "read_tool_output",

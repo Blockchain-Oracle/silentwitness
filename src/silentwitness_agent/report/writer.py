@@ -1,9 +1,7 @@
 """ReportWriter — atomic Markdown report renderer for one case directory.
 
-Subscribes to FindingEvent (observation_staged / interpretation_staged /
-pivot_staged / finding_approved / finding_archived) via on_finding_event
-and debounces concurrent events using a trailing-debounce (50ms idle timeout)
-into a single render.
+Callers invoke render() directly (see cli_commands/approve.py) to (re)build
+report.md from findings.json on demand.
 
 Atomicity invariant: report.md is written via write_text_atomic (atomic
 rename from a sibling .tmp file). A killed process never leaves a partial
@@ -32,7 +30,6 @@ from silentwitness_agent.report.compose import (
     compose_recommendations,
     compose_timeline,
 )
-from silentwitness_agent.report.events import FindingEvent
 from silentwitness_agent.report.template import (
     SECTION_ORDER,
     Frontmatter,
@@ -46,7 +43,6 @@ from silentwitness_common.types import ReportSection
 
 _LOG = logging.getLogger(__name__)
 
-_DEBOUNCE_SECS = 0.05
 _REPORT_FILENAME = "report.md"
 _FINDINGS_FILENAME = "findings.json"
 
@@ -64,10 +60,9 @@ class ReportRenderResult(BaseModel):
 
 
 class ReportWriter:
-    """Atomically renders cases/<case_id>/report.md on every state change.
+    """Atomically renders cases/<case_id>/report.md from findings.json.
 
-    Construction is side-effect-free. Wire event subscription externally by
-    calling on_finding_event directly (or via a bus) after construction.
+    Construction is side-effect-free; call render() to (re)build the report.
     """
 
     def __init__(
@@ -82,9 +77,7 @@ class ReportWriter:
         self._examiner = examiner
         self._model_used = model_used
         self._silentwitness_version = silentwitness_version
-        self._lock = threading.Lock()  # guards _timer slot
-        self._render_lock = threading.Lock()  # serialises concurrent render() calls
-        self._timer: threading.Timer | None = None
+        self._lock = threading.Lock()  # guards _render_count
         self._render_count = 0  # for test introspection
 
     # ------------------------------------------------------------------
@@ -185,29 +178,9 @@ class ReportWriter:
             gaps_count=gaps_count,
         )
 
-    def on_finding_event(self, event: FindingEvent) -> None:
-        """Debounced subscriber callback — resets the 50ms idle timer."""
-        _ = event  # event details are not needed; findings.json is the source of truth
-        with self._lock:
-            if self._timer is not None:
-                self._timer.cancel()
-            self._timer = threading.Timer(_DEBOUNCE_SECS, self._do_render)
-            self._timer.daemon = True
-            self._timer.start()
-
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
-
-    def _do_render(self) -> None:
-        """Timer callback — serialised render with error logging so failures surface."""
-        with self._lock:
-            self._timer = None
-        with self._render_lock:
-            try:
-                self.render()
-            except Exception:
-                _LOG.error("render() failed in timer thread", exc_info=True)
 
     def _load_findings(self) -> list[Any]:
         """Load and parse findings.json; returns empty list if absent/empty."""

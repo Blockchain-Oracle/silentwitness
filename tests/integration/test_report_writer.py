@@ -11,10 +11,8 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from datetime import UTC, datetime
 from pathlib import Path
 
-from silentwitness_agent.report.events import FindingEvent
 from silentwitness_agent.report.template import ReportTemplate, parse_frontmatter
 from silentwitness_agent.report.writer import ReportRenderResult, ReportWriter
 
@@ -78,15 +76,6 @@ def _finding_record(fid: str, obs_id: str, interp_id: str, status: str = "DRAFT"
 
 def _write_findings(case_dir: Path, records: list) -> None:  # type: ignore[type-arg]
     (case_dir / "findings.json").write_text(json.dumps(records), encoding="utf-8")
-
-
-def _make_finding_event(case_dir: Path) -> FindingEvent:
-    return FindingEvent(
-        event_type="observation_staged",
-        finding_id="F-001",
-        case_id=case_dir.name,
-        ts=datetime.now(UTC),
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -310,27 +299,6 @@ def test_appendix_audit_sha256_is_correct(tmp_path: Path) -> None:
     expected_digest = hashlib.sha256(content).hexdigest()
     text = (case_dir / "report.md").read_text(encoding="utf-8")
     assert expected_digest in text
-
-
-# ---------------------------------------------------------------------------
-# Test: debounce — 5 events within 30ms → exactly 1 render
-# ---------------------------------------------------------------------------
-
-
-def test_debounce_coalesces_events(tmp_path: Path) -> None:
-    case_dir = _make_case(tmp_path)
-    writer = _make_writer(case_dir)
-    initial_count = writer._render_count
-
-    event = _make_finding_event(case_dir)
-    for _ in range(5):
-        writer.on_finding_event(event)
-        time.sleep(0.005)  # 5ms between events — all within 50ms window
-
-    # Wait for the debounce timer to fire (50ms + buffer)
-    time.sleep(0.15)
-
-    assert writer._render_count == initial_count + 1
 
 
 # ---------------------------------------------------------------------------
