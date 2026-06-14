@@ -2155,6 +2155,32 @@ wheels = [
 ]
 
 [[package]]
+name = "libfwps-python"
+version = "20260522"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1d/16/47aca8830a60cfa3e621e17a93b968606af00dcffbaec71d07e45f14ea17/libfwps_python-20260522.tar.gz", hash = "sha256:da79081681c5e26f36e5d7c69103126b8aa0807517a06ad8f4ed4619027b73c9", size = 1264898, upload-time = "2026-05-22T07:49:43.741Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a4/3f/3db3a6fb6427f86ce39a59ae084e88c310eb5f6b61cacaed0ef861284325/libfwps_python-20260522-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:91ee441f2edc0c7be662a3495c6b5e5d3d1f2d5c7693dfe35a908f6f13b5516c", size = 430059, upload-time = "2026-05-22T07:48:41.764Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/cf/d7822f027ac8ff108ec5f94ad4ec59d1a37bb65a9067a245c999745b0089/libfwps_python-20260522-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:61353ada38d38c403db6c4f0314afeceac60aff518f0fe990f34fd4fbaa65822", size = 430333, upload-time = "2026-05-22T07:48:43.422Z" },
+    { url = "https://files.pythonhosted.org/packages/86/56/8aa5d3bb0c2bf71a0bcc087949128d3691fae59a9985487d55d01a590619/libfwps_python-20260522-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:021cc6d86dcc7aea4b1286648bc13db9fad8189230805b2424510f478ac47811", size = 951444, upload-time = "2026-05-22T07:48:44.967Z" },
+    { url = "https://files.pythonhosted.org/packages/1a/f1/2822f13a2a1ff93730c78bb1354b8cc8e8812cf22a1955f4b5df7b5eefc4/libfwps_python-20260522-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:908c0dcf5051f3b4e5403dc5545135d429f860fb1bf50e1903cd75ead04a2b42", size = 929090, upload-time = "2026-05-22T07:48:46.943Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/05/b2a1e85ca31cb887791a6ed2f1ba6e50e40a68670a4d3e83a5a5029da75c/libfwps_python-20260522-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:fd49b392f5452cd17b3084661c7ffbcdd9bc9edab2509c36b027e94c9d0d5f54", size = 938789, upload-time = "2026-05-22T07:48:48.995Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/ea/507a476126104a607565150cff12b4f80ec4e805a2303919ef442e905c04/libfwps_python-20260522-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:5f2845a992064b861eb750e5acf93f288e2b929352e08d027e3ec98752bf1157", size = 927162, upload-time = "2026-05-22T07:48:51.05Z" },
+    { url = "https://files.pythonhosted.org/packages/30/96/49e98a99e3c3ca5fb538c81cc60738c82427d40d1466690c71273c9a84ab/libfwps_python-20260522-cp312-cp312-win32.whl", hash = "sha256:976301920ac793c23c5cfd331d1076439fd9cabe9d81bfcfab99658134897167", size = 177035, upload-time = "2026-05-22T07:48:52.848Z" },
+    { url = "https://files.pythonhosted.org/packages/38/24/ed55779c3feeb125beaf46a65e332126d9f84396af2bd1e48c95ac80aa90/libfwps_python-20260522-cp312-cp312-win_amd64.whl", hash = "sha256:853cffd62023d921f452605c329d32c7faae793b822b7dc6c7e81a3a6d6d5928", size = 183134, upload-time = "2026-05-22T07:48:54.279Z" },
+    { url = "https://files.pythonhosted.org/packages/de/08/61d1c9a710f09598b902a3b461e38b5f98d5df280b2ec0b6c8023a975690/libfwps_python-20260522-cp312-cp312-win_arm64.whl", hash = "sha256:7c876b32b2bcbad7b4c7c72aefc4bbb5b99be5d2d066c2cd68a0e252e8b00947", size = 175693, upload-time = "2026-05-22T07:48:55.707Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/ed/c1032aeeb42422d14a32fd2f6e3e758a6c6893836d604acfb0bb6d9a85a0/libfwps_python-20260522-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:0b5f976bc44f38575d0ab97944c7fb3cfbae0b357f6317be0f6c1022a591b807", size = 430051, upload-time = "2026-05-22T07:48:57.118Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/80/eb53d3db21c056a5d65035a2b70412a714c0db1eb2465935620c15ed0aad/libfwps_python-20260522-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:8fe42a92c8671c64dc47a7cf4ff6fc8f8bb45c10bf9c5b5ac704219870d1431c", size = 430314, upload-time = "2026-05-22T07:48:58.734Z" },
+    { url = "https://files.pythonhosted.org/packages/ae/1c/0b8becf2d600e85ad41bbfb8ed8df9dd4719267c3f5b961b4f2fd0824527/libfwps_python-20260522-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:68440697784189fe79423e64364dc96ac3b532ed14e6a9fb3557462d1b7c6fce", size = 951482, upload-time = "2026-05-22T07:49:00.334Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/d2/8446870475d823eefd9947f4a0f1bfa75f8321badf368738454dcda08e5d/libfwps_python-20260522-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:d1dff93d435f502b914b8c92c3c412028d7e3fa3e13f2a2827d7c6ef4d9f30fb", size = 929051, upload-time = "2026-05-22T07:49:02.639Z" },
+    { url = "https://files.pythonhosted.org/packages/88/50/e852824ba1b784564736783274e490ca122c00e7832b9fda4d88ca28e6a3/libfwps_python-20260522-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:e2501ef2642089b5db02acadedbe4d36ecff2dfd29548e212dcfaea3aea24af1", size = 938953, upload-time = "2026-05-22T07:49:04.57Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/c4/a5a848e7a766df19826b2e1f343d87d8ae28f397b10243304c56b7585807/libfwps_python-20260522-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:5c388f6e4c6acc8d31b4ee12676e3a5c39544e1b5784dd499e2f5721c0070565", size = 927398, upload-time = "2026-05-22T07:49:06.408Z" },
+    { url = "https://files.pythonhosted.org/packages/75/00/38d02392de79c723f23987354e1899776d668ebf057926214e9d50001353/libfwps_python-20260522-cp313-cp313-win32.whl", hash = "sha256:415ba900d2444e2a92fb3b2986433b542d8aac9cbf9043298a941655d533f663", size = 177041, upload-time = "2026-05-22T07:49:08.308Z" },
+    { url = "https://files.pythonhosted.org/packages/70/8a/3b86b234211ac272ced824d1e13f8893e1a089ea9bc994b1676e08737fb0/libfwps_python-20260522-cp313-cp313-win_amd64.whl", hash = "sha256:cfb2691f39da803be3d668c5f4089743a43505e0f9e9bf4d104b6481eed9a9e4", size = 183115, upload-time = "2026-05-22T07:49:10.199Z" },
+    { url = "https://files.pythonhosted.org/packages/98/09/7fe08d2ab70b1f403a0d081a784fc777b1d731b8a2cb15e76abb09a7e99e/libfwps_python-20260522-cp313-cp313-win_arm64.whl", hash = "sha256:b30258acbc47a518b0bce6f9d879db1b6ac16ab08953af9f690fc30017a27e49", size = 175688, upload-time = "2026-05-22T07:49:11.631Z" },
+]
+
+[[package]]
 name = "libfwsi-python"
 version = "20260522"
 source = { registry = "https://pypi.org/simple" }
@@ -4439,6 +4465,7 @@ dependencies = [
 forensics = [
     { name = "dfvfs" },
     { name = "evtx" },
+    { name = "libfwps-python" },
     { name = "mft" },
     { name = "plaso" },
     { name = "python-evtx" },
@@ -4468,6 +4495,7 @@ requires-dist = [
     { name = "dfvfs", marker = "extra == 'forensics'", specifier = ">=20240115" },
     { name = "evtx", marker = "extra == 'forensics'", specifier = ">=0.8" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "libfwps-python", marker = "extra == 'forensics'", specifier = ">=20240101" },
     { name = "matplotlib", specifier = ">=3.10,<3.11" },
     { name = "mcp", specifier = ">=1.23.0,<2.0" },
     { name = "mft", marker = "extra == 'forensics'", specifier = ">=0.6" },

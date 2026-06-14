@@ -45,14 +45,16 @@ class ArtifactTarget:
     kind: Literal["file", "dir_glob", "per_user"]
     location: str
     name_pattern: str = ""
+    # Named NTFS alternate data stream to copy instead of the default ($DATA) stream;
+    # the USN journal content lives in $UsnJrnl's "$J" ADS, not its default stream.
+    data_stream: str = ""
 
 
 # ROCBA Windows-10 high-value set (confirmed present by the VPS probe). Explicit
-# live /Windows paths avoid the Windows.old duplicate tree. $UsnJrnl is
-# best-effort (its content is the $J ADS; full ADS extraction is a Phase-1 item).
+# live /Windows paths avoid the Windows.old duplicate tree.
 ROCBA_ARTIFACT_TARGETS: tuple[ArtifactTarget, ...] = (
     ArtifactTarget("mft", "file", "/$MFT"),
-    ArtifactTarget("usnjrnl", "file", "/$Extend/$UsnJrnl"),
+    ArtifactTarget("usnjrnl", "file", "/$Extend/$UsnJrnl", data_stream="$J"),
     ArtifactTarget("hive_software", "file", "/Windows/System32/config/SOFTWARE"),
     ArtifactTarget("hive_system", "file", "/Windows/System32/config/SYSTEM"),
     ArtifactTarget("hive_sam", "file", "/Windows/System32/config/SAM"),
@@ -100,14 +102,15 @@ def _iter_dir(opened: OpenedImage, dir_location: str) -> Iterator[tuple[str, Any
         yield raw.replace("\\", "/"), sub  # normalise NTFS backslash -> "/"
 
 
-def _write_entry(file_entry: Any, out_path: Path) -> tuple[int, bool]:
+def _write_entry(file_entry: Any, out_path: Path, *, data_stream: str = "") -> tuple[int, bool]:
     """Stream a dfVFS file entry to ``out_path``; return (bytes_written, truncated).
 
-    ``truncated`` is True when a mid-stream read fails on a corrupt
-    NTFS-compressed cluster (Security.evtx on the ROCBA image): we keep the bytes
-    read so far rather than discard the whole file — the readable prefix still
+    ``data_stream`` names a non-default NTFS alternate data stream to copy (e.g. ``$J``);
+    empty copies the default ($DATA) stream. ``truncated`` is True when a mid-stream read
+    fails on a corrupt NTFS-compressed cluster (Security.evtx on the ROCBA image): we keep
+    the bytes read so far rather than discard the whole file — the readable prefix still
     holds most of the records."""
-    file_object = file_entry.GetFileObject()
+    file_object = file_entry.GetFileObject(data_stream_name=data_stream)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     written = 0
     truncated = False
@@ -128,7 +131,7 @@ def _write_entry(file_entry: Any, out_path: Path) -> tuple[int, bool]:
 
 
 def _extract_one(
-    label: str, location: str, file_entry: Any, workdir: Path
+    label: str, location: str, file_entry: Any, workdir: Path, *, data_stream: str = ""
 ) -> ExtractedArtifact | None:
     """Copy one artifact; recover the readable prefix if its data is partly corrupt.
 
@@ -138,7 +141,7 @@ def _extract_one(
     ``truncated``; a fully unreadable / empty file is dropped and logged."""
     out_path = workdir / label / _sanitise_location(location)
     try:
-        size, truncated = _write_entry(file_entry, out_path)
+        size, truncated = _write_entry(file_entry, out_path, data_stream=data_stream)
     except (OSError, dfvfs_errors.Error) as exc:
         with contextlib.suppress(OSError):
             out_path.unlink()
@@ -166,10 +169,16 @@ def _extract_one(
 
 
 def _append_if_extracted(
-    results: list[ExtractedArtifact], label: str, location: str, entry: Any, workdir: Path
+    results: list[ExtractedArtifact],
+    label: str,
+    location: str,
+    entry: Any,
+    workdir: Path,
+    *,
+    data_stream: str = "",
 ) -> None:
     """Extract one artifact and append it unless its data was unreadable."""
-    extracted = _extract_one(label, location, entry, workdir)
+    extracted = _extract_one(label, location, entry, workdir, data_stream=data_stream)
     if extracted is not None:
         results.append(extracted)
 
@@ -191,7 +200,14 @@ def extract_artifacts(
         if target.kind == "file":
             entry = _open_location(opened, target.location)
             if entry is not None and entry.IsFile():
-                _append_if_extracted(results, target.label, target.location, entry, workdir)
+                _append_if_extracted(
+                    results,
+                    target.label,
+                    target.location,
+                    entry,
+                    workdir,
+                    data_stream=target.data_stream,
+                )
         elif target.kind == "dir_glob":
             pattern = re.compile(target.name_pattern, re.IGNORECASE)
             for location, sub in _iter_dir(opened, target.location):

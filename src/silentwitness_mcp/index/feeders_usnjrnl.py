@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -132,7 +132,12 @@ def _record_from_fields(
 
 
 def usnjrnl_records(
-    path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+    path: Path,
+    *,
+    audit_id: str,
+    host: str = "",
+    source_path: str | None = None,
+    stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
     """Stream one :class:`IndexRecord` per USN_RECORD_V2 in a ``$UsnJrnl:$J`` file.
 
@@ -156,6 +161,8 @@ def usnjrnl_records(
                 fields, offset = _parse_usn_record(buf, offset)
                 if fields is None:
                     resyncs += 1
+                    if stats is not None:
+                        stats.skip("usn_malformed_region")
                     continue
                 yielded += 1
                 yield _record_from_fields(

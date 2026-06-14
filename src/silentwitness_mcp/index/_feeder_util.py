@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -13,14 +14,40 @@ from silentwitness_mcp.index.store import IndexRecord
 MAX_TEXT = 8192
 
 
+@dataclass
+class FeederStats:
+    """Per-artifact diagnostics: how many records a feeder *skipped* (and why).
+
+    Feeders swallow malformed/unreadable records to keep going, but a feeder that
+    recovers 10% of records must not read as a clean run — so each skip is counted here
+    and the orchestrator surfaces non-empty stats in the operator summary + audit trail.
+    """
+
+    skipped: dict[str, int] = field(default_factory=dict)
+
+    def skip(self, reason: str) -> None:
+        self.skipped[reason] = self.skipped.get(reason, 0) + 1
+
+    @property
+    def total_skipped(self) -> int:
+        return sum(self.skipped.values())
+
+
 class Feeder(Protocol):
     """The contract every artifact feeder shares (enforced at type-check time).
 
     Conform with a module-level ``_: Feeder = my_feeder`` line so a renamed keyword
-    is caught by mypy rather than failing at runtime inside a worker subprocess."""
+    is caught by mypy rather than failing at runtime inside a worker subprocess. The
+    optional ``stats`` collector lets a feeder report skipped records to the caller."""
 
     def __call__(
-        self, path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+        self,
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: FeederStats | None = None,
     ) -> Iterator[IndexRecord]: ...
 
 

@@ -34,7 +34,7 @@ from typing import Literal
 
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
-from silentwitness_mcp.index._feeder_util import Feeder
+from silentwitness_mcp.index._feeder_util import Feeder, FeederStats
 from silentwitness_mcp.index.feeders_evtx import evtx_file_records
 from silentwitness_mcp.index.feeders_mft import mft_entry_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
@@ -78,13 +78,17 @@ def _kind_for(artifact_type: EvidenceType, name: str) -> Kind | None:
 
 @dataclass
 class IngestResult:
-    """Outcome of an ingest: rows per kind, plus every artifact that failed to parse.
+    """Outcome of an ingest: rows per kind, failed artifacts, and per-record diagnostics.
 
-    ``failures`` is the load-bearing half — the caller MUST surface it (operator summary
-    + audit advisories) so a skipped artifact never hides behind a green result."""
+    ``failures`` (whole-artifact errors) and ``diagnostics`` (per-record skips a feeder
+    swallowed to keep going) are the load-bearing halves — the caller MUST surface both
+    (operator summary + audit advisories) so neither a skipped artifact nor a partially
+    parsed one hides behind a green result."""
 
     counts: dict[str, int] = field(default_factory=dict)
     failures: list[tuple[str, str, str]] = field(default_factory=list)  # (kind, name, error)
+    # (kind, artifact name, {skip_reason: count}) for artifacts that dropped records.
+    diagnostics: list[tuple[str, str, dict[str, int]]] = field(default_factory=list)
 
 
 def _citation_path(path: Path) -> str:
@@ -117,10 +121,15 @@ def _feeder_for(kind: Kind) -> Feeder:
 
 def _parse_artifact(
     kind: Kind, path_str: str, cite: str, audit_id: str, host: str
-) -> list[IndexRecord]:
-    """Worker entry point: parse one artifact into a list of rows (runs in a subprocess)."""
+) -> tuple[list[IndexRecord], dict[str, int]]:
+    """Worker entry point: parse one artifact into ``(rows, skip_counts)``.
+
+    Returns the skip counts alongside the rows so per-record drops survive the subprocess
+    boundary and reach :class:`IngestResult.diagnostics`."""
+    stats = FeederStats()
     feeder = _feeder_for(kind)
-    return list(feeder(Path(path_str), audit_id=audit_id, host=host, source_path=cite))
+    rows = list(feeder(Path(path_str), audit_id=audit_id, host=host, source_path=cite, stats=stats))
+    return rows, stats.skipped
 
 
 def ingest_prepared_artifacts(
@@ -159,12 +168,15 @@ def ingest_prepared_artifacts(
         for future in as_completed(futures):
             kind, path = futures[future]
             try:
-                written = index.bulk_ingest(future.result())
+                rows, skipped = future.result()
+                written = index.bulk_ingest(rows)
             except Exception as exc:  # parse OR bulk-insert failure -> skip + record
                 _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
                 result.failures.append((kind, path.name, str(exc)))
                 continue
             result.counts[kind] = result.counts.get(kind, 0) + written
+            if skipped:
+                result.diagnostics.append((kind, path.name, skipped))
     return result
 
 
@@ -181,15 +193,18 @@ def _ingest_one(
 
     Same broad failure handling as the parallel path so the tested behaviour matches the
     shipped behaviour."""
+    stats = FeederStats()
     try:
         written = index.bulk_ingest(
-            _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite)
+            _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite, stats=stats)
         )
     except Exception as exc:  # parse OR bulk-insert failure -> skip + record
         _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
         result.failures.append((kind, path.name, str(exc)))
         return
     result.counts[kind] = result.counts.get(kind, 0) + written
+    if stats.skipped:
+        result.diagnostics.append((kind, path.name, stats.skipped))
 
 
 __all__ = ["IngestResult", "Kind", "ingest_prepared_artifacts"]

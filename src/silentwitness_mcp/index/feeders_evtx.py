@@ -27,7 +27,7 @@ from xml.etree.ElementTree import Element, ParseError
 
 from defusedxml.ElementTree import fromstring
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -126,7 +126,7 @@ def _rust_evtx_records(
 
 
 def _python_evtx_records(
-    path: Path, *, sha: str, cite: str, audit_id: str, host: str
+    path: Path, *, sha: str, cite: str, audit_id: str, host: str, stats: FeederStats | None
 ) -> Iterator[IndexRecord]:
     """Tolerant fallback: pure-Python ``python-evtx`` reads malformed-chunk files."""
     from Evtx.Evtx import Evtx  # lazy: forensics extra only
@@ -137,6 +137,8 @@ def _python_evtx_records(
                 xml = record.xml()
             except Exception:  # one corrupt record must not kill the whole file
                 _LOG.debug("evtx: skipped unrenderable record in %s", path)
+                if stats is not None:
+                    stats.skip("evtx_unrenderable_record")
                 continue
             rec = _event_xml_to_record(
                 xml, source_path=cite, sha256=sha, audit_id=audit_id, host=host
@@ -146,7 +148,12 @@ def _python_evtx_records(
 
 
 def evtx_file_records(
-    path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+    path: Path,
+    *,
+    audit_id: str,
+    host: str = "",
+    source_path: str | None = None,
+    stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
     """Stream one :class:`IndexRecord` per event in a single ``.evtx`` file.
 
@@ -161,7 +168,11 @@ def evtx_file_records(
         raise  # a missing Rust parser is an environment defect — surface it, don't mask it
     except Exception as exc:  # a real parse error → tolerant python-evtx fallback
         _LOG.warning("evtx: rust parser failed on %s (%s) — using python-evtx", path.name, exc)
-        yield from _python_evtx_records(path, sha=sha, cite=cite, audit_id=audit_id, host=host)
+        if stats is not None:
+            stats.skip("evtx_rust_fallback_file")
+        yield from _python_evtx_records(
+            path, sha=sha, cite=cite, audit_id=audit_id, host=host, stats=stats
+        )
         return
     yield from records
 

@@ -22,7 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -81,7 +81,12 @@ def _entry_to_record(
 
 
 def registry_hive_records(
-    path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+    path: Path,
+    *,
+    audit_id: str,
+    host: str = "",
+    source_path: str | None = None,
+    stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
     """Stream :class:`IndexRecord`s from every validated regipy plugin over one hive.
 
@@ -105,6 +110,8 @@ def registry_hive_records(
             entries = plugin.entries
         except Exception as exc:  # one bad plugin must not zero the whole hive
             _LOG.warning("regipy plugin %s failed on %s: %s", plugin.NAME, path.name, exc)
+            if stats is not None:
+                stats.skip("registry_plugin_failed")
             continue
         if isinstance(entries, dict):
             rows: list[Any] = [entries]

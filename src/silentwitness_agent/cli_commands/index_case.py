@@ -75,6 +75,14 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
             for kind, name, message in ingested.failures:
                 advisories.append(f"{kind} parse FAILED on {name}: {message}")
                 err.print(f"[red]✗[/red] {kind} parse FAILED on {name}: {message}", highlight=False)
+            for kind, name, skipped in ingested.diagnostics:
+                detail = ", ".join(f"{r}={c}" for r, c in sorted(skipped.items()))
+                advisories.append(f"{kind} {name}: skipped records ({detail})")
+                err.print(
+                    f"[yellow]⚠[/yellow] {kind} {name}: skipped {sum(skipped.values())} "
+                    f"record(s) ({detail})",
+                    highlight=False,
+                )
 
             images = [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE]
             for rec in images:
@@ -100,6 +108,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
             "targeted_counts": counts,
             "plaso_rows": plaso_rows,
             "failed_artifacts": len(ingested.failures),
+            "skipped_records": sum(sum(s.values()) for _, _, s in ingested.diagnostics),
             "host": host,
             "advisories": advisories,
         }

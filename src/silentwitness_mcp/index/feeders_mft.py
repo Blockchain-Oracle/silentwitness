@@ -20,7 +20,7 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -91,7 +91,12 @@ def _std_info_modified(entry: Any) -> str:
 
 
 def mft_entry_records(
-    path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+    path: Path,
+    *,
+    audit_id: str,
+    host: str = "",
+    source_path: str | None = None,
+    stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
     """Stream one :class:`IndexRecord` per named $MFT entry. ``mft`` is imported lazily."""
     import mft
@@ -101,9 +106,13 @@ def mft_entry_records(
     for entry in mft.PyMftParser(str(path)).entries():
         if isinstance(entry, Exception):  # the parser yields errors inline
             _LOG.debug("mft: skipped unreadable entry in %s: %s", path.name, entry)
+            if stats is not None:
+                stats.skip("mft_unreadable_entry")
             continue
         full_path = getattr(entry, "full_path", "") or ""
         if not full_path:  # unallocated/corrupt record with no usable filename
+            if stats is not None:
+                stats.skip("mft_no_path_entry")
             continue
         yield _entry_to_record(
             full_path=full_path,

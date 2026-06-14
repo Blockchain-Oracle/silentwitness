@@ -69,6 +69,9 @@ forensics = [
     "python-evtx>=0.7",
     # Rust-backed $MFT parser (fast, MIT). pyesedb (SRUM) arrives via plaso/libesedb.
     "mft>=0.6",
+    # libfwps (Windows property store) — regipy's shellbags plugins need it to decode
+    # folder-access shell items; without it regipy silently skips those plugins.
+    "libfwps-python>=20240101",
 ]
 
 [dependency-groups]

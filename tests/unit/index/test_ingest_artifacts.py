@@ -53,7 +53,12 @@ class _FakeRegistry:
 
 def _one_record_feeder(label: str) -> Any:
     def feeder(
-        path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
     ) -> Iterator[IndexRecord]:
         yield IndexRecord(text=f"{label} from {path.name}", source_tool=label, audit_id=audit_id)
 
@@ -99,7 +104,12 @@ def test_feeder_error_on_one_artifact_is_skipped_and_recorded(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     def flaky_feeder(
-        path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
     ) -> Iterator[IndexRecord]:
         if "bad" in path.name:
             raise RuntimeError("corrupt evtx")  # not OSError/ValueError -> must still be caught
@@ -118,6 +128,33 @@ def test_feeder_error_on_one_artifact_is_skipped_and_recorded(
         # The failure is COUNTED, not silently swallowed (the non-negotiable invariant).
         assert len(result.failures) == 1
         assert result.failures[0][1] == "bad.evtx" and "corrupt" in result.failures[0][2]
+
+
+def test_per_record_skips_are_surfaced_in_diagnostics(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def skipping_feeder(
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
+    ) -> Iterator[IndexRecord]:
+        if stats is not None:
+            stats.skip("corrupt_record")
+            stats.skip("corrupt_record")
+        yield IndexRecord(text="kept", source_tool="evtx:Security", audit_id=audit_id)
+
+    monkeypatch.setattr(ingest_artifacts, "evtx_file_records", skipping_feeder)
+    registry = _FakeRegistry([_Rec(EvidenceType.EVTX, Path("/c/prepared/img/evtx/a.evtx"))])
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        result = ingest_prepared_artifacts(registry, idx, audit_id="a", host="", max_workers=1)
+        assert result.counts == {"evtx": 1}
+        # The 2 swallowed records are visible, not hidden behind the green count.
+        assert len(result.diagnostics) == 1
+        kind, name, skipped = result.diagnostics[0]
+        assert kind == "evtx" and name == "a.evtx" and skipped == {"corrupt_record": 2}
 
 
 # ---------------------------------------------------------------------------
@@ -166,10 +203,17 @@ def test_parallel_path_keeps_every_record_and_records_failures(
     _patch_sync_pool(monkeypatch)
 
     def feeder(
-        path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
     ) -> Iterator[IndexRecord]:
         if "bad" in path.name:
             raise RuntimeError("Failed to parse chunk header")
+        if "skipme" in path.name and stats is not None:
+            stats.skip("test_skip")  # exercise the diagnostics channel
         # two rows per good artifact, to prove no rows are lost across the pool
         yield IndexRecord(text=f"a {path.name}", source_tool="evtx:Security", audit_id=audit_id)
         yield IndexRecord(text=f"b {path.name}", source_tool="evtx:Security", audit_id=audit_id)

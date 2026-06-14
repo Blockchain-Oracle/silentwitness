@@ -28,7 +28,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, sha256_file
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, sha256_file
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -135,7 +135,12 @@ def _get_table(esedb_file: Any, name: str) -> Any:
 
 
 def srum_records(
-    path: Path, *, audit_id: str, host: str = "", source_path: str | None = None
+    path: Path,
+    *,
+    audit_id: str,
+    host: str = "",
+    source_path: str | None = None,
+    stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
     """Stream per-app network-usage rows from a SRUDB.dat. ``pyesedb`` is imported lazily."""
     import pyesedb
@@ -165,6 +170,8 @@ def srum_records(
                 luid = record.get_value_data_as_integer(4) or 0
             except (OSError, ValueError):  # pyesedb raises ValueError; skip just this row
                 skipped += 1
+                if stats is not None:
+                    stats.skip("srum_unreadable_record")
                 continue
             app = appmap.get(app_id, f"appid:{app_id if app_id is not None else 'unknown'}")
             yield _net_row_to_record(
