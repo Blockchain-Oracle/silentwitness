@@ -1,8 +1,8 @@
 """Closed-loop critic agent for evaluating staged findings against cited evidence.
 
 The critic is a separate Pydantic AI Agent with a fresh context window.
-It receives ONLY the staged finding text + cited blob contents — never the
-investigator's reasoning chain or hypothesis history.  This fresh-context
+It receives ONLY the staged finding text + its cited evidence quotes — never
+the investigator's reasoning chain or hypothesis history.  This fresh-context
 property is the architectural mechanism that breaks the sycophancy loop
 (architecture.md §5.5).
 
@@ -11,7 +11,6 @@ Entry point: ``critique()``.  Factory: ``build_critic()``.
 
 from __future__ import annotations
 
-import hashlib
 import importlib.resources
 import logging
 import os
@@ -30,8 +29,6 @@ _LOG = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "anthropic:claude-opus-4-7"
 _CRITIC_FAST_MODEL = "anthropic:claude-haiku-4-5"
-# Max bytes of blob content passed inline to avoid flooding the critic's context.
-_BLOB_TRUNCATION_BYTES = 50_000
 
 try:
     _SYSTEM_PROMPT: str = (
@@ -65,7 +62,11 @@ class StagedFinding(BaseModel):
     interpretation_text: str = Field(min_length=1)
     confidence: Confidence
     cited_audit_ids: list[str] = Field(default_factory=list)
-    cited_blob_paths: list[Path] = Field(default_factory=list)
+    # The verbatim evidence the finding cites — the span_texts from the
+    # observation's cited_spans, already verified by the citation gate as real
+    # substrings of index records. The critic evaluates the finding against
+    # exactly these bytes (no blob re-reading post index-citation rewire).
+    cited_evidence: tuple[str, ...] = Field(default_factory=tuple)
 
 
 class CriticVerdictRecord(BaseModel):
@@ -161,39 +162,16 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
 
 
 # ---------------------------------------------------------------------------
-# Blob loading helpers
+# Prompt rendering
 # ---------------------------------------------------------------------------
 
 
-def _load_blob(path: Path) -> str:
-    """Read a blob file; return empty string if missing.
+def _build_critique_prompt(findings: list[StagedFinding]) -> str:
+    """Render the per-run user prompt with findings and their cited evidence.
 
-    Files over _BLOB_TRUNCATION_BYTES are cut with a ``[TRUNCATED]`` marker.
-    Non-UTF-8 files (binary) get a one-line descriptor with a SHA-256 prefix
-    rather than silently replacing bytes, which would corrupt evidence text.
-    """
-    if not path.exists():
-        _LOG.warning("critic: blob not found path=%s", path)
-        return ""
-    content = path.read_bytes()
-    truncated = len(content) > _BLOB_TRUNCATION_BYTES
-    if truncated:
-        _LOG.info(
-            "critic: blob truncated path=%s original_bytes=%d limit=%d",
-            path,
-            len(content),
-            _BLOB_TRUNCATION_BYTES,
-        )
-        content = content[:_BLOB_TRUNCATION_BYTES]
-    try:
-        return content.decode("utf-8") + ("\n[TRUNCATED]" if truncated else "")
-    except UnicodeDecodeError:
-        digest = hashlib.sha256(content).hexdigest()[:16]
-        return f"[BINARY BLOB — {len(content)} bytes, sha256={digest}...]"
-
-
-def _build_critique_prompt(findings: list[StagedFinding], blob_contents: dict[str, str]) -> str:
-    """Render the per-run user prompt with findings and inline blob evidence."""
+    The cited evidence is the verbatim span_texts the investigator quoted from
+    the index (citation-gate-verified). The critic judges whether the
+    observation + interpretation are actually supported by those bytes."""
     parts: list[str] = ["Review the following staged findings against the cited evidence.\n"]
     for f in findings:
         parts.append(f"--- Finding {f.finding_id} ---")
@@ -201,19 +179,12 @@ def _build_critique_prompt(findings: list[StagedFinding], blob_contents: dict[st
         parts.append(f"Interpretation: {f.interpretation_text}")
         parts.append(f"Confidence: {f.confidence}")
         if f.cited_audit_ids:
-            parts.append("Cited audit IDs: " + ", ".join(f.cited_audit_ids))
-        for aid in f.cited_audit_ids:
-            blob_text = blob_contents.get(aid, "")
-            if blob_text:
-                parts.append(f"\nBlob [{aid}]:\n{blob_text}")
-            else:
-                parts.append(f"\nBlob [{aid}]: (not found)")
-        for bp in f.cited_blob_paths:
-            blob_text = blob_contents.get(str(bp), "")
-            if blob_text:
-                parts.append(f"\nBlob [{bp.name}]:\n{blob_text}")
-            else:
-                parts.append(f"\nBlob [{bp.name}]: (not found)")
+            parts.append("Cited source tools (audit_ids): " + ", ".join(f.cited_audit_ids))
+        if f.cited_evidence:
+            parts.append("Cited evidence (verbatim quotes from the index):")
+            parts.extend(f"  • {ev}" for ev in f.cited_evidence)
+        else:
+            parts.append("Cited evidence: (none — the finding cites no evidence)")
         parts.append("")
     return "\n".join(parts)
 
@@ -232,27 +203,16 @@ async def critique(
 ) -> CriticReport:
     """Run the critic against a list of staged findings; return a CriticReport.
 
-    Loads cited blob contents from ``case_dir/audit/blobs/<audit_id>.txt``
-    and from each ``cited_blob_paths`` entry.  Blobs over 50 KB are truncated
-    with a ``[TRUNCATED]`` marker so the critic's context remains manageable.
-    """
+    Each finding carries its cited evidence inline (the verbatim span_texts the
+    investigator quoted from the index), so the critic needs no filesystem
+    access — it judges the finding against exactly the citation-gate-verified
+    bytes."""
     if not findings:
         return CriticReport(verdicts=[], tokens_spent=0, time_elapsed_ms=0.0)
 
     t0 = time.monotonic()
 
-    blob_contents: dict[str, str] = {}
-    blobs_dir = case_dir / "audit" / "blobs"
-    for finding in findings:
-        for aid in finding.cited_audit_ids:
-            if aid not in blob_contents:
-                blob_contents[aid] = _load_blob(blobs_dir / f"{aid}.txt")
-        for bp in finding.cited_blob_paths:
-            key = str(bp)
-            if key not in blob_contents:
-                blob_contents[key] = _load_blob(bp)
-
-    prompt = _build_critique_prompt(findings, blob_contents)
+    prompt = _build_critique_prompt(findings)
     deps = CriticDeps(case_dir=case_dir, examiner=examiner, findings_to_review=findings)
 
     agent = build_critic(model=model)
