@@ -29,19 +29,14 @@ class CitationRejectReason(StrEnum):
     """Architectural rejection codes (architecture §4.5).
 
     Every non-exception path through :func:`verify_citation` ends in
-    ``success=True`` or in one of these codes. The set is closed for
-    well-formed audit entries; programmatic invariants (e.g. an audit
-    entry whose ``tool`` was removed from the normalizer's registry)
-    map to :attr:`TOOL_NOT_REGISTERED` rather than propagating exceptions.
+    ``success=True`` or in one of these codes. The set is closed:
+    a citation either names a record that does not exist
+    (:attr:`RECORD_NOT_FOUND`) or quotes text that is not a verbatim
+    substring of that record (:attr:`SPAN_NOT_IN_RECORD`).
     """
 
-    AUDIT_ID_NOT_FOUND = "AUDIT_ID_NOT_FOUND"
-    STDOUT_PATH_MISSING = "STDOUT_PATH_MISSING"
-    STDOUT_PATH_UNREADABLE = "STDOUT_PATH_UNREADABLE"
-    TOOL_NOT_REGISTERED = "TOOL_NOT_REGISTERED"
-    OUTPUT_HASH_MISMATCH = "OUTPUT_HASH_MISMATCH"
-    LINE_RANGE_OUT_OF_BOUNDS = "LINE_RANGE_OUT_OF_BOUNDS"
-    SPAN_NOT_IN_LINES = "SPAN_NOT_IN_LINES"
+    RECORD_NOT_FOUND = "RECORD_NOT_FOUND"
+    SPAN_NOT_IN_RECORD = "SPAN_NOT_IN_RECORD"
 
 
 _BASE_CONFIG = ConfigDict(frozen=True, extra="forbid")

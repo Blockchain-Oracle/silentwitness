@@ -46,12 +46,12 @@ def _seed_findings(case_dir: Path, observation_ids: tuple[str, ...] = ("O-001",)
 
 
 def test_record_interpretation_happy_path_persists_under_observation(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Given O-001 exists, an InterpretationInput with all required
     fields produces I-001 attached under O-001 in findings.json + an
     audit row."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -86,9 +86,9 @@ def test_record_interpretation_happy_path_persists_under_observation(
 
 
 def test_observation_not_found_when_observation_id_absent(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir, observation_ids=("O-001",))
     payload = InterpretationInput(
         observation_id="O-999",
@@ -109,11 +109,11 @@ def test_observation_not_found_when_observation_id_absent(
 
 
 def test_missing_required_field_rejects_whitespace_only_justification(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A whitespace-only justification (passes ``min_length=1``, fails
     post-sanitize content check)."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -131,11 +131,11 @@ def test_missing_required_field_rejects_whitespace_only_justification(
 
 
 def test_missing_required_field_rejects_whitespace_only_text(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A text composed only of whitespace (passes ``min_length=1`` at
     the model level, fails post-sanitize emptiness check)."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -153,9 +153,9 @@ def test_missing_required_field_rejects_whitespace_only_text(
 
 
 def test_missing_required_field_rejects_whitespace_falsification(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -173,11 +173,11 @@ def test_missing_required_field_rejects_whitespace_falsification(
 
 
 def test_justification_too_short_for_high_confidence(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """HIGH confidence with a 20-char justification (below the 50-char
     floor) → JUSTIFICATION_TOO_SHORT_FOR_CONFIDENCE."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -196,9 +196,9 @@ def test_justification_too_short_for_high_confidence(
 
 
 def test_justification_too_short_for_medium_confidence(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -216,11 +216,11 @@ def test_justification_too_short_for_medium_confidence(
 
 
 def test_low_confidence_has_no_justification_floor(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """LOW confidence accepts any non-empty justification — the floor
     only applies to MEDIUM/HIGH."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -242,9 +242,9 @@ def test_low_confidence_has_no_justification_floor(
 
 
 def test_sanitizer_strips_xml_role_token_from_text(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     payload = InterpretationInput(
         observation_id="O-001",
@@ -274,12 +274,12 @@ def test_sanitizer_strips_xml_role_token_from_text(
 
 
 def test_second_interpretation_allocates_distinct_id_and_retains_first(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """The same observation_id interpreted twice retains both — the
     report renderer shows the latest but the audit trail keeps the
     history (architecture §8.1 step 23)."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir)
     first = InterpretationInput(
         observation_id="O-001",
@@ -313,11 +313,11 @@ def test_second_interpretation_allocates_distinct_id_and_retains_first(
 
 
 def test_interpretation_id_is_global_across_observations(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """I-NNN sequence is case-wide, not per-observation — a critic
     citing I-005 must be unambiguous."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_findings(case_dir, observation_ids=("O-001", "O-002"))
     p1 = InterpretationInput(
         observation_id="O-001",

@@ -239,11 +239,12 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         max_lines: int = 200,
     ) -> dict[str, Any]:
         """Read the line-numbered content of a stored tool-output blob (the raw
-        bytes behind a search_evidence / get_record hit) so you can quote EXACT
-        lines in a record_observation citation. Returns an audit_id +
-        sha256_of_normalized_output + numbered lines; pass those (with the line
-        range and the verbatim span_text) as a cited_span. Only files under the
-        case's .tool-output directory are readable. Page via line_start/max_lines."""
+        bytes behind a search_evidence / get_record hit) when you need to inspect
+        more context than the indexed record carries. To CITE evidence, pass
+        {record_id, span_text} from a search_evidence / get_record hit to
+        record_observation — citations resolve against index records, not this
+        blob. Only files under the case's .tool-output directory are readable.
+        Page via line_start/max_lines."""
         guard_mount("read_tool_output", ctx)
         case_dir, _registry, audit, model = _case_deps(ctx)
         allowed_root = (case_dir / ".tool-output").resolve()

@@ -126,9 +126,9 @@ def test_result_discriminator_rejects_failure_with_narrative_id() -> None:
 
 
 def test_multiple_narratives_allocate_n001_then_n002(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     kw = {"case_dir": case_dir, "audit_logger": logger, "model_used": MODEL}
     e1 = record_narrative(_valid_payload(), **kw)
@@ -138,11 +138,11 @@ def test_multiple_narratives_allocate_n001_then_n002(
 
 
 def test_narrative_id_is_case_wide_across_sections(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """The N-NNN sequence is case-wide — a critic citing N-005 is
     unambiguous regardless of section."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     kw = {"case_dir": case_dir, "audit_logger": logger, "model_used": MODEL}
     e1 = record_narrative(_valid_payload(section=ReportSection.FINDINGS), **kw)
@@ -152,12 +152,12 @@ def test_narrative_id_is_case_wide_across_sections(
 
 
 def test_pivot_scanner_tolerates_whitespace_missing_keys_and_non_dict(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """The pivot-id scanner tolerates blank lines, non-dict scalars,
     and dicts missing the ``pivot_id`` key; valid pivot rows still
     drive the existence check."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -193,11 +193,11 @@ def test_pivot_scanner_tolerates_whitespace_missing_keys_and_non_dict(
 
 
 def test_audit_store_corrupted_when_findings_json_not_a_list(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A findings.json whose top level is not a JSON array → AUDIT_
     STORE_CORRUPTED. Audit row still written (architecture §4.4)."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "findings.json").write_text(json.dumps({"not": "a list"}), encoding="utf-8")
     payload = _valid_payload()
@@ -209,11 +209,11 @@ def test_audit_store_corrupted_when_findings_json_not_a_list(
 
 
 def test_audit_store_corrupted_when_observation_id_is_non_string(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A previously-persisted observation with a non-string
     observation_id violates the contract → AUDIT_STORE_CORRUPTED."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [{"observation_id": 42, "text": "broken"}]
     (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
@@ -224,11 +224,11 @@ def test_audit_store_corrupted_when_observation_id_is_non_string(
 
 
 def test_audit_store_corrupted_when_narrative_id_malformed(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A persisted narrative entry whose ``narrative_id`` doesn't match
     N-NNN violates the contract; silent skip would risk a collision."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {"observation_id": "O-001", "text": "seed"},
@@ -242,11 +242,11 @@ def test_audit_store_corrupted_when_narrative_id_malformed(
 
 
 def test_corrupted_pivot_log_with_non_string_pivot_id(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Citing a pivot when hypothesis.jsonl has a malformed pivot_id
     surfaces as AUDIT_STORE_CORRUPTED, not silently as PIVOT_NOT_FOUND."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
@@ -263,12 +263,12 @@ def test_corrupted_pivot_log_with_non_string_pivot_id(
 
 
 def test_audit_store_unwritable_when_findings_write_raises(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Disk-write failure during findings.json allocation →
     AUDIT_STORE_UNWRITABLE."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
 
     def _raise(*_args: object, **_kwargs: object) -> None:
@@ -282,12 +282,12 @@ def test_audit_store_unwritable_when_findings_write_raises(
 
 
 def test_pipeline_internal_error_on_unexpected_exception(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unexpected exception (TypeError from a sanitizer regression) →
     PIPELINE_INTERNAL_ERROR; broad catch prevents leakage."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
 
     def _boom(*_args: object, **_kwargs: object) -> None:
@@ -301,13 +301,13 @@ def test_pipeline_internal_error_on_unexpected_exception(
 
 
 def test_audit_write_failure_preserves_original_rejection(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When audit/findings.jsonl append fails, the original rejection
     (SECTION_NOT_AGENT_WRITABLE) survives under context.original_reason
     so the agent's self-correction loop still sees the real verdict."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
 
     monkeypatch.setattr(
@@ -326,11 +326,11 @@ def test_audit_write_failure_preserves_original_rejection(
 
 
 def test_audit_row_written_on_rejection(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Architecture §4.4: rejections are evidence — audit row written
     even on SECTION_NOT_AGENT_WRITABLE."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = _valid_payload(section=ReportSection.RECOMMENDATIONS)
     record_narrative(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)
@@ -345,11 +345,11 @@ def test_audit_row_written_on_rejection(
 
 
 def test_scanner_tolerates_non_dict_findings_entries(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Hand-edited findings.json with stray non-dict entries — the
     scanner skips them and allocation proceeds."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         "stray string",
@@ -362,11 +362,11 @@ def test_scanner_tolerates_non_dict_findings_entries(
 
 
 def test_empty_findings_file_treated_as_no_observations(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Whitespace-only findings.json → empty observation set, so any
     attack_chain reference fails OBSERVATION_NOT_FOUND."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "findings.json").write_text("   \n   ", encoding="utf-8")
     payload = _valid_payload()

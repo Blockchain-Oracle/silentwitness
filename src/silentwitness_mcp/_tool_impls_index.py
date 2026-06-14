@@ -168,8 +168,8 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
     async def get_record(ctx: Context[ServerSession, AppContext], record_id: int) -> dict[str, Any]:
         """Re-fetch one evidence-index record by ``record_id`` (from a search hit) to
         inspect its full text. The returned text is sanitized + wrapped (untrusted
-        evidence), so it is NOT a byte-for-byte copy; citation verification resolves a
-        finding to the stored tool-output bytes via ``audit_id``, not this string."""
+        evidence) for display; the citation gate verifies a quoted span against the
+        record's authoritative stored text by this same ``record_id``."""
         case_dir, _registry, audit, model = _case_deps(ctx)
         index_path = case_dir / _INDEX_DB
         if not index_path.exists():

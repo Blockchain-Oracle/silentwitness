@@ -14,7 +14,6 @@ from silentwitness_common.ids import make_audit_id
 from silentwitness_common.types import (
     AuditEntry,
     AuditId as SourceAuditId,
-    CitedSpan,
     Confidence as SourceConfidence,
 )
 from silentwitness_mcp.envelope import (
@@ -174,19 +173,6 @@ def test_audit_id_format_gate_also_applies_to_audit_entry() -> None:
             elapsed_ms=10.0,
             examiner="aj",
             model_used="anthropic:claude-opus-4-7",
-        )
-
-
-def test_audit_id_format_gate_also_applies_to_cited_span() -> None:
-    """Citation gate's input — an LLM-emitted CitedSpan — must refuse a
-    malformed audit_id at parse time, before the gate even fires."""
-    with pytest.raises(ValidationError, match=r"does not match sift-"):
-        CitedSpan(
-            audit_id="bogus-id",
-            sha256_of_normalized_output=_SHA,
-            line_start=0,
-            line_end=1,
-            span_text="anything",
         )
 
 

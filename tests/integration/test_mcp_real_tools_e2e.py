@@ -81,23 +81,14 @@ async def _exercise(case_dir: Path) -> dict[str, Any]:
             )
             # record_observation over the wire with a bad citation: exercises the
             # JSON->ObservationInput coercion + citation gate + the at-failure
-            # read_tool_output advisory, without needing spaCy (the citation gate
-            # rejects the unknown audit_id before the entity gate runs).
+            # self-correction advisory, without needing spaCy (the citation gate
+            # rejects the unknown record_id before the entity gate runs).
             out["record_observation_reject"] = _payload(
                 await session.call_tool(
                     "record_observation",
                     {
                         "text": "Host 10.0.0.5 did something.",
-                        "audit_ids": ["sift-ci-20260613-999"],
-                        "cited_spans": [
-                            {
-                                "audit_id": "sift-ci-20260613-999",
-                                "sha256_of_normalized_output": "0" * 64,
-                                "line_start": 0,
-                                "line_end": 1,
-                                "span_text": "something",
-                            }
-                        ],
+                        "cited_spans": [{"record_id": 999999, "span_text": "something"}],
                     },
                 )
             )
@@ -142,9 +133,9 @@ def test_record_observation_runs_over_the_wire_and_rejects_bad_citation(
     res = server_results["record_observation_reject"]
     data = res.get("data") if isinstance(res.get("data"), dict) else {}
     assert data.get("success") is False
-    assert data.get("reason") == "AUDIT_ID_NOT_FOUND"
+    assert data.get("reason") == "RECORD_NOT_FOUND"
     advisories = " ".join(str(a) for a in (res.get("advisories") or []))
-    assert "read_tool_output" in advisories
+    assert "search_evidence" in advisories or "record_id" in advisories
 
 
 def test_read_tool_output_returns_citable_content(server_results: dict[str, Any]) -> None:

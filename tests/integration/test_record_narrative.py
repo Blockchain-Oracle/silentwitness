@@ -72,10 +72,10 @@ def _seed_pivots(case_dir: Path, pivot_ids: tuple[str, ...]) -> None:
 
 
 def test_record_narrative_happy_path_persists_and_emits_audit(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Valid NarrativeInput → N-001 appended to findings.json + audit row."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.FINDINGS,
@@ -109,11 +109,11 @@ def test_record_narrative_happy_path_persists_and_emits_audit(
 
 
 def test_section_not_agent_writable_for_recommendations(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """RECOMMENDATIONS is reserved for the examiner — agent attempts
     must surface as SECTION_NOT_AGENT_WRITABLE, never silently append."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.RECOMMENDATIONS,
@@ -128,9 +128,9 @@ def test_section_not_agent_writable_for_recommendations(
 
 
 def test_section_not_agent_writable_for_appendix_audit(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.APPENDIX_AUDIT,
@@ -149,12 +149,12 @@ def test_section_not_agent_writable_for_appendix_audit(
 
 
 def test_missing_required_field_rejects_whitespace_only_hypothesis(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Whitespace-padded hypothesis passes Pydantic min_length=20 (the
     Pydantic count includes whitespace) but its post-sanitize content
     is empty → MISSING_REQUIRED_FIELD on initial_hypothesis."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.FINDINGS,
@@ -196,11 +196,11 @@ def test_input_rejects_empty_attack_chain() -> None:
 
 
 def test_missing_gaps_rejected_when_attack_chain_exceeds_threshold(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """>3 attack-chain steps + empty gaps → MISSING_GAPS — the
     architectural floor on epistemic honesty for chained findings."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001", "O-002", "O-003", "O-004"))
     chain = tuple(AttackChainStep(observation_id=f"O-{i:03d}") for i in range(1, 5))
     payload = NarrativeInput(
@@ -218,11 +218,11 @@ def test_missing_gaps_rejected_when_attack_chain_exceeds_threshold(
 
 
 def test_gaps_not_required_for_short_attack_chain(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """≤3 attack-chain steps → trivial finding, empty gaps OK. Avoids
     forcing fake gaps for single-pivot cases."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001", "O-002", "O-003"))
     chain = tuple(AttackChainStep(observation_id=f"O-{i:03d}") for i in range(1, 4))
     payload = NarrativeInput(
@@ -238,10 +238,10 @@ def test_gaps_not_required_for_short_attack_chain(
 
 
 def test_gaps_accepted_for_long_attack_chain(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """>3 steps + non-empty gaps → accepted. Pin the positive case."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001", "O-002", "O-003", "O-004"))
     chain = tuple(AttackChainStep(observation_id=f"O-{i:03d}") for i in range(1, 5))
     payload = NarrativeInput(
@@ -261,9 +261,9 @@ def test_gaps_accepted_for_long_attack_chain(
 
 
 def test_observation_not_found_when_attack_chain_references_missing_obs(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.FINDINGS,
@@ -278,9 +278,9 @@ def test_observation_not_found_when_attack_chain_references_missing_obs(
 
 
 def test_pivot_not_found_when_pivot_id_absent_from_log(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     _seed_pivots(case_dir, ("P-001",))
     payload = NarrativeInput(
@@ -297,9 +297,9 @@ def test_pivot_not_found_when_pivot_id_absent_from_log(
 
 
 def test_valid_pivot_id_accepted(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     _seed_pivots(case_dir, ("P-001",))
     payload = NarrativeInput(
@@ -319,9 +319,9 @@ def test_valid_pivot_id_accepted(
 
 
 def test_sanitizer_strips_xml_role_token_from_text(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.FINDINGS,
