@@ -238,9 +238,9 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         line_start: int = 0,
         max_lines: int = 200,
     ) -> dict[str, Any]:
-        """Read the line-numbered content of a stored tool-output file (e.g. a
-        Zeek log path returned by zeek_run) so you can quote EXACT lines in a
-        record_observation citation. Returns an audit_id +
+        """Read the line-numbered content of a stored tool-output blob (the raw
+        bytes behind a search_evidence / get_record hit) so you can quote EXACT
+        lines in a record_observation citation. Returns an audit_id +
         sha256_of_normalized_output + numbered lines; pass those (with the line
         range and the verbatim span_text) as a cited_span. Only files under the
         case's .tool-output directory are readable. Page via line_start/max_lines."""

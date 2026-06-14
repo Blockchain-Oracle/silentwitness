@@ -193,9 +193,9 @@ async def _do_agent_run(
     )
     run_result = await cfg.agent.run(
         f"Investigate case {case_dir.name}.\n\n"
-        "Registered evidence — pass these EXACT paths as the path argument to "
-        f"tools (e.g. zeek_run pcap_path=...):\n{evidence_block}\n\n"
-        "Form your first hypothesis and analyse the evidence above.",
+        "This evidence is parsed into the searchable case index — discover with "
+        f"search_evidence/timeline/get_record (do NOT read raw artifacts):\n{evidence_block}\n\n"
+        "Form your first hypothesis and analyse the evidence by querying the index.",
         deps=deps,
         usage_limits=UsageLimits(request_limit=cfg.max_iters),
     )
