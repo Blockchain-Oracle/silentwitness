@@ -5,9 +5,9 @@ entity gate, and sanitizer under random input. Profile selection:
 ``HYPOTHESIS_PROFILE=dev|ci|slow`` (registered in ``tests/conftest.py``).
 
 Load-bearing property: any randomly constructed valid observation
-(cited spans derived from real tmp-path blob bytes, SHA-256 recomputed)
-must be accepted by both the citation gate AND the entity gate in
-conjunction — see ``test_both_gates_accept_valid_observation``.
+(cited spans quoting verbatim lines of real index records) must be accepted
+by both the citation gate AND the entity gate in conjunction — see
+``test_both_gates_accept_valid_observation`` in test_gate_conjunction.py.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ import hashlib
 
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from hypothesis.strategies import DataObject
-from pytest import TempPathFactory
 
 from silentwitness_mcp.verification._types import CitationRejectReason
 from silentwitness_mcp.verification.citation_gate import verify_citation
@@ -26,10 +25,10 @@ from silentwitness_mcp.verification.sanitizer import StripEvent, sanitize
 from tests.property.strategies import (
     FORGED_MALLORY_PREFIX,
     ForgedMarkerPayload,
-    audit_entry_strategy,
     cited_span_strategy,
     dfir_entity_strategy,
     forged_marker_strategy,
+    index_record_strategy,
     injection_payload_strategy,
     normalizable_output_strategy,
 )
@@ -176,19 +175,17 @@ def test_sanitize_wrap_markers_present(payload: str) -> None:
 
 
 @given(data=st.data())
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
-def test_citation_gate_accepts_valid_construction(
-    tmp_path_factory: TempPathFactory, data: DataObject
-) -> None:
-    """For ANY validly constructed CitedSpan + matching audit_entry the
-    citation gate ACCEPTS. The wedge's strongest property — if this ever
-    fails Hypothesis has found a construction we forgot."""
-    tmpdir = tmp_path_factory.mktemp("citation_accept", numbered=True)
-    entry, payload = data.draw(audit_entry_strategy(tmpdir))
-    span = data.draw(cited_span_strategy(entry, payload))
+@settings(deadline=None)
+def test_citation_gate_accepts_valid_construction(data: DataObject) -> None:
+    """For ANY index record + a CitedSpan quoting one of its verbatim lines, the
+    citation gate ACCEPTS. The wedge's strongest property — if this ever fails
+    Hypothesis has found a construction we forgot."""
+    record = data.draw(index_record_strategy())
+    span = data.draw(cited_span_strategy(record))
     assume(span is not None)
     assert span is not None
-    result = verify_citation(span, audit_index={entry.audit_id: entry})
+    assert record.id is not None
+    result = verify_citation(span, {record.id: record})
     assert result.success is True, (
         f"citation gate rejected a valid construction; reason={result.reason} "
         f"context={result.context}"
@@ -197,49 +194,36 @@ def test_citation_gate_accepts_valid_construction(
 
 @given(
     data=st.data(),
-    bogus_hash=st.text(alphabet="0123456789abcdef", min_size=64, max_size=64),
+    fabricated=st.text(
+        alphabet=st.characters(min_codepoint=0x21, max_codepoint=0x7E),
+        min_size=1,
+        max_size=40,
+    ),
 )
-@settings(suppress_health_check=[HealthCheck.function_scoped_fixture], deadline=None)
-def test_citation_gate_rejects_random_sha256(
-    tmp_path_factory: TempPathFactory, data: DataObject, bogus_hash: str
-) -> None:
-    """A randomly generated sha256 cannot match an arbitrary blob's
-    actual hash (collision-resistance probability 2^-256). The gate
-    must reject with OUTPUT_HASH_MISMATCH."""
-    tmpdir = tmp_path_factory.mktemp("citation_reject_hash", numbered=True)
-    entry, payload = data.draw(audit_entry_strategy(tmpdir))
-    actual = hashlib.sha256(normalize_output(payload, tool=entry.tool)).hexdigest()
-    assume(bogus_hash != actual)  # vacuous collision case
+@settings(deadline=None)
+def test_citation_gate_rejects_span_not_in_record(data: DataObject, fabricated: str) -> None:
+    """A quote that is not a verbatim substring of the cited record → rejected
+    with SPAN_NOT_IN_RECORD (closed-domain hallucination caught)."""
+    record = data.draw(index_record_strategy())
+    assume(fabricated not in record.text)
+    assert record.id is not None
     from silentwitness_common.types import CitedSpan
 
-    span = CitedSpan(
-        audit_id=entry.audit_id,
-        sha256_of_normalized_output=bogus_hash,
-        line_start=0,
-        line_end=1,
-        span_text="anything",
-    )
-    result = verify_citation(span, audit_index={entry.audit_id: entry})
+    span = CitedSpan(record_id=record.id, span_text=fabricated)
+    result = verify_citation(span, {record.id: record})
     assert result.success is False
-    assert result.reason == CitationRejectReason.OUTPUT_HASH_MISMATCH
+    assert result.reason == CitationRejectReason.SPAN_NOT_IN_RECORD
 
 
-@given(seq=st.integers(min_value=1, max_value=999_999))
-def test_citation_gate_rejects_unknown_audit_id(seq: int) -> None:
-    """An audit_id absent from the index → AUDIT_ID_NOT_FOUND. Strategy
-    generates canonical-format ids so the CitedSpan model accepts them."""
+@given(record_id=st.integers(min_value=1, max_value=999_999))
+def test_citation_gate_rejects_unknown_record_id(record_id: int) -> None:
+    """A record_id absent from the resolved lookup → RECORD_NOT_FOUND."""
     from silentwitness_common.types import CitedSpan
 
-    span = CitedSpan(
-        audit_id=f"sift-mallory-20260613-{seq:03d}",
-        sha256_of_normalized_output="a" * 64,
-        line_start=0,
-        line_end=1,
-        span_text="anything",
-    )
-    result = verify_citation(span, audit_index={})
+    span = CitedSpan(record_id=record_id, span_text="anything")
+    result = verify_citation(span, {})
     assert result.success is False
-    assert result.reason == CitationRejectReason.AUDIT_ID_NOT_FOUND
+    assert result.reason == CitationRejectReason.RECORD_NOT_FOUND
 
 
 # ---------------------------------------------------------------------------
@@ -258,13 +242,7 @@ def test_entity_gate_accepts_when_entity_in_cited(entity: str) -> None:
     wrong reason)."""
     from silentwitness_common.types import CitedSpan
 
-    cited = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output="a" * 64,
-        line_start=0,
-        line_end=1,
-        span_text=f"observed {entity} in evidence",
-    )
+    cited = CitedSpan(record_id=1, span_text=f"observed {entity} in evidence")
     result = verify_entities(f"observed {entity}", [cited])
     assert result.success is True, (
         f"entity gate rejected a valid entity; "
@@ -288,13 +266,7 @@ def test_entity_gate_rejects_when_entity_only_in_obs(entity: str) -> None:
     from silentwitness_common.types import CitedSpan
 
     # Use cited text that has no entities — generic prose.
-    cited = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output="a" * 64,
-        line_start=0,
-        line_end=1,
-        span_text="generic evidence text with no actionable entities",
-    )
+    cited = CitedSpan(record_id=1, span_text="generic evidence text with no actionable entities")
     result = verify_entities(f"observed {entity}", [cited])
     assert result.success is False
     assert result.reason == "HALLUCINATED_ENTITIES"
@@ -313,13 +285,7 @@ def test_entity_gate_extracts_entity_kind_consistently(entity: str) -> None:
     not spaCy NER outputs)."""
     from silentwitness_common.types import CitedSpan
 
-    cited = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output="a" * 64,
-        line_start=0,
-        line_end=1,
-        span_text=f"row data {entity} more data",
-    )
+    cited = CitedSpan(record_id=1, span_text=f"row data {entity} more data")
     result = verify_entities(f"row data {entity}", [cited])
     assert result.success is True
     matching = [e for e in result.extracted if e.text == entity]

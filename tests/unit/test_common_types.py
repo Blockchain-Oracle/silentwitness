@@ -38,13 +38,7 @@ _HASH64 = "a" * 64
 
 
 def _cited_span() -> CitedSpan:
-    return CitedSpan(
-        audit_id="sift-aj-20260613-007",
-        sha256_of_normalized_output=_HASH64,
-        line_start=10,
-        line_end=12,
-        span_text="svchost.exe at PID 1208",
-    )
+    return CitedSpan(record_id=11, span_text="svchost.exe at PID 1208")
 
 
 def _data_provenance() -> DataProvenance:
@@ -96,39 +90,20 @@ def test_observation_rejects_unknown_field() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_cited_span_rejects_negative_line_start() -> None:
+def test_cited_span_rejects_zero_record_id() -> None:
+    """record_id is a SQLite rowid — must be >= 1."""
     with pytest.raises(ValidationError):
-        CitedSpan(
-            audit_id="sift-aj-20260613-001",
-            sha256_of_normalized_output=_HASH64,
-            line_start=-1,
-            line_end=5,
-            span_text="x",
-        )
+        CitedSpan(record_id=0, span_text="x")
 
 
-def test_cited_span_rejects_line_end_le_start() -> None:
-    """Half-open Python-slice semantics — line_end must be strictly > line_start."""
+def test_cited_span_rejects_negative_record_id() -> None:
     with pytest.raises(ValidationError):
-        CitedSpan(
-            audit_id="sift-aj-20260613-001",
-            sha256_of_normalized_output=_HASH64,
-            line_start=10,
-            line_end=10,  # equal is now rejected (was accepted under 1-indexed inclusive)
-            span_text="x",
-        )
+        CitedSpan(record_id=-1, span_text="x")
 
 
-def test_cited_span_sha256_normalised_to_lowercase() -> None:
-    """Sha256Hex BeforeValidator lowercases uppercase hex on construction."""
-    span = CitedSpan(
-        audit_id="sift-aj-20260613-001",
-        sha256_of_normalized_output="A" * 64,
-        line_start=0,
-        line_end=1,
-        span_text="x",
-    )
-    assert span.sha256_of_normalized_output == "a" * 64
+def test_cited_span_rejects_empty_span_text() -> None:
+    with pytest.raises(ValidationError):
+        CitedSpan(record_id=1, span_text="")
 
 
 # ---------------------------------------------------------------------------
@@ -331,41 +306,42 @@ def test_tool_response_failure_forbids_data() -> None:
         )
 
 
-def _bare_cited_span(sha: object) -> CitedSpan:
-    """Builder used by Sha256Hex tests — keeps Sha256Hex the only variable."""
-    return CitedSpan(
-        audit_id="sift-aj-20260613-001",
-        sha256_of_normalized_output=sha,  # type: ignore[arg-type]
-        line_start=0,
-        line_end=1,
-        span_text="x",
-    )
+def _validated_sha(sha: object) -> str:
+    """Builder used by Sha256Hex tests — DataProvenance.result_sha256 is a
+    Sha256Hex, so it exercises the same BeforeValidator + StringConstraints
+    with the hash as the only variable."""
+    return DataProvenance(
+        tool="vol_pslist",
+        stdout_path=Path("/x"),
+        result_sha256=sha,  # type: ignore[arg-type]
+        elapsed_ms=1.0,
+        cmd_argv=("vol",),
+    ).result_sha256
 
 
 def test_sha256hex_lowercases_uppercase_input() -> None:
     """The Sha256Hex BeforeValidator must canonicalise to lowercase before
     the StringConstraints pattern check fires."""
-    span = _bare_cited_span("A" * 64)
-    assert span.sha256_of_normalized_output == "a" * 64
+    assert _validated_sha("A" * 64) == "a" * 64
 
 
 def test_sha256hex_rejects_non_hex_characters() -> None:
     """A 64-char non-hex string (e.g. 64 'g' chars) must fail validation."""
     with pytest.raises(ValidationError):
-        _bare_cited_span("g" * 64)
+        _validated_sha("g" * 64)
 
 
 def test_sha256hex_rejects_wrong_length() -> None:
     """A short hex string (e.g. 32 chars) must fail the pattern length anchor."""
     with pytest.raises(ValidationError):
-        _bare_cited_span("a" * 32)
+        _validated_sha("a" * 32)
 
 
 def test_sha256hex_rejects_non_string_input() -> None:
     """A non-string value (int, bytes, None) must fail loudly at the type layer."""
     for bad in (12345, b"a" * 64, None):
         with pytest.raises(ValidationError):
-            _bare_cited_span(bad)
+            _validated_sha(bad)
 
 
 def test_data_provenance_cmd_argv_roundtrip_preserves_tuple() -> None:

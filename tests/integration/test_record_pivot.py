@@ -45,12 +45,12 @@ def _seed_hypothesis_log(case_dir: Path, hypothesis_ids: tuple[str, ...]) -> Non
 
 
 def test_record_pivot_happy_path_emits_hypothesis_event(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A valid PivotInput produces P-001, appends a ``type=pivot`` row
     to hypothesis.jsonl carrying the from/to/reason/abandoning_evidence
     payload, and writes an audit row."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -84,12 +84,12 @@ def test_record_pivot_happy_path_emits_hypothesis_event(
 
 
 def test_future_to_hypothesis_id_is_accepted(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Spec contract: ``to_hypothesis_id`` is NOT validated against the
     log — the agent may record the pivot before forming the child.
     Pins the positive case so a "validate both" refactor fails here."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))  # only H-001 exists
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -103,12 +103,12 @@ def test_future_to_hypothesis_id_is_accepted(
 
 
 def test_from_hypothesis_id_matches_prior_pivot_row(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """`existing_hypothesis_ids` scans every row regardless of event
     type. Pin this so a defensive refactor that filtered to
     ``type=='form'`` would break chained pivots and fail this test."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
@@ -140,12 +140,12 @@ def test_from_hypothesis_id_matches_prior_pivot_row(
     assert envelope.data.pivot_id == "P-002"
 
 
-def test_pivot_count_metric_grep_works(case_env: tuple[Path, Path, AuditLogger]) -> None:
+def test_pivot_count_metric_grep_works(case_env: tuple[Path, AuditLogger]) -> None:
     """PRD §4 secondary metric: ``grep -c '"type":"pivot"'
     hypothesis.jsonl`` returns the pivot count. The emitted JSONL must
     use that key ordering — Pydantic's serialization gives us a stable
     layout."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -164,11 +164,11 @@ def test_pivot_count_metric_grep_works(case_env: tuple[Path, Path, AuditLogger])
 
 
 def test_hypothesis_not_found_when_from_id_absent(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A ``from_hypothesis_id`` that doesn't appear in hypothesis.jsonl
     → HYPOTHESIS_NOT_FOUND with context.field == 'from_hypothesis_id'."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-999",
@@ -183,11 +183,11 @@ def test_hypothesis_not_found_when_from_id_absent(
 
 
 def test_missing_required_field_rejects_whitespace_reason(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A whitespace-only reason passes Pydantic ``min_length=1`` but
     fails the post-sanitize emptiness check."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -202,10 +202,10 @@ def test_missing_required_field_rejects_whitespace_reason(
 
 
 def test_missing_abandoning_evidence_rejects_empty_list(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """An empty abandoning_evidence list → MISSING_ABANDONING_EVIDENCE."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -224,11 +224,11 @@ def test_missing_abandoning_evidence_rejects_empty_list(
 
 
 def test_sanitizer_strips_xml_role_token_from_reason(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Reason with a `<system>` token gets stripped before the event
     persists, and a sanitizer JSONL entry is emitted."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(
         from_hypothesis_id="H-001",
@@ -256,11 +256,11 @@ def test_sanitizer_strips_xml_role_token_from_reason(
 
 
 def test_five_sequential_pivots_allocate_p001_through_p005(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Sequential pivots in the same case allocate P-001..P-005 in
     order and write five ``type=pivot`` rows."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     pivot_ids: list[str] = []
     for i in range(5):

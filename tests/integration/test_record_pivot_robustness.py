@@ -111,10 +111,10 @@ def test_result_discriminator_rejects_failure_with_pivot_id() -> None:
 
 
 def test_audit_row_written_even_on_rejection(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Architecture §4.4: rejections are evidence too."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
     payload = PivotInput(
         from_hypothesis_id="H-999",
@@ -129,12 +129,12 @@ def test_audit_row_written_even_on_rejection(
 
 
 def test_pipeline_internal_error_on_unexpected_exception(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unexpected exception → PIPELINE_INTERNAL_ERROR; broad catch
     prevents leakage past the envelope."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
 
     def _boom(*_args: object, **_kwargs: object) -> None:
@@ -153,12 +153,12 @@ def test_pipeline_internal_error_on_unexpected_exception(
 
 
 def test_audit_store_unwritable_when_append_fails(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Disk-write failure during hypothesis.jsonl append →
     AUDIT_STORE_UNWRITABLE; finally-block still writes the audit row."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
 
     real_append = __import__(
@@ -183,13 +183,13 @@ def test_audit_store_unwritable_when_append_fails(
 
 
 def test_audit_write_failure_preserves_original_rejection(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When audit/findings.jsonl append fails, the result rewrites to
     AUDIT_STORE_UNWRITABLE but preserves the original rejection reason
     under context.original_reason."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
 
     real_append = __import__(
@@ -216,12 +216,12 @@ def test_audit_write_failure_preserves_original_rejection(
 
 
 def test_scanner_tolerates_whitespace_and_non_dict_lines(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """The scanner tolerates blank lines and non-dict scalars (a
     hand-edit may leave a stray ``"\\n"`` or a top-level string).
     Validation still finds the valid form row."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     form_row = json.dumps(
@@ -247,11 +247,11 @@ def test_scanner_tolerates_whitespace_and_non_dict_lines(
 
 
 def test_scanner_skips_dicts_without_hypothesis_id_or_pivot_id(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Dict rows missing the key are tolerated — only dicts CARRYING
     the key but with a malformed value raise."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     rows = [
@@ -270,11 +270,11 @@ def test_scanner_skips_dicts_without_hypothesis_id_or_pivot_id(
 
 
 def test_audit_store_corrupted_on_non_string_hypothesis_id(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A row with ``hypothesis_id`` present but non-string violates the
     persistence contract → AUDIT_STORE_CORRUPTED."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(
@@ -300,11 +300,11 @@ def test_audit_store_corrupted_on_non_string_hypothesis_id(
 
 
 def test_audit_store_corrupted_on_malformed_pivot_id_pattern(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A pivot_id string that doesn't match P-NNN (e.g. legacy ``P-1``)
     raises HypothesisStoreError → AUDIT_STORE_CORRUPTED."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     rows = [
@@ -329,13 +329,13 @@ def test_audit_store_corrupted_on_malformed_pivot_id_pattern(
 
 
 def test_audit_store_corrupted_on_malformed_pivot_id(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A pivot row with a non-string ``pivot_id`` violates the
     persistence contract. The seq scanner raises
     HypothesisStoreError → AUDIT_STORE_CORRUPTED, defending against
     the next allocation colliding with an invisible existing ID."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     record = {
@@ -362,12 +362,12 @@ def test_audit_store_corrupted_on_malformed_pivot_id(
 
 
 def test_audit_store_corrupted_when_hypothesis_jsonl_malformed(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A malformed hypothesis.jsonl (non-JSON line) raises
     JSONDecodeError inside _existing_hypothesis_ids → mapped to
     AUDIT_STORE_CORRUPTED."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     log = case_dir / "audit" / "hypothesis.jsonl"
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text("this is not json\n", encoding="utf-8")

@@ -8,17 +8,14 @@ generators filter at 100% and Hypothesis bails.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Final, NamedTuple
 
 from hypothesis import strategies as st
 
 from silentwitness_common.ids import assert_audit_id_format
-from silentwitness_common.types import AuditEntry, CitedSpan
-from silentwitness_mcp.verification.normalizer import normalize_output
+from silentwitness_common.types import CitedSpan
+from silentwitness_mcp.index.store import IndexRecord
 
 _HASH64 = "a" * 64
 _AUDIT_ID_RE = "sift-aj-20260613-{:03d}"
@@ -92,13 +89,9 @@ def dfir_entity_strategy() -> st.SearchStrategy[str]:
 
 
 # ---------------------------------------------------------------------------
-# AuditEntry + CitedSpan strategies — these write a tmp-path blob and
-# recompute the SHA-256 so the citation gate's hash check always sees
-# matching bytes for the success-path property tests.
+# IndexRecord + CitedSpan strategies — the index-era citation gate resolves a
+# record by id and checks the quoted span is a verbatim substring of its text.
 # ---------------------------------------------------------------------------
-
-
-_TOOL_FOR_PROPERTY_TESTS = "_universal_only"
 
 
 _ASCII_LINE = st.text(
@@ -117,85 +110,47 @@ _UTF8_LINE = st.text(
 )
 
 
-def audit_entry_strategy(tmpdir: Path) -> st.SearchStrategy[tuple[AuditEntry, bytes]]:
-    """Build an AuditEntry + the raw bytes its stdout_path points to.
+def index_record_strategy() -> st.SearchStrategy[IndexRecord]:
+    """Build an IndexRecord with realistic multi-line evidence text + a positive id.
 
-    Payload is one of:
-    * pure ASCII (Vol3-shape baseline)
-    * valid multi-byte UTF-8 (real-world IR output with accents)
-    * BOM-prefixed UTF-8 (EvtxECmd ships these)
-
-    Each example lands in its own ``{tmpdir}/{uuid}`` subdirectory — the
-    audit_id sequence space is 999 wide, so at the slow profile's 5000
-    examples the birthday-paradox collision probability on a shared
-    directory is effectively 1.0. Per-example isolation eliminates the
-    "shrunk example replays into a sibling's overwritten blob" failure
-    mode.
-    """
+    Lines are ASCII or valid multi-byte UTF-8 (real-world IR output with accents).
+    Multiple distinct lines keep the multi-line span-substring paths exercised."""
 
     @st.composite
-    def _build(draw: st.DrawFn) -> tuple[AuditEntry, bytes]:
-        flavour = draw(st.sampled_from(("ascii", "utf8", "bom")))
+    def _build(draw: st.DrawFn) -> IndexRecord:
+        flavour = draw(st.sampled_from(("ascii", "utf8")))
         line_strat = _ASCII_LINE if flavour == "ascii" else _UTF8_LINE
-        # N distinct lines — repeating a single line N times makes the
-        # multi-line span-slice paths untested in the citation gate.
         lines = draw(st.lists(line_strat, min_size=1, max_size=6))
-        body = "\n".join(lines).encode("utf-8")
-        payload = b"\xef\xbb\xbf" + body if flavour == "bom" else body
         seq = draw(st.integers(min_value=1, max_value=999))
-        audit_id = _AUDIT_ID_RE.format(seq)
-        # exist_ok=False — UUID collisions at 48 bits over 5000 examples
-        # are ~7e-5 (effectively zero); a real collision indicates a
-        # seed-replay or a tmpdir-cleanup race we want to surface. The
-        # same flag also fails loudly on PermissionError / NotADirectory
-        # / ENOSPC rather than silently corrupting the test environment.
-        subdir = tmpdir / draw(st.uuids()).hex[:12]
-        subdir.mkdir(parents=True, exist_ok=False)
-        blob_path = subdir / f"{audit_id}.txt"
-        blob_path.write_bytes(payload)
-        entry = AuditEntry(
-            ts=datetime(2026, 6, 13, 14, 27, tzinfo=UTC),
-            audit_id=audit_id,
-            tool=_TOOL_FOR_PROPERTY_TESTS,
-            params={},
-            result_summary={},
-            result_sha256=_HASH64,
-            stdout_path=blob_path,
-            elapsed_ms=10.0,
-            examiner="aj",
-            model_used="anthropic:claude-opus-4-7",
+        return IndexRecord(
+            text="\n".join(lines),
+            source_tool="evtx:Security",
+            audit_id=_AUDIT_ID_RE.format(seq),
+            sha256=_HASH64,
+            id=draw(st.integers(min_value=1, max_value=10**6)),
         )
-        return entry, payload
 
     return _build()
 
 
 @st.composite
-def cited_span_strategy(draw: st.DrawFn, entry: AuditEntry, payload: bytes) -> CitedSpan | None:
-    """Derive a valid CitedSpan from ``entry`` + its raw ``payload``.
+def cited_span_strategy(draw: st.DrawFn, record: IndexRecord) -> CitedSpan | None:
+    """Derive a valid CitedSpan (record_id + verbatim line) from ``record``.
 
-    Returns ``None`` if the normalised text has no non-empty line — the
-    caller filters those out with ``assume(span is not None)``.
+    Returns ``None`` if the record has no non-empty line — the caller filters
+    those out with ``assume(span is not None)``.
     """
-    normalised = normalize_output(payload, tool=entry.tool)
-    text = normalised.decode("utf-8", errors="surrogateescape")
-    lines = text.split("\n")
-    non_empty_lines = [(i, line) for i, line in enumerate(lines) if line]
+    non_empty_lines = [line for line in record.text.split("\n") if line]
     if not non_empty_lines:
         return None
-    line_idx, line_content = draw(st.sampled_from(non_empty_lines))
+    line_content = draw(st.sampled_from(non_empty_lines))
     # Lone surrogates (U+DC80..U+DCFF) are invalid input for the Pydantic
-    # CitedSpan.span_text field — filter them so the strategy only
-    # produces constructable spans.
+    # CitedSpan.span_text field — filter them so the strategy only produces
+    # constructable spans.
     if any(0xDC80 <= ord(c) <= 0xDCFF for c in line_content):
         return None
-    return CitedSpan(
-        audit_id=entry.audit_id,
-        sha256_of_normalized_output=hashlib.sha256(normalised).hexdigest(),
-        line_start=line_idx,
-        line_end=line_idx + 1,
-        span_text=line_content,
-    )
+    assert record.id is not None
+    return CitedSpan(record_id=record.id, span_text=line_content)
 
 
 # ---------------------------------------------------------------------------

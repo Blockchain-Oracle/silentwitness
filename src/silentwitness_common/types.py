@@ -168,22 +168,19 @@ _BASE_CONFIG = ConfigDict(
 
 
 class CitedSpan(BaseModel):
-    """Agent-emitted citation (architecture §4.5). Line indices are 0-based
-    Python-slice semantics (half-open: ``lines[line_start:line_end]``)."""
+    """Agent-emitted citation against the evidence index (architecture §4.5).
+
+    The agent cites one parsed evidence row by its ``record_id`` (the ``id``
+    returned on a ``search_evidence`` / ``get_record`` hit) and quotes the
+    exact ``span_text`` it relies on. The citation gate resolves the record
+    and verifies ``span_text`` is a verbatim substring of the record's stored
+    text; provenance (``audit_id`` / ``source_tool`` / ``sha256``) is read
+    from the authoritative record, never supplied by the agent."""
 
     model_config = _BASE_CONFIG
 
-    audit_id: AuditId
-    sha256_of_normalized_output: Sha256Hex
-    line_start: int = Field(ge=0)
-    line_end: int = Field(ge=0)
+    record_id: int = Field(ge=1)
     span_text: str = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _check_line_range(self) -> CitedSpan:
-        if self.line_end <= self.line_start:
-            raise ValueError(f"line_end ({self.line_end}) must be > line_start ({self.line_start})")
-        return self
 
 
 class DataProvenance(BaseModel):

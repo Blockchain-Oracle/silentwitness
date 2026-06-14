@@ -8,6 +8,7 @@ input rather than raising, so the agent's self-correction loop sees a reason.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from mcp.server.fastmcp import Context, FastMCP
@@ -16,7 +17,6 @@ from pydantic import ValidationError
 
 from silentwitness_mcp._lifecycle import AppContext
 from silentwitness_mcp._tool_impls import _augment_advisories, _case_deps, _GuardFn
-from silentwitness_mcp.findings._audit_index import build_audit_index
 from silentwitness_mcp.findings.interpretation import (
     InterpretationInput,
     record_interpretation as _impl_record_interpretation,
@@ -30,29 +30,48 @@ from silentwitness_mcp.findings.observation import (
     record_observation as _impl_record_observation,
 )
 from silentwitness_mcp.findings.pivot import PivotInput, record_pivot as _impl_record_pivot
+from silentwitness_mcp.index.store import EvidenceIndex, EvidenceIndexError, IndexRecord
 
 FINDING_TOOLS: frozenset[str] = frozenset(
     {"record_observation", "record_interpretation", "record_narrative", "record_pivot"}
 )
 
-# record_observation rejection reasons where re-reading the cited output via
-# read_tool_output is the fix. Surfacing the hint in the REJECTION envelope is the
-# strongest guidance: it is read at the moment of failure, coupled to enforcement.
+_INDEX_DB = "index.db"
+
+# record_observation rejection reasons where re-querying the index is the fix.
+# Surfacing the hint in the REJECTION envelope is the strongest guidance: it is read
+# at the moment of failure, coupled to enforcement.
 _CITATION_FIX_REASONS: frozenset[str] = frozenset(
     {
-        "SPAN_NOT_IN_LINES",
-        "LINE_RANGE_OUT_OF_BOUNDS",
+        "RECORD_NOT_FOUND",
+        "SPAN_NOT_IN_RECORD",
         "HALLUCINATED_ENTITIES",
-        "AUDIT_ID_NOT_FOUND",
-        "OUTPUT_HASH_MISMATCH",
     }
 )
 _CITATION_FIX_HINT = (
-    "To fix: call read_tool_output(output_path=...) on the output whose audit_id you "
-    "cited, locate the exact line containing your claim, and re-submit with that line "
-    "quoted verbatim as span_text, the returned sha256_of_normalized_output, and the "
-    "0-based half-open line range that contains it."
+    "To fix: call search_evidence (or get_record) to find the exact record_id whose "
+    "text contains your claim, and re-submit each cited_span as {record_id, span_text} "
+    "with span_text quoted verbatim from that record."
 )
+
+
+def _cited_records(case_dir: Path, record_ids: set[int]) -> dict[int, IndexRecord]:
+    """Resolve the cited record_ids against the case evidence index.
+
+    Returns only the rows that exist; absent ids are simply missing from the map
+    and the citation gate rejects them as RECORD_NOT_FOUND. If no index has been
+    built yet the map is empty (do NOT open a non-existent db — EvidenceIndex
+    would create an empty one as a side effect)."""
+    index_path = case_dir / _INDEX_DB
+    if not record_ids or not index_path.exists():
+        return {}
+    out: dict[int, IndexRecord] = {}
+    with EvidenceIndex(index_path) as idx:
+        for rid in record_ids:
+            rec = idx.get(rid)
+            if rec is not None:
+                out[rid] = rec
+    return out
 
 
 def register_finding_recorders(mcp: FastMCP, guard_mount: _GuardFn) -> None:
@@ -63,25 +82,34 @@ def register_finding_recorders(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         ctx: Context[ServerSession, AppContext],
         text: str,
         cited_spans: list[dict[str, Any]],
-        audit_ids: list[str],
     ) -> dict[str, Any]:
-        """Record a verifiable observation. Each cited_span = {audit_id,
-        sha256_of_normalized_output, line_start, line_end, span_text}; span_text
-        must appear verbatim in the cited tool output (citation gate) and every
-        named entity must appear in a cited span (entity gate). Rejections are
-        returned, not raised — re-submit with fixes."""
+        """Record a verifiable observation. Each cited_span = {record_id,
+        span_text}, where record_id is the id of an evidence-index record (from
+        search_evidence / get_record) and span_text must appear verbatim in that
+        record (citation gate); every named entity must appear in a cited span
+        (entity gate). Rejections are returned, not raised — re-submit with fixes."""
         guard_mount("record_observation", ctx)
         case_dir, _registry, audit, model = _case_deps(ctx)
         try:
-            payload = ObservationInput.model_validate(
-                {"text": text, "cited_spans": cited_spans, "audit_ids": audit_ids}
-            )
+            payload = ObservationInput.model_validate({"text": text, "cited_spans": cited_spans})
         except (ValidationError, ValueError) as exc:
             return {"success": False, "reason": "INVALID_INPUT", "detail": str(exc)}
+        cited_ids = {span.record_id for span in payload.cited_spans}
+        try:
+            records = _cited_records(case_dir, cited_ids)
+        except EvidenceIndexError as exc:
+            # A present-but-unreadable index (corrupt image / locked file) is a
+            # pre-pipeline failure — return a structured reject (mirrors the
+            # INVALID_INPUT early return) so the agent gets a reason, not a crash.
+            return {
+                "success": False,
+                "reason": "FINDINGS_STORE_CORRUPTED",
+                "detail": f"evidence index unreadable: {exc}",
+            }
         resp = _impl_record_observation(
             payload,
             case_dir=case_dir,
-            audit_index=build_audit_index(case_dir),
+            records=records,
             audit_logger=audit,
             model_used=model,
         )

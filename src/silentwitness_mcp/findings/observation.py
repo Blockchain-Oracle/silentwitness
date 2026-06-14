@@ -20,10 +20,11 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.atomic_io import append_jsonl_line
-from silentwitness_common.types import AuditEntry, AuditId, CitedSpan, ToolResponse
+from silentwitness_common.types import AuditEntry, CitedSpan, ToolResponse
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._id_gen import allocate_observation_id
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
+from silentwitness_mcp.index.store import IndexRecord
 from silentwitness_mcp.verification.citation_gate import verify_citation
 from silentwitness_mcp.verification.entity_gate import (
     EntityGateModelError,
@@ -47,13 +48,8 @@ class ObservationRejectReason(StrEnum):
     Re-declared rather than imported so adding a new citation gate
     code is an explicit decision, not a silent surface widening."""
 
-    AUDIT_ID_NOT_FOUND = "AUDIT_ID_NOT_FOUND"
-    OUTPUT_HASH_MISMATCH = "OUTPUT_HASH_MISMATCH"
-    SPAN_NOT_IN_LINES = "SPAN_NOT_IN_LINES"
-    LINE_RANGE_OUT_OF_BOUNDS = "LINE_RANGE_OUT_OF_BOUNDS"
-    STDOUT_PATH_MISSING = "STDOUT_PATH_MISSING"
-    STDOUT_PATH_UNREADABLE = "STDOUT_PATH_UNREADABLE"
-    TOOL_NOT_REGISTERED = "TOOL_NOT_REGISTERED"
+    RECORD_NOT_FOUND = "RECORD_NOT_FOUND"
+    SPAN_NOT_IN_RECORD = "SPAN_NOT_IN_RECORD"
     HALLUCINATED_ENTITIES = "HALLUCINATED_ENTITIES"
     # Pipeline-failure codes (split per round-2 type-design Critical):
     ENTITY_GATE_UNAVAILABLE = "ENTITY_GATE_UNAVAILABLE"
@@ -66,28 +62,17 @@ _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 
 
 class ObservationInput(BaseModel):
-    """Agent-emitted observation (architecture §4.2 record_observation row)."""
+    """Agent-emitted observation (architecture §4.2 record_observation row).
+
+    Each cited_span names one evidence-index record by ``record_id`` and quotes
+    the ``span_text`` it relies on. Provenance (``audit_id`` / ``source_tool``)
+    is resolved from the authoritative records by the pipeline, not declared by
+    the agent — so there is no agent-supplied audit_id superset to validate."""
 
     model_config = _RESULT_CONFIG
 
     text: str = Field(min_length=1)
     cited_spans: tuple[CitedSpan, ...] = Field(min_length=1)
-    audit_ids: tuple[AuditId, ...] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _cited_audit_ids_subset(self) -> ObservationInput:
-        """The audit_ids tuple is the superset every cited_span's audit_id
-        must appear in (round-1 type-design Important). Architecture §4.2
-        — declared superset enforced, not documented-only."""
-        cited = {span.audit_id for span in self.cited_spans}
-        declared = set(self.audit_ids)
-        missing = cited - declared
-        if missing:
-            raise ValueError(
-                f"cited_spans reference audit_ids {sorted(missing)} not in "
-                f"the declared audit_ids superset"
-            )
-        return self
 
 
 class ObservationResult(BaseModel):
@@ -163,10 +148,11 @@ def _suggested_for_hallucination(hallucinated_texts: tuple[str, ...]) -> str | N
     return (
         f"Entity gate: {offending} do not appear verbatim in any span you cited "
         "— you are likely describing evidence you read but did not cite. Fix by "
-        "EITHER (a) for each entity, add a cited_span whose span_text is the exact "
-        "line containing it (use read_tool_output to locate that line), OR (b) "
-        "remove the entity from observation_text. Quote every entity you name "
-        "byte-for-byte; do not paraphrase it."
+        "EITHER (a) for each entity, add a cited_span {record_id, span_text} whose "
+        "span_text is the exact text containing it — use search_evidence (or "
+        "get_record) to find that record_id — OR (b) remove the entity from "
+        "observation_text. Quote every entity you name byte-for-byte; do not "
+        "paraphrase it."
     )
 
 
@@ -179,7 +165,7 @@ def record_observation(
     payload: ObservationInput,
     *,
     case_dir: Path,
-    audit_index: Mapping[str, AuditEntry],
+    records: Mapping[int, IndexRecord],
     audit_logger: AuditLogger,
     model_used: str,
 ) -> ToolResponse[ObservationResult]:
@@ -199,7 +185,7 @@ def record_observation(
             payload,
             case_dir=case_dir,
             sanitizer_log=sanitizer_log,
-            audit_index=audit_index,
+            records=records,
             pre_audit_id=pre_audit_id,
         )
     except EntityGateModelError as exc:
@@ -246,6 +232,7 @@ def record_observation(
             _write_audit_row(
                 result,
                 payload=payload,
+                records=records,
                 findings_log=findings_log,
                 case_dir=case_dir,
                 audit_id=pre_audit_id,
@@ -276,7 +263,7 @@ def _run_pipeline(
     *,
     case_dir: Path,
     sanitizer_log: Path,
-    audit_index: Mapping[str, AuditEntry],
+    records: Mapping[int, IndexRecord],
     pre_audit_id: str,
 ) -> ObservationResult:
     sanitize_result = sanitize(
@@ -287,7 +274,7 @@ def _run_pipeline(
     sanitized_text = sanitize_result.wrapped_text
 
     for span in payload.cited_spans:
-        verdict = verify_citation(span, audit_index)
+        verdict = verify_citation(span, records)
         if not verdict.success:
             return ObservationResult(
                 success=False,
@@ -308,16 +295,28 @@ def _run_pipeline(
     observation_record = {
         "text": payload.text,
         "cited_spans": [s.model_dump(mode="json") for s in payload.cited_spans],
-        "audit_ids": list(payload.audit_ids),
+        "audit_ids": _resolved_audit_ids(payload.cited_spans, records),
     }
     observation_id = allocate_observation_id(case_dir, observation_record)
     return ObservationResult(success=True, observation_id=observation_id)
+
+
+def _resolved_audit_ids(
+    cited_spans: tuple[CitedSpan, ...], records: Mapping[int, IndexRecord]
+) -> list[str]:
+    """Provenance for the audit trail, read from the authoritative records the
+    agent cited (never agent-supplied). Sorted + de-duplicated; a span whose
+    record_id is absent contributes nothing (the citation gate already rejects
+    that case before we reach here on the accept path)."""
+    audit_ids = {records[s.record_id].audit_id for s in cited_spans if s.record_id in records}
+    return sorted(a for a in audit_ids if a)
 
 
 def _write_audit_row(
     result: ObservationResult,
     *,
     payload: ObservationInput,
+    records: Mapping[int, IndexRecord],
     findings_log: Path,
     case_dir: Path,
     audit_id: str,
@@ -341,7 +340,7 @@ def _write_audit_row(
     scrubbed_params: dict[str, object] = {
         "text": scrub_line_terminators(payload.text),
         "cited_spans": [s.model_dump(mode="json") for s in payload.cited_spans],
-        "audit_ids": list(payload.audit_ids),
+        "audit_ids": _resolved_audit_ids(payload.cited_spans, records),
     }
     entry = AuditEntry(
         ts=datetime.now(UTC),

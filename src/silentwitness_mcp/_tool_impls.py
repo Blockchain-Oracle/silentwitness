@@ -125,7 +125,7 @@ def _collect_output_paths(obj: Any) -> list[str]:
 
     Tools that decompose evidence into files (zeek -> conn.log/http.log/...) report
     those files as ``path`` entries. Surfacing them lets the wrapper tell the agent
-    EXACTLY which files to read_tool_output for citation."""
+    which files it can read_tool_output for additional context."""
     found: list[str] = []
     if isinstance(obj, dict):
         for key, value in obj.items():
@@ -153,15 +153,16 @@ def _augment_advisories(dumped: dict[str, Any], *extra: str | None) -> dict[str,
 
 
 def _read_to_cite_advisory(dumped: dict[str, Any]) -> str | None:
-    """Advisory pointing the agent at read_tool_output for the output files this
-    tool produced. ``None`` when the response carries no file paths."""
+    """Advisory listing the output files this tool produced, for context-gathering
+    via read_tool_output. ``None`` when the response carries no file paths."""
     paths = _collect_output_paths(dumped)
     if not paths:
         return None
     return (
-        "These fields are an INVENTORY of output files, not their content. To cite a "
-        "specific event in record_observation, call read_tool_output(output_path="
-        f"<one of these>) and quote the exact line verbatim: {paths}"
+        "These fields are an INVENTORY of output files, not their content. "
+        "read_tool_output(output_path=<one of these>) shows a file's raw bytes; "
+        "to CITE evidence in record_observation, pass {record_id, span_text} from a "
+        f"search_evidence / get_record hit (citations resolve against index records): {paths}"
     )
 
 
@@ -239,11 +240,12 @@ def register_real_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         max_lines: int = 200,
     ) -> dict[str, Any]:
         """Read the line-numbered content of a stored tool-output blob (the raw
-        bytes behind a search_evidence / get_record hit) so you can quote EXACT
-        lines in a record_observation citation. Returns an audit_id +
-        sha256_of_normalized_output + numbered lines; pass those (with the line
-        range and the verbatim span_text) as a cited_span. Only files under the
-        case's .tool-output directory are readable. Page via line_start/max_lines."""
+        bytes behind a search_evidence / get_record hit) when you need to inspect
+        more context than the indexed record carries. To CITE evidence, pass
+        {record_id, span_text} from a search_evidence / get_record hit to
+        record_observation — citations resolve against index records, not this
+        blob. Only files under the case's .tool-output directory are readable.
+        Page via line_start/max_lines."""
         guard_mount("read_tool_output", ctx)
         case_dir, _registry, audit, model = _case_deps(ctx)
         allowed_root = (case_dir / ".tool-output").resolve()

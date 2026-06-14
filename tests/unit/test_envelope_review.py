@@ -68,13 +68,7 @@ def test_audit_id_format_gate_propagates_into_tuple_elements() -> None:
     ELEMENT, not just on the container."""
     from silentwitness_common.types import Observation
 
-    valid_span = CitedSpan(
-        audit_id=_AUDIT_ID,
-        sha256_of_normalized_output=_SHA,
-        line_start=0,
-        line_end=1,
-        span_text="x",
-    )
+    valid_span = CitedSpan(record_id=1, span_text="x")
     with pytest.raises(ValidationError, match=r"does not match sift-"):
         Observation(
             id="O-001",

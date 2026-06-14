@@ -28,26 +28,23 @@ from silentwitness_mcp.findings.observation import (
     ObservationRejectReason,
     record_observation,
 )
+from silentwitness_mcp.index.store import IndexRecord
 from silentwitness_mcp.verification.entity_gate import EntityGateModelError
-from tests.integration.conftest import (
-    MODEL,
-    cited_span_for,
-    write_blob_and_entry,
-)
+from tests.integration.conftest import MODEL, cited_span_for, make_record
 
-CaseEnv = tuple[Path, Path, AuditLogger]
+CaseEnv = tuple[Path, AuditLogger]
 
-_CONTENT = b"PID 4 System idle process\n"
+_TEXT = "PID 4 System idle process"
 _SPAN_TEXT = "PID 4"
 
 
-def _basic_payload(case_env: CaseEnv) -> tuple[ObservationInput, dict[str, object]]:
-    _case_dir, blobs_dir, logger = case_env
+def _basic_payload(case_env: CaseEnv) -> tuple[ObservationInput, dict[int, IndexRecord]]:
+    _case_dir, logger = case_env
     aid = logger.next_audit_id()
-    entry = write_blob_and_entry(blobs_dir, audit_id=aid, content=_CONTENT)
-    span = cited_span_for(_CONTENT, aid, span_text=_SPAN_TEXT)
-    payload = ObservationInput(text="PID 4 System idle", cited_spans=(span,), audit_ids=(aid,))
-    return payload, {aid: entry}
+    record = make_record(_TEXT, record_id=1, audit_id=aid)
+    span = cited_span_for(_TEXT, record_id=1, span_text=_SPAN_TEXT)
+    payload = ObservationInput(text="PID 4 System idle", cited_spans=(span,))
+    return payload, {1: record}
 
 
 # ---------------------------------------------------------------------------
@@ -63,17 +60,17 @@ def test_audit_write_failure_inside_finally_still_returns_envelope(
     FINDINGS_STORE_UNWRITABLE and STILL return the envelope. Without
     this guard the original pipeline exception would mask everything
     and the audit row would silently vanish."""
-    case_dir, _, _ = case_env
+    case_dir, logger = case_env
     audit_dir = case_dir / "audit"
     audit_dir.mkdir(parents=True, exist_ok=True)
     # Place a directory where the JSONL file should be → append fails.
     (audit_dir / "findings.jsonl").mkdir()
-    payload, audit_index = _basic_payload(case_env)
+    payload, records = _basic_payload(case_env)
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
-        audit_logger=case_env[2],
+        records=records,
+        audit_logger=logger,
         model_used=MODEL,
     )
     # Envelope returns cleanly — that's the load-bearing promise.
@@ -92,20 +89,20 @@ def test_audit_write_failure_inside_finally_still_returns_envelope(
 def test_typeerror_mid_pipeline_caught_as_pipeline_internal_error(
     case_env: CaseEnv, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A TypeError raised by an integration-layer bug (e.g. malformed
-    audit_index) must NOT leak past the envelope. The broadened
-    except Exception is the only thing that catches it."""
+    """A TypeError raised by an integration-layer bug must NOT leak past
+    the envelope. The broadened except Exception is the only thing that
+    catches it."""
 
     def _boom(*_a: object, **_kw: object) -> None:
         raise TypeError("synthetic mid-pipeline TypeError")
 
     monkeypatch.setattr(obs_mod, "verify_citation", _boom)
-    payload, audit_index = _basic_payload(case_env)
-    case_dir, _, logger = case_env
+    payload, records = _basic_payload(case_env)
+    case_dir, logger = case_env
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
+        records=records,
         audit_logger=logger,
         model_used=MODEL,
     )
@@ -126,12 +123,12 @@ def test_importerror_mid_pipeline_caught_as_pipeline_internal_error(
         raise ImportError("synthetic mid-pipeline ImportError")
 
     monkeypatch.setattr(obs_mod, "verify_citation", _boom)
-    payload, audit_index = _basic_payload(case_env)
-    case_dir, _, logger = case_env
+    payload, records = _basic_payload(case_env)
+    case_dir, logger = case_env
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
+        records=records,
         audit_logger=logger,
         model_used=MODEL,
     )
@@ -164,19 +161,18 @@ def test_forbidden_line_terminators_scrubbed_from_audit_row(
     through the audit-row write. A regression that drops one char would
     re-introduce the round-2 silent-failure C2 attack surface for that
     specific char."""
-    case_dir, blobs_dir, logger = case_env
+    case_dir, logger = case_env
     aid = logger.next_audit_id()
-    entry = write_blob_and_entry(blobs_dir, audit_id=aid, content=_CONTENT)
-    span = cited_span_for(_CONTENT, aid, span_text=_SPAN_TEXT)
+    record = make_record(_TEXT, record_id=1, audit_id=aid)
+    span = cited_span_for(_TEXT, record_id=1, span_text=_SPAN_TEXT)
     payload = ObservationInput(
         text=f"PID 4 System{attack_char}injection-{codename}",
         cited_spans=(span,),
-        audit_ids=(aid,),
     )
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index={aid: entry},
+        records={1: record},
         audit_logger=logger,
         model_used=MODEL,
     )
@@ -203,12 +199,12 @@ def test_entity_gate_unavailable_reject(case_env: CaseEnv, monkeypatch: pytest.M
         raise EntityGateModelError("spaCy en_core_web_lg unavailable")
 
     monkeypatch.setattr(obs_mod, "verify_entities", _no_spacy)
-    payload, audit_index = _basic_payload(case_env)
-    case_dir, _, logger = case_env
+    payload, records = _basic_payload(case_env)
+    case_dir, logger = case_env
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
+        records=records,
         audit_logger=logger,
         model_used=MODEL,
     )
@@ -233,12 +229,12 @@ def test_findings_store_unwritable_outer_oserror(
         raise PermissionError("synthetic findings.json EACCES")
 
     monkeypatch.setattr(obs_mod, "allocate_observation_id", _boom)
-    payload, audit_index = _basic_payload(case_env)
-    case_dir, _, logger = case_env
+    payload, records = _basic_payload(case_env)
+    case_dir, logger = case_env
     envelope = record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
+        records=records,
         audit_logger=logger,
         model_used=MODEL,
     )
@@ -265,14 +261,14 @@ def test_exactly_one_audit_row_per_call_regardless_of_outcome(
     appends exactly one row to audit/findings.jsonl regardless of accept,
     reject, or pipeline failure. This property is the load-bearing
     invariant the entire wedge depends on."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     findings_log = case_dir / "audit" / "findings.jsonl"
     rows_before = (
         len([ln for ln in findings_log.read_text().splitlines() if ln.strip()])
         if findings_log.exists()
         else 0
     )
-    payload, audit_index = _basic_payload(case_env)
+    payload, records = _basic_payload(case_env)
 
     if failure_mode == "type_error":
 
@@ -296,7 +292,7 @@ def test_exactly_one_audit_row_per_call_regardless_of_outcome(
     record_observation(
         payload,
         case_dir=case_dir,
-        audit_index=audit_index,
+        records=records,
         audit_logger=logger,
         model_used=MODEL,
     )

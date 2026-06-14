@@ -47,12 +47,12 @@ def _valid_payload(**overrides: object) -> NarrativeInput:
 
 
 def test_allocator_resumes_after_pre_existing_narrative(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Sparse-sequence path: a pre-existing N-005 entry means the next
     allocation MUST be N-006. Catches off-by-one regressions in
     _max_narrative_seq that test_multiple_narratives doesn't see."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {"observation_id": "O-001", "text": "seed"},
@@ -66,11 +66,11 @@ def test_allocator_resumes_after_pre_existing_narrative(
 
 
 def test_sanitized_to_empty_gap_does_not_satisfy_floor(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A gap entry whose content sanitizes to empty does NOT satisfy
     the conditional gaps floor — closes the epistemic-honesty bypass."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001", "O-002", "O-003", "O-004"))
     chain = tuple(AttackChainStep(observation_id=f"O-{i:03d}") for i in range(1, 5))
     payload = NarrativeInput(
@@ -93,11 +93,11 @@ def test_sanitized_to_empty_gap_does_not_satisfy_floor(
 
 
 def test_attack_chain_note_sanitization_emits_sanitizer_row(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A malicious note on an AttackChainStep gets sanitized + emits a
     sanitizer.jsonl row + persisted note carries the envelope."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
     payload = NarrativeInput(
         section=ReportSection.FINDINGS,
@@ -123,7 +123,7 @@ def test_attack_chain_note_sanitization_emits_sanitizer_row(
 
 
 def test_audit_write_failure_on_success_path_preserves_narrative_id(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When the pipeline succeeds (N-NNN allocated + findings.json
@@ -131,7 +131,7 @@ def test_audit_write_failure_on_success_path_preserves_narrative_id(
     narrative_id MUST survive in context.original_narrative_id so
     the agent's next turn knows about the partial commit. Closes a
     silent-failure HIGH."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed_observations(case_dir, ("O-001",))
 
     real_append = __import__(

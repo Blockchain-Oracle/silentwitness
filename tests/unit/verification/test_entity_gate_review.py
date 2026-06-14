@@ -14,13 +14,7 @@ from silentwitness_mcp.verification.entity_gate import verify_entities
 
 
 def _span(text: str) -> CitedSpan:
-    return CitedSpan(
-        audit_id="sift-aj-20260613-007",
-        sha256_of_normalized_output="a" * 64,
-        line_start=0,
-        line_end=1,
-        span_text=text,
-    )
+    return CitedSpan(record_id=1, span_text=text)
 
 
 # ---------------------------------------------------------------------------

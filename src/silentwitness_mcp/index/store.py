@@ -218,8 +218,15 @@ class EvidenceIndex:
         return [self._row_to_record(row) for row in rows]
 
     def get(self, record_id: int) -> IndexRecord | None:
-        """Return the record with ``record_id``, or None if absent."""
-        row = self._conn.execute(_GET_SQL, (record_id,)).fetchone()
+        """Return the record with ``record_id``, or None if absent.
+
+        Raises :class:`EvidenceIndexError` if the underlying database cannot be
+        read (corrupt image, locked file) — callers get a structured error to
+        convert into a rejection rather than a raw ``sqlite3.Error`` stack trace."""
+        try:
+            row = self._conn.execute(_GET_SQL, (record_id,)).fetchone()
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"cannot read record id={record_id}: {exc}") from exc
         return self._row_to_record(row) if row is not None else None
 
     def recent(

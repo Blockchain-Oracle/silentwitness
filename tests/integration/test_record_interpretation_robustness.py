@@ -110,12 +110,12 @@ def test_result_discriminator_rejects_failure_with_interpretation_id() -> None:
 
 
 def test_corrupted_interpretations_list_returns_store_corrupted(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A previous writer that left ``interpretations`` as a non-list
     must surface as FINDINGS_STORE_CORRUPTED — silent overwrite would
     erase legitimate state."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {
@@ -142,11 +142,11 @@ def test_corrupted_interpretations_list_returns_store_corrupted(
 
 
 def test_empty_findings_file_falls_back_to_no_observations(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """Whitespace-only findings.json is treated as no-observations,
     leading to OBSERVATION_NOT_FOUND for any input."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     (case_dir / "findings.json").write_text("   \n  ", encoding="utf-8")
     payload = InterpretationInput(
@@ -164,11 +164,11 @@ def test_empty_findings_file_falls_back_to_no_observations(
 
 
 def test_non_dict_interpretation_entries_are_tolerated(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A non-dict entry (e.g. a stray string from a hand-edit) is
     tolerated by the seq scanner; valid entries still drive allocation."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {
@@ -195,12 +195,12 @@ def test_non_dict_interpretation_entries_are_tolerated(
 
 
 def test_missing_interpretation_id_raises_store_corrupted(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """An entry missing ``interpretation_id`` violates the persistence
     contract — next allocation could collide with an invisible existing
     ID. Surfaces as FINDINGS_STORE_CORRUPTED, not a silent skip."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {
@@ -227,12 +227,12 @@ def test_missing_interpretation_id_raises_store_corrupted(
 
 
 def test_malformed_interpretation_id_raises_store_corrupted(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """A non-matching ``interpretation_id`` (wrong shape, non-string)
     also surfaces as FINDINGS_STORE_CORRUPTED — silent skip would risk
     a collision."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
     findings = [
         {
@@ -259,12 +259,12 @@ def test_malformed_interpretation_id_raises_store_corrupted(
 
 
 def test_audit_row_for_every_call_even_when_pipeline_corrupts(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
 ) -> None:
     """findings.json corrupted (not a list) → FINDINGS_STORE_CORRUPTED,
     audit row still written. Architecture §4.4: rejected attempts are
     evidence too."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     (case_dir / "findings.json").write_text(json.dumps({"not": "a list"}), encoding="utf-8")
     payload = InterpretationInput(
         observation_id="O-001",
@@ -290,12 +290,12 @@ def test_audit_row_for_every_call_even_when_pipeline_corrupts(
 
 
 def test_findings_store_unwritable_when_write_raises_oserror(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Disk-write failure → FINDINGS_STORE_UNWRITABLE; audit row still
     gets written via the finally block."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
 
     def _raise(*_args: object, **_kwargs: object) -> None:
@@ -321,12 +321,12 @@ def test_findings_store_unwritable_when_write_raises_oserror(
 
 
 def test_pipeline_internal_error_on_unexpected_exception(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Unexpected exception (e.g. sanitizer regression raising
     TypeError) → PIPELINE_INTERNAL_ERROR; broad catch prevents leakage."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     case_dir.mkdir(parents=True, exist_ok=True)
 
     def _boom(*_args: object, **_kwargs: object) -> None:
@@ -349,13 +349,13 @@ def test_pipeline_internal_error_on_unexpected_exception(
 
 
 def test_audit_write_failure_preserves_original_rejection(
-    case_env: tuple[Path, Path, AuditLogger],
+    case_env: tuple[Path, AuditLogger],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Audit-write failure preserves the original rejection under
     ``context.original_reason`` so the agent's self-correction loop
     still sees the real verdict."""
-    case_dir, _, logger = case_env
+    case_dir, logger = case_env
     _seed(case_dir)
     monkeypatch.setattr(
         "silentwitness_mcp.findings.interpretation.append_jsonl_line",
