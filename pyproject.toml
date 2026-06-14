@@ -148,7 +148,9 @@ omit = [
     "src/silentwitness_mcp/index/feeders_srum.py",
     "src/silentwitness_mcp/index/feeders_mft.py",
     "src/silentwitness_mcp/index/feeders_usnjrnl.py",
+    "src/silentwitness_mcp/index/ingest.py",
     "src/silentwitness_agent/cli_commands/index_case.py",
+    "src/silentwitness_agent/cli_commands/prepare.py",
 ]
 
 [tool.coverage.report]
