@@ -151,6 +151,10 @@ omit = [
     "src/silentwitness_mcp/index/ingest.py",
     "src/silentwitness_agent/cli_commands/index_case.py",
     "src/silentwitness_agent/cli_commands/prepare.py",
+    # Demoted off the agent surface (Phase 2, firewall #1): their @mcp.tool registrants
+    # are no longer called; kept as feeder impls pending Phase-3 disposition.
+    "src/silentwitness_mcp/_tool_impls_memory.py",
+    "src/silentwitness_mcp/_tool_impls_log.py",
 ]
 
 [tool.coverage.report]
