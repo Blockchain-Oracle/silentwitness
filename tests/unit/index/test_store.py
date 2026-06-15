@@ -165,3 +165,32 @@ def test_persists_across_reopen(tmp_path: Path) -> None:
     with EvidenceIndex(db) as reopened:
         assert reopened.count() == 3
         assert len(reopened.search("powershell")) == 1
+
+
+def test_count_by_source_prefix_aggregates_detections(tmp_path: Path) -> None:
+    db = tmp_path / "index.db"
+    with EvidenceIndex(db) as idx:
+        idx.bulk_ingest(
+            [
+                IndexRecord(text="SIGMA DETECTION rule=A", source_tool="sigma:high"),
+                IndexRecord(text="SIGMA DETECTION rule=B", source_tool="sigma:high"),
+                IndexRecord(text="SIGMA DETECTION rule=C", source_tool="sigma:medium"),
+                IndexRecord(text="EventID=4624", source_tool="evtx:Security"),
+            ]
+        )
+        counts = idx.count_by_source_prefix("sigma:")
+    assert counts == {"sigma:high": 2, "sigma:medium": 1}  # non-sigma excluded
+
+
+def test_count_by_source_prefix_escapes_like_wildcards(tmp_path: Path) -> None:
+    db = tmp_path / "index.db"
+    with EvidenceIndex(db) as idx:
+        idx.bulk_ingest(
+            [
+                IndexRecord(text="x", source_tool="sigma:high"),
+                IndexRecord(text="y", source_tool="sigmaXhigh"),  # would match a raw % wildcard
+            ]
+        )
+        # '%' in the prefix must be treated literally, not as a wildcard
+        assert idx.count_by_source_prefix("sig%") == {}
+        assert idx.count_by_source_prefix("sigma:") == {"sigma:high": 1}

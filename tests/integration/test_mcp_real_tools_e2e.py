@@ -30,7 +30,7 @@ from silentwitness_mcp._case_env import build_server_env
 # Firewall layer #1: the raw-evidence tools (vol_*/zeek/chainsaw/hayabusa/suricata) are
 # demoted to ingest feeders and no longer advertised. The agent's surface is the index
 # query tools + finding recorders + evidence register/verify + read_tool_output.
-_EXPECTED_TOOL_COUNT = 11
+_EXPECTED_TOOL_COUNT = 12
 # approve_finding stays a stub (CLI/examiner-only HMAC approval). Everything else is real.
 _STILL_STUBBED = frozenset({"approve_finding"})
 

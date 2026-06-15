@@ -71,3 +71,62 @@ def test_one_record_sanitizer_failure_withholds_only_that_record(
     assert "good evidence one" in out[0]["text"]
     assert "withheld" in out[1]["text"]
     assert "good evidence two" in out[2]["text"]
+
+
+# ---------------------------------------------------------------------------
+# _detection_summary — pure aggregation (severity order, budget, reconciliation)
+# ---------------------------------------------------------------------------
+from silentwitness_mcp._tool_impls_index import _detection_summary  # noqa: E402
+
+
+def _rec(tool: str, n: int) -> list[IndexRecord]:
+    return [IndexRecord(text=f"{tool} {i}", source_tool=tool) for i in range(n)]
+
+
+def _fetcher(per_tool: dict[str, int]):
+    def fetch(tool: str, lim: int) -> list[IndexRecord]:
+        return _rec(tool, per_tool.get(tool, 0))[:lim]
+
+    return fetch
+
+
+def test_detection_summary_orders_by_level_high_severity_first() -> None:
+    counts = {"sigma:medium": 3, "sigma:critical": 1, "sigma:low": 2}
+    total, by_level, samples = _detection_summary(counts, _fetcher(counts), limit=50)
+    assert total == 6
+    assert list(by_level.keys()) == ["critical", "medium", "low"]  # severity order, not dict order
+    # samples drawn critical-first
+    assert [s.source_tool for s in samples[:1]] == ["sigma:critical"]
+
+
+def test_detection_summary_respects_limit_budget_high_severity_first() -> None:
+    counts = {"sigma:critical": 5, "sigma:high": 5, "sigma:low": 5}
+    _total, _by_level, samples = _detection_summary(counts, _fetcher(counts), limit=7)
+    assert len(samples) == 7  # never exceeds the budget
+    # the 7 drawn are the 5 critical then 2 high — low is starved
+    tools = [s.source_tool for s in samples]
+    assert tools.count("sigma:critical") == 5
+    assert tools.count("sigma:high") == 2
+    assert "sigma:low" not in tools
+
+
+def test_detection_summary_clamps_nonpositive_limit() -> None:
+    counts = {"sigma:high": 3}
+    _total, _by_level, samples = _detection_summary(counts, _fetcher(counts), limit=0)
+    assert len(samples) == 1  # limit<=0 clamps to 1
+
+
+def test_detection_summary_other_bucket_reconciles_total() -> None:
+    # A non-standard level must not be silently dropped from the summary.
+    counts = {"sigma:high": 2, "sigma:weird": 4}
+    total, by_level, _samples = _detection_summary(counts, _fetcher(counts), limit=50)
+    assert total == 6
+    assert by_level == {"high": 2, "other": 4}
+    assert sum(by_level.values()) == total  # always reconciles
+
+
+def test_detection_summary_empty_counts() -> None:
+    total, by_level, samples = _detection_summary({}, _fetcher({}), limit=20)
+    assert total == 0
+    assert by_level == {}
+    assert samples == []

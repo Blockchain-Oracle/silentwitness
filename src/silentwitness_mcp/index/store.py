@@ -257,6 +257,20 @@ class EvidenceIndex:
         """Total rows in the index."""
         return int(self._conn.execute("SELECT COUNT(*) FROM record").fetchone()[0])
 
+    def count_by_source_prefix(self, prefix: str) -> dict[str, int]:
+        """Map ``source_tool`` -> row count for every tool whose name starts with ``prefix``.
+
+        Used to summarise detection rows (``sigma:<level>``) accurately without streaming
+        the (potentially tens of thousands of) matching rows into memory. ``prefix`` is a
+        literal string; ``%``/``_`` in it are escaped so it can't act as a LIKE wildcard."""
+        escaped = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        rows = self._conn.execute(
+            "SELECT source_tool, COUNT(*) FROM record "
+            "WHERE source_tool LIKE ? ESCAPE '\\' GROUP BY source_tool",
+            (escaped + "%",),
+        ).fetchall()
+        return {str(name): int(n) for name, n in rows}
+
     @staticmethod
     def _row_to_record(row: tuple[object, ...]) -> IndexRecord:
         data = dict(zip(_COLUMNS, row, strict=True))

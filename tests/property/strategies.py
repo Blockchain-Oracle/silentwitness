@@ -140,7 +140,9 @@ def cited_span_strategy(draw: st.DrawFn, record: IndexRecord) -> CitedSpan | Non
     Returns ``None`` if the record has no non-empty line — the caller filters
     those out with ``assume(span is not None)``.
     """
-    non_empty_lines = [line for line in record.text.split("\n") if line]
+    # Keep only lines with non-whitespace content: a whitespace-only line (e.g. " ")
+    # is non-empty but fails CitedSpan.span_text validation (min length after strip).
+    non_empty_lines = [line for line in record.text.split("\n") if line.strip()]
     if not non_empty_lines:
         return None
     line_content = draw(st.sampled_from(non_empty_lines))

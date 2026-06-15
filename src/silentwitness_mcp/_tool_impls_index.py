@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +33,14 @@ from silentwitness_mcp.verification.sanitizer import StripEvent, StripEventWrite
 
 _LOG = logging.getLogger(__name__)
 
-INDEX_TOOLS: frozenset[str] = frozenset({"search_evidence", "get_record", "timeline"})
+INDEX_TOOLS: frozenset[str] = frozenset(
+    {"search_evidence", "get_record", "timeline", "list_detections"}
+)
+
+# Detection rows are tagged ``sigma:<level>``; severity order for summary + sampling.
+_DETECTION_PREFIX = "sigma:"
+_DETECTION_LEVELS = ("critical", "high", "medium", "low", "informational")
+_DETECTION_SAMPLE_DEFAULT = 20
 
 _INDEX_DB = "index.db"
 _DEFAULT_LIMIT = 50
@@ -94,6 +102,37 @@ def _sanitized_records(
             text = _REDACTED
         out.append(_record_dict(rec, sanitize_text=text))
     return out
+
+
+def _detection_summary(
+    counts: dict[str, int],
+    fetch: Callable[[str, int], list[IndexRecord]],
+    limit: int,
+) -> tuple[int, dict[str, int], list[IndexRecord]]:
+    """Reduce ``source_tool -> count`` into (total, by_level, samples).
+
+    ``by_level`` is ordered highest-severity-first and ALWAYS reconciles with ``total``: any
+    ``sigma:*`` tool whose level isn't one of the standard severities lands in an ``other``
+    bucket rather than being silently dropped from the summary. Samples are drawn
+    highest-severity-first until the (clamped) ``limit`` budget is exhausted."""
+    total = sum(counts.values())
+    by_level: dict[str, int] = {}
+    samples: list[IndexRecord] = []
+    remaining = min(max(1, limit), _MAX_LIMIT)
+    for level in _DETECTION_LEVELS:
+        count = counts.get(f"{_DETECTION_PREFIX}{level}", 0)
+        if not count:
+            continue
+        by_level[level] = count
+        if remaining > 0:
+            rows = fetch(f"{_DETECTION_PREFIX}{level}", remaining)
+            samples.extend(rows)
+            remaining -= len(rows)
+    known = {f"{_DETECTION_PREFIX}{lvl}" for lvl in _DETECTION_LEVELS}
+    other = sum(n for tool, n in counts.items() if tool not in known)
+    if other:
+        by_level["other"] = other
+    return total, by_level, samples
 
 
 def _emit(
@@ -183,6 +222,46 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         _emit(audit, "get_record", {"record_id": record_id}, {"found": True}, index_path, t0, model)
         record = _sanitized_records([rec], audit_id=audit_id, case_dir=case_dir)[0]
         return {"success": True, "record": record}
+
+    @mcp.tool()
+    async def list_detections(
+        ctx: Context[ServerSession, AppContext],
+        limit: int = _DETECTION_SAMPLE_DEFAULT,
+    ) -> dict[str, Any]:
+        """Summarise the Sigma auto-detection hits staged during ingest — the recommended
+        STARTING point for an investigation. Returns accurate per-severity counts plus the
+        top sample detections (highest severity first), each a citable index record. Use
+        this before blind search to anchor on what the rules already flagged."""
+        case_dir, _registry, audit, model = _case_deps(ctx)
+        index_path = case_dir / _INDEX_DB
+        if not index_path.exists():
+            return _refuse("INDEX_NOT_BUILT", _NO_INDEX)
+        t0 = time.monotonic()
+        audit_id = audit.next_audit_id()
+        with EvidenceIndex(index_path) as idx:
+            counts = idx.count_by_source_prefix(_DETECTION_PREFIX)
+            total, by_level, samples = _detection_summary(
+                counts,
+                lambda tool, lim: idx.recent(source_tool=tool, limit=lim),
+                limit,
+            )
+        results = _sanitized_records(samples, audit_id=audit_id, case_dir=case_dir)
+        _emit(
+            audit,
+            "list_detections",
+            {"limit": limit},
+            {"total": total, "by_level": by_level},
+            index_path,
+            t0,
+            model,
+        )
+        return {
+            "success": True,
+            "audit_id": audit_id,
+            "total": total,
+            "by_level": by_level,
+            "samples": results,
+        }
 
     @mcp.tool()
     async def timeline(
