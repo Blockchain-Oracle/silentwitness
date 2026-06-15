@@ -16,11 +16,14 @@ from typing import IO, Any, Final
 import yaml
 
 from silentwitness_common.atomic_io import write_json_atomic
+from silentwitness_mcp.findings.corroboration import CorroborationTier, classify
+from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
 
 _FINDINGS_FILENAME: Final = "findings.json"
 _CASE_YAML_FILENAME: Final = "CASE.yaml"
+_INDEX_DB: Final = "index.db"
 _LOCK_FILENAME: Final = ".findings.lock"
 _FINDING_SEQ_RE: Final = re.compile(r"^F-(\d+)$")
 
@@ -98,6 +101,67 @@ def locate_finding(findings: list[Any], finding_id: str) -> tuple[int, dict[str,
     return None
 
 
+def _observation_record_ids(observation_dict: dict[str, Any]) -> set[int]:
+    """Extract integer record_ids from an observation's cited_spans.
+
+    Malformed entries (non-dict spans, non-int record_id) are LOGGED at WARNING
+    rather than silently dropped — a schema regression in ``cited_spans`` would
+    otherwise quietly downgrade findings to UNVERIFIED with no operator signal
+    (round-1 review caught this as a silent-failure HIGH)."""
+    oid = observation_dict.get("observation_id", "?")
+    out: set[int] = set()
+    dropped = 0
+    for span in observation_dict.get("cited_spans", []) or []:
+        if not isinstance(span, dict):
+            dropped += 1
+            continue
+        rid = span.get("record_id")
+        if isinstance(rid, int):
+            out.add(rid)
+        else:
+            dropped += 1
+    if dropped:
+        _LOG.warning(
+            "corroboration: observation %s has %d malformed cited_span(s); "
+            "they will not contribute to the tier",
+            oid,
+            dropped,
+        )
+    return out
+
+
+def _classify_with_index(
+    record_ids: set[int],
+    idx: EvidenceIndex | None,
+    observation_id: str,
+) -> tuple[CorroborationTier, list[str]]:
+    """Resolve record_ids against an already-open ``idx`` (or None) and classify.
+
+    Hoisting the EvidenceIndex above the per-observation loop (one open per
+    materialise() call instead of one per observation) is a perf win on real-case
+    runs with N observations against a 1.8GB index. Missing record_ids — a stale
+    citation pointing at evidence that was re-indexed away — are LOGGED rather
+    than silently dropped (round-1 review HIGH)."""
+    records: list[IndexRecord] = []
+    missing = 0
+    if idx is not None and record_ids:
+        for rid in record_ids:
+            rec = idx.get(rid)
+            if rec is None:
+                missing += 1
+            else:
+                records.append(rec)
+    if missing:
+        _LOG.warning(
+            "corroboration: observation %s cited %d record_id(s) absent from "
+            "index.db (stale citation or re-indexed evidence); tier may downgrade",
+            observation_id,
+            missing,
+        )
+    tier, categories = classify(records)
+    return tier, sorted(categories)
+
+
 def _max_finding_seq(findings: list[Any]) -> int:
     mx = 0
     for item in findings:
@@ -128,38 +192,55 @@ def materialize_findings(case_dir: Path) -> list[str]:
             if isinstance(item, dict) and item.get("finding_id") and item.get("observation_id")
         }
         seq = _max_finding_seq(findings)
-        for item in list(findings):
-            if not isinstance(item, dict):
-                continue
-            oid = item.get("observation_id")
-            if not isinstance(oid, str) or oid in covered:
-                continue
-            interps = [i for i in item.get("interpretations", []) or [] if isinstance(i, dict)]
-            iid = interps[-1].get("interpretation_id") if interps else None
-            if not isinstance(iid, str):
-                # An observation WITH interpretations but no usable id is a schema
-                # drift worth surfacing (it would otherwise vanish from review with
-                # no signal). Zero interpretations is legitimate "not yet ready".
-                if interps:
-                    _LOG.warning(
-                        "materialize_findings: observation %s has interpretations but the "
-                        "latest lacks a string interpretation_id; no finding created",
-                        oid,
-                    )
-                continue
-            seq += 1
-            fid = f"F-{seq:03d}"
-            findings.append(
-                {
-                    "finding_id": fid,
-                    "observation_id": oid,
-                    "interpretation_id": iid,
-                    "status": "DRAFT",
-                    "staged_at": datetime.now(UTC).isoformat(),
-                }
-            )
-            covered.add(oid)
-            created.append(fid)
+        # Phase 6a: open the index ONCE per call rather than per observation —
+        # round-1 review flagged the per-call open as a perf regression on
+        # real-case runs with N pending observations.
+        index_path = case_dir / _INDEX_DB
+        idx_ctx: EvidenceIndex | None = EvidenceIndex(index_path) if index_path.exists() else None
+        try:
+            for item in list(findings):
+                if not isinstance(item, dict):
+                    continue
+                oid = item.get("observation_id")
+                if not isinstance(oid, str) or oid in covered:
+                    continue
+                interps = [i for i in item.get("interpretations", []) or [] if isinstance(i, dict)]
+                iid = interps[-1].get("interpretation_id") if interps else None
+                if not isinstance(iid, str):
+                    # An observation WITH interpretations but no usable id is a schema
+                    # drift worth surfacing (it would otherwise vanish from review with
+                    # no signal). Zero interpretations is legitimate "not yet ready".
+                    if interps:
+                        _LOG.warning(
+                            "materialize_findings: observation %s has interpretations but the "
+                            "latest lacks a string interpretation_id; no finding created",
+                            oid,
+                        )
+                    continue
+                seq += 1
+                fid = f"F-{seq:03d}"
+                # Phase 6a: advisory corroboration tier from cited-record category diversity.
+                # Computed once at materialise time and frozen on the row — `covered` skips
+                # already-materialised observations on subsequent calls, so the tier is
+                # naturally idempotent (no re-classify against a later index state).
+                record_ids = _observation_record_ids(item)
+                tier, categories = _classify_with_index(record_ids, idx_ctx, oid)
+                findings.append(
+                    {
+                        "finding_id": fid,
+                        "observation_id": oid,
+                        "interpretation_id": iid,
+                        "status": "DRAFT",
+                        "staged_at": datetime.now(UTC).isoformat(),
+                        "corroboration_tier": tier.value,
+                        "corroboration_categories": categories,
+                    }
+                )
+                covered.add(oid)
+                created.append(fid)
+        finally:
+            if idx_ctx is not None:
+                idx_ctx.close()
         if created:
             write_json_atomic(case_dir / _FINDINGS_FILENAME, findings)
     return created

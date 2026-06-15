@@ -159,16 +159,27 @@ def compose_methodology(case_dir: Path) -> str:
     return f"Tools used during this investigation:\n\n{tool_lines}\n"
 
 
+def _corroboration_badge(finding: dict[str, Any]) -> str:
+    """Tier badge for a finding (empty for legacy/no-tier findings)."""
+    tier = finding.get("corroboration_tier")
+    if not isinstance(tier, str) or not tier:
+        return ""
+    cats = finding.get("corroboration_categories")
+    suffix = f" · {' + '.join(str(c) for c in cats)}" if isinstance(cats, list) and cats else ""
+    return f"**Corroboration:** `{tier}`{suffix}  \n"
+
+
 def compose_findings(
     approved: list[dict[str, Any]],
     observations: dict[str, dict[str, Any]],
 ) -> str:
     """Approved findings + provisional (DRAFT) findings from staged observations.
 
-    The report drafts itself as the case unfolds: examiner-approved findings get
-    the full signed treatment, and observations the agent has staged (with their
-    interpretation, if recorded) render as clearly-marked provisional findings so
-    the report is never empty mid-investigation."""
+    The report drafts itself as the case unfolds — examiner-approved findings get
+    the signed treatment, observations the agent has staged render as DRAFT so the
+    report is never empty mid-investigation. Each approved finding carries a
+    `Corroboration:` badge from the materialised tier (Phase 6a); legacy findings
+    without the field render unchanged."""
     parts: list[str] = []
     for finding in approved:
         fid = finding.get("finding_id", "F-???")
@@ -191,6 +202,7 @@ def compose_findings(
         section = (
             f"### {fid} — {title}\n\n"
             f"**Confidence:** {confidence}  \n"
+            f"{_corroboration_badge(finding)}"
             f"**Affected systems:** _To be completed by examiner._\n\n"
             f"{interp_text}\n\n"
             f"**Supporting evidence:**\n\n"
