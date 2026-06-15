@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
@@ -30,6 +30,13 @@ _LOG = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "anthropic:claude-opus-4-7"
 _DEFAULT_MAX_ITERS = 50
+# How many times the coverage gate may bounce the agent back before it is allowed to
+# finalize regardless — so a genuinely-unanswerable question can't deadlock the run. Each
+# bounce consumes one of the Agent ``retries`` below, which is SHARED with tool-call and
+# output-schema retries — so the budget is set with headroom above the cap to leave room
+# for those without tripping pydantic-ai's "exceeded retries" error.
+_MAX_COVERAGE_GATE_ATTEMPTS = 3
+_OUTPUT_RETRIES = 12
 
 try:
     _SYSTEM_PROMPT: str = (
@@ -56,6 +63,10 @@ class InvestigatorDeps(BaseModel):
     # into the agent's context each turn by the pending-critique instruction so
     # the investigator can revise or corroborate the challenged finding.
     pending_critiques: list[CriticVerdictRecord] = Field(default_factory=list)
+    # How many times the coverage gate has bounced this run back (see the output
+    # validator); capped at _MAX_COVERAGE_GATE_ATTEMPTS so an unanswerable question
+    # can't deadlock the agent.
+    coverage_gate_attempts: int = 0
 
 
 class InvestigatorResult(BaseModel):
@@ -181,7 +192,39 @@ def build_investigator(
         toolsets=[mcp_server],
         capabilities=capabilities,
         model_settings=cache_settings(resolved_model),
+        retries=_OUTPUT_RETRIES,
     )
+
+    @agent.output_validator
+    def _enforce_question_coverage(
+        ctx: RunContext[InvestigatorDeps], output: InvestigatorResult
+    ) -> InvestigatorResult:
+        """Refuse to finalize while a Key Question has no supporting observation.
+
+        Structural breadth: instead of trusting the model to explore, the gate reads the
+        recorded observations and bounces the agent back (``ModelRetry``) naming each
+        unanswered question + the artifact types that bear on it — until all five are
+        addressed or the bounce budget is spent (so an unanswerable question can't
+        deadlock the run)."""
+        from silentwitness_agent.coverage import analyze_coverage, coverage_gap_message
+
+        report = analyze_coverage(ctx.deps.case_dir)
+        if ctx.deps.coverage_gate_attempts >= _MAX_COVERAGE_GATE_ATTEMPTS:
+            # Bounce budget spent — finalize, but do NOT let an incomplete investigation
+            # masquerade as complete: surface the still-open questions loudly.
+            if not report.is_complete:
+                _LOG.warning(
+                    "coverage gate gave up after %d attempts; UNANSWERED Key Questions: %s",
+                    ctx.deps.coverage_gate_attempts,
+                    ", ".join(q.qid for q in report.uncovered),
+                )
+            return output
+        message = coverage_gap_message(report)
+        if message is None:
+            return output
+        ctx.deps.coverage_gate_attempts += 1
+        raise ModelRetry(message)
+
     return _AgentConfig(
         agent=agent, model_str=model_str, max_iters=max_iters, mcp_server=mcp_server
     )
@@ -202,7 +245,7 @@ async def investigate(
     with reason ``"MAX_ITERATIONS"`` before returning a partial result.
     Queued hypotheses are left in ACTIVE state in the audit log on this path.
     """
-    from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
 
     cfg = build_investigator(
         case_dir, examiner, model=model, max_iterations=max_iterations, hooks=hooks
@@ -279,6 +322,33 @@ async def investigate(
             findings_staged=0,
             total_tool_calls=0,
             total_tokens_consumed=0,
+        )
+
+    except UnexpectedModelBehavior as exc:
+        # e.g. the shared retry budget (tool + output + coverage-gate bounces) is exhausted.
+        # Return a partial ERROR result rather than crashing the whole run — and abandon the
+        # active hypothesis so it isn't left ACTIVE in the audit log.
+        _LOG.warning(
+            "investigate: model behaviour error for examiner=%s (likely retry budget "
+            "exhausted): %s",
+            examiner,
+            exc,
+            exc_info=True,
+        )
+        snap = stack.snapshot()
+        if snap.active:
+            try:
+                stack.abandon(snap.active.id, "ERROR")
+            except Exception as abandon_exc:
+                _LOG.error(
+                    "investigate: failed to emit ABANDON for %s after ERROR (examiner=%s): %s",
+                    snap.active.id,
+                    examiner,
+                    abandon_exc,
+                    exc_info=True,
+                )
+        return _build_result(
+            final_state="ERROR", findings_staged=0, total_tool_calls=0, total_tokens_consumed=0
         )
 
 

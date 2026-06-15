@@ -1,0 +1,160 @@
+/root/silentwitness/src/silentwitness_agent/investigator.py:141: PydanticAIDeprecationWarning: In v2.0, 'openai:' will resolve to the OpenAI Responses API by default. Use 'openai-chat:' to keep current Chat Completions behavior, or 'openai-responses:' to opt in early.
+  return infer_model(model_str)
+/root/silentwitness/src/silentwitness_agent/specialists/_base.py:96: PydanticAIDeprecationWarning: In v2.0, 'openai:' will resolve to the OpenAI Responses API by default. Use 'openai-chat:' to keep current Chat Completions behavior, or 'openai-responses:' to opt in early.
+  return infer_model(value)
+silentwitness v1.4.5 starting (transport=stdio)
+[06/15/26 14:25:30] INFO     evidence mount check: OK          _lifecycle.py:182
+                    INFO     mount: evidence mount /evidence   _lifecycle.py:189
+                             does not exist (dev/test
+                             environment; hard mount check
+                             skipped)
+                    INFO     injection-pattern catalog loaded: _lifecycle.py:191
+                             8 patterns
+                    INFO     case bound:                       _lifecycle.py:206
+                             /root/silentwitness/cases/rocba
+                             (examiner=analyst,
+                             model=openai:gpt-5.2)
+                    INFO     Processing request of type            server.py:727
+                             ListToolsRequest
+EVT {"event": "step", "active_hypothesis_id": null, "ts": "2026-06-15T12:25:38.306589+00:00"}
+EVT {"ts": "2026-06-15T12:25:38.315210Z", "type": "form", "hypothesis_id": "H-001", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-001", "ts": "2026-06-15T12:25:41.696810+00:00"}
+[06/15/26 14:25:41] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-001", "ts": "2026-06-15T12:25:53.331287+00:00"}
+[06/15/26 14:25:53] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-001", "ts": "2026-06-15T12:25:55.079069+00:00"}
+[06/15/26 14:25:55] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-001", "ts": "2026-06-15T12:25:59.435676+00:00"}
+EVT {"ts": "2026-06-15T12:25:59.442107Z", "type": "pivot", "hypothesis_id": "H-001", "reason": "Search for \"4624 AND LogonType 10\" returned only 4624 events with LogonType=5 (service logons) and no LogonType=10 RDP successes in the sample set, while Sigma detections show extensive 4625 failures with LogonType=3 from multiple IPs (e.g.", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_PIVOTED"}
+EVT {"ts": "2026-06-15T12:25:59.444425Z", "type": "form", "hypothesis_id": "H-002", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:01.412846+00:00"}
+[06/15/26 14:26:01] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:03.187924+00:00"}
+[06/15/26 14:26:03] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:06.092267+00:00"}
+[06/15/26 14:26:06] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:09.001850+00:00"}
+[06/15/26 14:26:09] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:12.549713+00:00"}
+[06/15/26 14:26:12] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:23.104774+00:00"}
+[06/15/26 14:26:23] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-002", "ts": "2026-06-15T12:26:25.647625+00:00"}
+EVT {"ts": "2026-06-15T12:26:25.655159Z", "type": "confirm", "hypothesis_id": "H-002", "reason": "", "related_audit_ids": ["sift-analyst-20260615-201", "sift-analyst-20260615-202", "sift-analyst-20260615-199", "sift-analyst-20260615-196", "sift-analyst-20260615-191"], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_CONFIRMED"}
+EVT {"event": "step", "active_hypothesis_id": null, "ts": "2026-06-15T12:26:30.267210+00:00"}
+EVT {"ts": "2026-06-15T12:26:30.272228Z", "type": "form", "hypothesis_id": "H-003", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:33.230072+00:00"}
+[06/15/26 14:26:33] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:35.258536+00:00"}
+[06/15/26 14:26:35] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:36.682923+00:00"}
+[06/15/26 14:26:36] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:38.314145+00:00"}
+[06/15/26 14:26:38] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:41.492716+00:00"}
+[06/15/26 14:26:41] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:45.956639+00:00"}
+[06/15/26 14:26:45] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-003", "ts": "2026-06-15T12:26:47.813667+00:00"}
+EVT {"ts": "2026-06-15T12:26:47.820298Z", "type": "confirm", "hypothesis_id": "H-003", "reason": "", "related_audit_ids": ["sift-analyst-20260615-212", "sift-analyst-20260615-213", "sift-analyst-20260615-208", "sift-analyst-20260615-210"], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_CONFIRMED"}
+EVT {"event": "step", "active_hypothesis_id": null, "ts": "2026-06-15T12:26:52.186472+00:00"}
+EVT {"ts": "2026-06-15T12:26:52.195232Z", "type": "form", "hypothesis_id": "H-004", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:04.780212+00:00"}
+[06/15/26 14:27:04] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:07.868367+00:00"}
+[06/15/26 14:27:07] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:12.816687+00:00"}
+[06/15/26 14:27:12] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:14.378271+00:00"}
+[06/15/26 14:27:14] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:24.641457+00:00"}
+[06/15/26 14:27:24] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:30.733731+00:00"}
+[06/15/26 14:27:30] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:37.134604+00:00"}
+[06/15/26 14:27:37] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:39.797999+00:00"}
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:45.686672+00:00"}
+EVT {"ts": "2026-06-15T12:27:45.697900Z", "type": "form", "hypothesis_id": "H-005", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:47.904801+00:00"}
+[06/15/26 14:27:47] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:27:51.824601+00:00"}
+[06/15/26 14:27:51] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+/root/silentwitness/src/silentwitness_agent/critic.py:114: PydanticAIDeprecationWarning: In v2.0, 'openai:' will resolve to the OpenAI Responses API by default. Use 'openai-chat:' to keep current Chat Completions behavior, or 'openai-responses:' to opt in early.
+  return infer_model(model_str)
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:09.135927+00:00"}
+[06/15/26 14:28:09] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:12.284903+00:00"}
+[06/15/26 14:28:12] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:17.350044+00:00"}
+[06/15/26 14:28:17] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:34.031247+00:00"}
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:38.766838+00:00"}
+EVT {"ts": "2026-06-15T12:28:38.775190Z", "type": "form", "hypothesis_id": "H-006", "reason": "", "related_audit_ids": [], "tokens_spent": 0, "steps_spent": 0, "event": "HYPOTHESIS_FORMED"}
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:41.050620+00:00"}
+[06/15/26 14:28:41] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:46.911247+00:00"}
+[06/15/26 14:28:46] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:49.918395+00:00"}
+[06/15/26 14:28:49] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+                    INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:28:55.380162+00:00"}
+[06/15/26 14:28:55] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:29:01.888173+00:00"}
+[06/15/26 14:29:01] INFO     Processing request of type            server.py:727
+                             CallToolRequest
+EVT {"event": "step", "active_hypothesis_id": "H-004", "ts": "2026-06-15T12:29:04.247140+00:00"}
+[06/15/26 14:29:04] INFO     silentwitness server shutdown     _lifecycle.py:233
+                             complete

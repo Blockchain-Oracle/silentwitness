@@ -1,0 +1,122 @@
+[
+  {
+    "id": "GT-ROC-001",
+    "dataset_id": "rocba",
+    "category": "user_profile",
+    "summary": "Subject is Fred Rocba, a remote technical engineer at Stark Research Labs (SRL)",
+    "expected_artifact_substrings": ["fredr", "Rocba"],
+    "expected_path_globs": ["*Users/fredr*", "*Users\\fredr*"],
+    "supporting_question_id": "Q1",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx speaker notes: Fred Rocba, a technical engineer, was hired at Stark Research Labs (SRL) in October 2020 and worked from home. Windows 10, single user 'fredr'."
+  },
+  {
+    "id": "GT-ROC-002",
+    "dataset_id": "rocba",
+    "category": "credential",
+    "summary": "SRL Office365 mailbox frocba@stark-research-labs.com (the corporate IP-access identity)",
+    "expected_artifact_substrings": ["frocba", "stark-research-labs"],
+    "expected_path_globs": [],
+    "supporting_question_id": "Q1",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: Office365 mailbox frocba@stark-research-labs.com; SRL is a biotech/metals/advanced-alloy R&D lab and a repeated nation-state target."
+  },
+  {
+    "id": "GT-ROC-003",
+    "dataset_id": "rocba",
+    "category": "network_indicator",
+    "summary": "Remote access via RDP — the work-from-home and intrusion vector (Q4: how)",
+    "expected_artifact_substrings": ["RDP", "Default.rdp"],
+    "expected_path_globs": ["*.rdp"],
+    "supporting_question_id": "Q4",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: Fred Rocba worked from home via RDP + SaaS; the home was broken into and the SRL laptop (left logged in) was targeted. Remote-access/RDP is the access method."
+  },
+  {
+    "id": "GT-ROC-004",
+    "dataset_id": "rocba",
+    "category": "exfiltration",
+    "summary": "Cloud-sync exfiltration channel: Dropbox (Q3: where transferred to)",
+    "expected_artifact_substrings": ["Dropbox", "dbx"],
+    "expected_path_globs": ["*Dropbox*"],
+    "supporting_question_id": "Q3",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: personal Dropbox populated; SaaS used from home. Dropbox is a candidate transfer destination for stolen IP."
+  },
+  {
+    "id": "GT-ROC-005",
+    "dataset_id": "rocba",
+    "category": "exfiltration",
+    "summary": "Cloud-sync exfiltration channel: OneDrive (Q3: where transferred to)",
+    "expected_artifact_substrings": ["OneDrive"],
+    "expected_path_globs": ["*OneDrive*"],
+    "supporting_question_id": "Q3",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: OneDrive populated. A candidate transfer destination for stolen IP."
+  },
+  {
+    "id": "GT-ROC-006",
+    "dataset_id": "rocba",
+    "category": "communication",
+    "summary": "Office365 / cloud email as an IP movement channel (Q3: where transferred to)",
+    "expected_artifact_substrings": ["Office365", "outlook"],
+    "expected_path_globs": [],
+    "supporting_question_id": "Q3",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: worked via Office365; personal accounts fred.rocba@gmail.com and fred.rocba@outlook.com. Email/cloud is a transfer channel."
+  },
+  {
+    "id": "GT-ROC-007",
+    "dataset_id": "rocba",
+    "category": "timestamp",
+    "summary": "Intrusion window: subject left on vacation 2020-11-10; break-in 2020-11-13 (Q5: when)",
+    "expected_artifact_substrings": ["2020-11-13", "2020-11-10"],
+    "expected_path_globs": [],
+    "supporting_question_id": "Q5",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: leaves on vacation 2020-11-10; home broken into the evening of 2020-11-13. Suspicious activity should cluster in/after this window while the user was absent."
+  },
+  {
+    "id": "GT-ROC-008",
+    "dataset_id": "rocba",
+    "category": "installed_tool",
+    "summary": "Anti-forensic / secure-deletion tooling (SDelete) consistent with covering the theft",
+    "expected_artifact_substrings": ["SDelete", "sdelete"],
+    "expected_path_globs": [],
+    "supporting_question_id": "Q4",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "Break-in + IP theft scenario: secure-deletion / anti-forensic activity is an expected method/cover-up artifact for how the theft was executed and concealed."
+  },
+  {
+    "id": "GT-ROC-009",
+    "dataset_id": "rocba",
+    "category": "credential",
+    "summary": "Privileged/backup account targeting during the intrusion (failed logons to BACKUPADMIN)",
+    "expected_artifact_substrings": ["BACKUPADMIN", "4625"],
+    "expected_path_globs": [],
+    "supporting_question_id": "Q4",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "IP-theft-by-intrusion: credential attacks against privileged/backup accounts (Security EventID 4625 failed logons) are an expected access method during the break-in window."
+  },
+  {
+    "id": "GT-ROC-010",
+    "dataset_id": "rocba",
+    "category": "file_artifact",
+    "summary": "SRL R&D intellectual property (advanced-alloy / metals research) is the stolen target (Q2)",
+    "expected_artifact_substrings": ["Stark Research", "research"],
+    "expected_path_globs": ["*Documents*"],
+    "supporting_question_id": "Q2",
+    "source": "hand_crafted",
+    "source_url": null,
+    "source_excerpt": "ROCBA-BACKGROUND.pptx: SRL is an advanced-alloy/metals biotech R&D lab; the case is IP theft. The stolen material is SRL research IP under the user's document tree."
+  }
+]
