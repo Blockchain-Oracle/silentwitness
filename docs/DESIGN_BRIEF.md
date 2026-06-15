@@ -145,6 +145,40 @@ Shows "any finding is traceable to the tool execution that produced it."
 
 ---
 
+## 2b. Banner + marketing images (README & Devpost)
+
+These are the "hero/marketing" images (separate from the technical diagrams above). The more
+good visuals we have on the Devpost gallery, the better — each should *explain* one idea cleanly.
+
+### Banner (README + Devpost header) — **highest priority**
+A **wide, vertically-short banner** (the kind that sits at the top of a README — wide strip, not
+a full screen). Content: the **logo + product name "SilentWitness"** + the tagline *"The AI
+incident-response analyst that has to prove every claim."* Keep it clean/forensic per the brand.
+- **Primary size:** **1280 × 320 px** (4:1), PNG, for the README top and Devpost header.
+- Also export **1200 × 630 px** (the social/OG-card size Devpost uses for link previews).
+- Provide a **transparent-background** logo lockup separately (for dark/light placement).
+
+### Devpost gallery images (aim for 4–6; Devpost shows them as a carousel)
+Each ~**1200 × 675 px** (16:9), PNG. Suggested set (reuse the diagrams + add these "explainer"
+cards):
+1. **Banner / hero** (above).
+2. **Recall result card** — big "**10 / 10 findings recalled**" with the 40→20→30-50→100 mini
+   bar chart (Diagram E) and a small honest footnote "single run; recall varies by model."
+3. **"Architectural guardrails, not prompts" card** — the 10-layer firewall (Diagram B) styled
+   as a hero image with the one-line caption.
+4. **Self-correction card** — a stylized snippet showing the critic **CHALLENGE → revise** loop
+   (e.g. "Critic: this claim is too broad → Agent: revised") to make the autonomy concrete.
+5. **System architecture** (Diagram A), cleaned up as a gallery image.
+6. **Three-claim trace** (Diagram F) — "trace any finding to the tool that produced it."
+
+### Where they go
+- The **banner** → top of `README.md` and the Devpost header.
+- The **gallery images** → the Devpost image gallery (see [`DEVPOST_DRAFT.md`](DEVPOST_DRAFT.md),
+  which marks **[IMAGE: …]** at each spot they should appear).
+- Any screenshots of the tool running (terminal + the report) are also welcome on Devpost.
+
+---
+
 ## 3. Website / UI content (single-page docs + landing)
 
 A single page is perfect. Suggested sections (copy below is ready to use, edit freely):
