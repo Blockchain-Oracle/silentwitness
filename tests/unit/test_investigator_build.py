@@ -7,6 +7,7 @@ keys (keys are validated at call-time, not at Agent construction).
 from __future__ import annotations
 
 import logging
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -143,7 +144,8 @@ def test_mcp_toolset_command_and_args(monkeypatch: pytest.MonkeyPatch) -> None:
         "tester",
     )
     ts: MCPServerStdio = cfg.agent._user_toolsets[0]  # type: ignore[assignment]
-    assert ts.command == "python"
+    # The running interpreter, not bare "python" (absent on the SIFT OVA / VPS).
+    assert ts.command == sys.executable
     assert ts.args == ["-m", "silentwitness_mcp"]
 
 

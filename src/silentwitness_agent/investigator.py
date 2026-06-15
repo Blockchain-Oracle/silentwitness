@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib.resources
 import logging
 import os
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -161,7 +162,10 @@ def build_investigator(
     resolved_model = _resolve_model(model_str)
 
     mcp_server = MCPServerStdio(
-        "python",
+        # sys.executable, not bare "python" — the latter is often absent (the SIFT
+        # OVA / VPS ship only python3 + the venv interpreter), which crashed the
+        # real ROCBA run with "No such file or directory: 'python'".
+        sys.executable,
         ["-m", "silentwitness_mcp"],
         env=build_server_env(case_dir, examiner, model_str),
         sampling_model=resolved_model,
