@@ -1,12 +1,11 @@
-"""Memory-image ingest — Volatility 3 plugin output into :class:`IndexRecord` rows.
+"""Memory-image driver — Volatility 3 subprocess + bulk-ingest into the case index.
 
 The disk feeders are per-artifact (one ``.evtx`` / one hive / one ``.pf`` -> one feeder
 call); a memory image is the inverse — one big raw blob driven by **many** vol3 plugins.
 Each plugin call is a ``subprocess`` of the vendored vol3 venv (own Python, own deps,
-own crash domain), invoked with ``-r json`` so its output is a stable list-of-dicts we
-can map deterministically to flat index rows. The mappers are pure (unit-testable
-against the captured schemas in :file:`tests/fixtures/vol3/*.json`); the driver is the
-thin I/O wrapper.
+own crash domain), invoked with ``-r json`` so its output is a stable list-of-dicts the
+per-plugin mappers in :mod:`silentwitness_mcp.index.feeders_memory` map deterministically
+to flat index rows.
 
 Why a separate module from :mod:`ingest_artifacts`:
     The :class:`Feeder` protocol there is per-file. A memory pass is per-plugin over
@@ -17,43 +16,32 @@ Why a separate module from :mod:`ingest_artifacts`:
     bug). We mirror :class:`IngestResult` semantics here so the operator + audit see
     the same structured outcome.
 
-Provenance: ``source_tool="vol:<plugin>"`` (so `list_detections` and the citation gate
-can tell a memory row apart from a disk row); ``artifact_path`` is the image's
-prepared-relative path plus a ``#vol:<plugin>`` fragment so a citation pin-points the
-plugin that produced the row. ``sha256`` is hashed once per image and reused across
-plugin invocations — the image bytes are the same artifact across every plugin pass.
+``sha256`` is hashed once per image (before the vol3-binary check, so provenance
+lands even on driver abort) and reused across plugin invocations — the image bytes
+are the same artifact across every plugin pass.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 import shutil
+import sqlite3
 import subprocess
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT, sha256_file
+from silentwitness_mcp.index._feeder_util import sha256_file
+from silentwitness_mcp.index.feeders_memory import MAPPERS, PLUGINS, _short_plugin
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
 
-# Per-process child caps: pslist/psscan never nest; malfind's __children carry the
-# hit-list. We never recurse beyond one level — vol3 only ever emits one.
+# CLAUDE.md pins this as the canonical SIFT/OVA install path; the driver accepts a
+# `vol_bin=` override so tests and non-SIFT installs can point at their own venv.
 _VOL_BIN: Final[str] = "/opt/silentwitness/vol3-venv/bin/vol"
-
-# The plugins we ingest. Order is irrelevant for correctness (each is an independent
-# subprocess); kept stable for reproducible audit-summary output.
-PLUGINS: Final[tuple[str, ...]] = (
-    "windows.pslist.PsList",
-    "windows.cmdline.CmdLine",
-    "windows.netscan.NetScan",
-    "windows.malware.malfind.Malfind",
-    "windows.psscan.PsScan",
-)
 
 
 @dataclass
@@ -71,246 +59,66 @@ class MemoryIngestResult:
 
 
 # ---------------------------------------------------------------------------
-# Pure mappers — one per plugin. Unit-tested against captured vol3 JSON.
-# ---------------------------------------------------------------------------
-
-
-def _short_plugin(plugin: str) -> str:
-    """``windows.pslist.PsList`` -> ``pslist`` — the short form used in source_tool."""
-    return plugin.rsplit(".", 1)[-1].lower()
-
-
-def _row_text(prefix: str, **fields: Any) -> str:
-    """``Process pid=4 ppid=0 name=System`` — stable space-joined ``key=value`` line.
-
-    Skips ``None`` so an absent column doesn't read as the literal string ``None`` in
-    the FTS-indexed text (which would be searchable and misleading)."""
-    parts = [prefix]
-    for key, value in fields.items():
-        if value is None or value == "":
-            continue
-        parts.append(f"{key}={value}")
-    return " ".join(parts)
-
-
-def _make_record(
-    *,
-    text: str,
-    plugin: str,
-    artifact_path: str,
-    host: str,
-    ts: str,
-    audit_id: str,
-    sha256: str,
-) -> IndexRecord:
-    return IndexRecord(
-        text=text[:MAX_TEXT],
-        source_tool=f"vol:{_short_plugin(plugin)}",
-        artifact_path=f"{artifact_path}#vol:{_short_plugin(plugin)}",
-        host=host,
-        ts=ts,
-        audit_id=audit_id,
-        sha256=sha256,
-    )
-
-
-def _pslist_to_records(
-    rows: Iterable[dict[str, Any]],
-    *,
-    artifact_path: str,
-    audit_id: str,
-    host: str,
-    sha256: str,
-) -> Iterator[IndexRecord]:
-    for row in rows:
-        text = _row_text(
-            "Process",
-            pid=row.get("PID"),
-            ppid=row.get("PPID"),
-            name=row.get("ImageFileName"),
-            threads=row.get("Threads"),
-            wow64=row.get("Wow64"),
-            exited=row.get("ExitTime"),
-        )
-        yield _make_record(
-            text=text,
-            plugin="windows.pslist.PsList",
-            artifact_path=artifact_path,
-            host=host,
-            ts=str(row.get("CreateTime") or ""),
-            audit_id=audit_id,
-            sha256=sha256,
-        )
-
-
-def _cmdline_to_records(
-    rows: Iterable[dict[str, Any]],
-    *,
-    artifact_path: str,
-    audit_id: str,
-    host: str,
-    sha256: str,
-) -> Iterator[IndexRecord]:
-    for row in rows:
-        args = row.get("Args")
-        # Skip processes vol3 couldn't read a cmdline for — their PID still shows in
-        # pslist; emitting a row with no Args adds noise without investigative value.
-        if not args:
-            continue
-        text = _row_text(
-            "Cmdline",
-            pid=row.get("PID"),
-            process=row.get("Process"),
-            args=args,
-        )
-        yield _make_record(
-            text=text,
-            plugin="windows.cmdline.CmdLine",
-            artifact_path=artifact_path,
-            host=host,
-            ts="",  # cmdline is a snapshot — no per-row timestamp
-            audit_id=audit_id,
-            sha256=sha256,
-        )
-
-
-def _netscan_to_records(
-    rows: Iterable[dict[str, Any]],
-    *,
-    artifact_path: str,
-    audit_id: str,
-    host: str,
-    sha256: str,
-) -> Iterator[IndexRecord]:
-    for row in rows:
-        text = _row_text(
-            "NetConn",
-            proto=row.get("Proto"),
-            local=f"{row.get('LocalAddr')}:{row.get('LocalPort')}"
-            if row.get("LocalAddr")
-            else None,
-            foreign=f"{row.get('ForeignAddr')}:{row.get('ForeignPort')}"
-            if row.get("ForeignAddr")
-            else None,
-            state=row.get("State"),
-            pid=row.get("PID"),
-            owner=row.get("Owner"),
-        )
-        yield _make_record(
-            text=text,
-            plugin="windows.netscan.NetScan",
-            artifact_path=artifact_path,
-            host=host,
-            ts=str(row.get("Created") or ""),
-            audit_id=audit_id,
-            sha256=sha256,
-        )
-
-
-def _malfind_to_records(
-    rows: Iterable[dict[str, Any]],
-    *,
-    artifact_path: str,
-    audit_id: str,
-    host: str,
-    sha256: str,
-) -> Iterator[IndexRecord]:
-    """Malfind emits one row per suspicious VAD region (executable + private memory).
-
-    The Hexdump column is large and noisy for FTS; we keep the structural fields
-    (process, address, protection, tag) since those are what an analyst correlates."""
-    for row in rows:
-        text = _row_text(
-            "Malfind",
-            pid=row.get("PID"),
-            process=row.get("Process"),
-            start=row.get("Start VPN") or row.get("Start"),
-            end=row.get("End VPN") or row.get("End"),
-            tag=row.get("Tag"),
-            protection=row.get("Protection"),
-            commit=row.get("CommitCharge"),
-            private=row.get("PrivateMemory"),
-        )
-        yield _make_record(
-            text=text,
-            plugin="windows.malware.malfind.Malfind",
-            artifact_path=artifact_path,
-            host=host,
-            ts="",
-            audit_id=audit_id,
-            sha256=sha256,
-        )
-
-
-def _psscan_to_records(
-    rows: Iterable[dict[str, Any]],
-    *,
-    artifact_path: str,
-    audit_id: str,
-    host: str,
-    sha256: str,
-) -> Iterator[IndexRecord]:
-    """Same shape as pslist but found by pool scanning (catches unlinked / hidden procs).
-
-    A process visible in psscan but absent from pslist is a strong rootkit signal —
-    keeping them as separate ``vol:psscan`` rows lets a query / detector compare."""
-    for row in rows:
-        text = _row_text(
-            "ProcessScan",
-            pid=row.get("PID"),
-            ppid=row.get("PPID"),
-            name=row.get("ImageFileName"),
-            threads=row.get("Threads"),
-            exited=row.get("ExitTime"),
-        )
-        yield _make_record(
-            text=text,
-            plugin="windows.psscan.PsScan",
-            artifact_path=artifact_path,
-            host=host,
-            ts=str(row.get("CreateTime") or ""),
-            audit_id=audit_id,
-            sha256=sha256,
-        )
-
-
-_MAPPERS: Final[dict[str, Any]] = {
-    "windows.pslist.PsList": _pslist_to_records,
-    "windows.cmdline.CmdLine": _cmdline_to_records,
-    "windows.netscan.NetScan": _netscan_to_records,
-    "windows.malware.malfind.Malfind": _malfind_to_records,
-    "windows.psscan.PsScan": _psscan_to_records,
-}
-
-
-# ---------------------------------------------------------------------------
-# Driver — subprocess + JSON parse + bulk ingest.
+# vol3 subprocess
 # ---------------------------------------------------------------------------
 
 
 def _run_vol_json(
     image: Path, plugin: str, *, timeout: int, vol_bin: str = _VOL_BIN
 ) -> list[dict[str, Any]]:
-    """Run ``vol -r json -f <image> <plugin>`` and return its parsed JSON array.
+    """Run ``vol -r json -f <image> <plugin>`` and return its parsed JSON rows.
 
     Raises :class:`subprocess.CalledProcessError` on non-zero exit, ``TimeoutExpired``
-    on hang, ``json.JSONDecodeError`` on garbled output, ``FileNotFoundError`` if vol3
-    isn't installed — each becomes one ``(plugin, error)`` entry in the driver."""
+    on hang, ``json.JSONDecodeError`` on garbled output, and ``ValueError`` on the
+    two failure modes that look like success: empty stdout (some vol3 versions exit 0
+    with no output when symbol resolution fails — observed on ROCBA Malfind) and a
+    top-level dict instead of a list (some plugin renderers wrap rows as
+    ``{"renderer": "json", "rows": [...]}``)."""
     completed = subprocess.run(  # noqa: S603  # fixed vendored vol3 binary, validated args
         [vol_bin, "-q", "-r", "json", "-f", str(image), plugin],
         capture_output=True,
         check=True,
         timeout=timeout,
     )
+    if not completed.stdout.strip():
+        raise ValueError(
+            f"vol3 {plugin} produced empty output (exit 0) — likely symbol/profile failure"
+        )
     parsed = json.loads(completed.stdout)
+    if isinstance(parsed, dict) and isinstance(parsed.get("rows"), list):
+        # Renderer-wrapped form: {"renderer": "json", "columns": [...], "rows": [...]}.
+        # Older / future vol3 versions sometimes emit this instead of a bare list.
+        parsed = parsed["rows"]
     if not isinstance(parsed, list):
         raise ValueError(f"vol3 {plugin} JSON output was not a list (got {type(parsed).__name__})")
     return [row for row in parsed if isinstance(row, dict)]
 
 
+def _record_subprocess_failure(
+    result: MemoryIngestResult, plugin: str, exc: subprocess.CalledProcessError
+) -> None:
+    """Fold vol3's stderr tail into the failure message — ``str(exc)`` alone only
+    shows the exit code, dropping the actual diagnostic."""
+    stderr_tail = (exc.stderr or b"").decode("utf-8", errors="replace").strip()[-500:]
+    message = f"{exc} | stderr: {stderr_tail}" if stderr_tail else str(exc)
+    _LOG.warning("vol3 %s failed: %s", plugin, message)
+    result.failures.append((plugin, message))
+
+
+# ---------------------------------------------------------------------------
+# Driver
+# ---------------------------------------------------------------------------
+
+
+class _IndexWriter(Protocol):
+    """Structural protocol for the bulk_ingest sink. Lets tests inject a stub."""
+
+    def bulk_ingest(self, records: Iterable[IndexRecord]) -> int: ...
+
+
 def ingest_memory_image(
     image: Path,
-    index: EvidenceIndex,
+    index: _IndexWriter | EvidenceIndex,
     *,
     audit_id: str,
     artifact_path: str | None = None,
@@ -326,22 +134,26 @@ def ingest_memory_image(
     caller is responsible for the outer ``index.begin_bulk()`` / ``rebuild_fts()`` —
     matching :func:`ingest_prepared_artifacts` so the disk + memory passes share one
     FTS build."""
-    if shutil.which(vol_bin) is None and not Path(vol_bin).exists():
-        return MemoryIngestResult(
-            failures=[("__driver__", f"vol3 binary not found at {vol_bin}")],
-        )
+    # Hash up front (cheap relative to vol3) so the provenance hash is recorded even
+    # if the vol3 binary is missing — a "vol3 absent" failure on a registered image
+    # still produces a complete audit trail.
     result = MemoryIngestResult(image_sha256=sha256_file(image))
+    if shutil.which(vol_bin) is None and not Path(vol_bin).exists():
+        result.failures.append(("__driver__", f"vol3 binary not found at {vol_bin}"))
+        return result
     cite = artifact_path if artifact_path is not None else image.name
 
     for plugin in plugins:
-        mapper = _MAPPERS.get(plugin)
+        mapper = MAPPERS.get(plugin)
         if mapper is None:
             result.failures.append((plugin, "no mapper registered"))
             continue
         try:
             rows = _run_vol_json(image, plugin, timeout=timeout_seconds, vol_bin=vol_bin)
+        except subprocess.CalledProcessError as exc:
+            _record_subprocess_failure(result, plugin, exc)
+            continue
         except (
-            subprocess.CalledProcessError,
             subprocess.TimeoutExpired,
             FileNotFoundError,
             json.JSONDecodeError,
@@ -361,7 +173,7 @@ def ingest_memory_image(
         )
         try:
             written = index.bulk_ingest(records)
-        except Exception as exc:  # SQLite write failure -> count + record, don't abort
+        except sqlite3.Error as exc:  # documented store failure mode — record, don't abort
             _LOG.warning("bulk ingest failed for %s: %s", plugin, exc)
             result.failures.append((plugin, f"bulk_ingest: {exc}"))
             continue
@@ -369,13 +181,4 @@ def ingest_memory_image(
     return result
 
 
-def _content_hash(rows: list[dict[str, Any]]) -> str:
-    """Stable hash of a vol3 JSON list — useful for unit-test fixtures."""
-    return hashlib.sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
-
-
-__all__ = [
-    "PLUGINS",
-    "MemoryIngestResult",
-    "ingest_memory_image",
-]
+__all__ = ["PLUGINS", "MemoryIngestResult", "ingest_memory_image"]

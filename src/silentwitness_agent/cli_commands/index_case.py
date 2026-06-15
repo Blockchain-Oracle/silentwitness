@@ -55,7 +55,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
 
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
     from silentwitness_mcp.index.ingest import IngestError, ingest_image_timeline
-    from silentwitness_mcp.index.ingest_artifacts import ingest_prepared_artifacts
+    from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
     from silentwitness_mcp.index.ingest_memory import ingest_memory_image
 
     audit = AuditLogger(case_dir, examiner)
@@ -63,7 +63,11 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
     counts: dict[str, int] = {}
     plaso_rows = 0
     memory_counts: dict[str, int] = {}
+    memory_total = 0
     advisories: list[str] = []
+    # Sentinel so the post-finally summary doesn't UnboundLocalError if the try block
+    # raised before `ingested` was assigned (e.g. EvidenceIndex open fails).
+    ingested = IngestResult()
     try:
         audit_id = audit.next_audit_id()
         out.print(
