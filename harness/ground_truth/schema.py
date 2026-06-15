@@ -24,7 +24,9 @@ class GroundTruthFinding(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     id: Annotated[str, Field(min_length=1)]
-    dataset_id: Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
+    dataset_id: Literal[
+        "rocba", "nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"
+    ]
     category: CategoryLiteral
     summary: Annotated[str, Field(min_length=1, max_length=200)]
     expected_artifact_substrings: Annotated[

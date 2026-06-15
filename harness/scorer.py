@@ -45,8 +45,9 @@ __all__ = [
     "verify_artifact_present_in_evidence",
 ]
 
-_DatasetId = Literal["nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
+_DatasetId = Literal["rocba", "nitroba", "nist-data-leakage", "nist-hacking-case", "case-trapdoor"]
 _GT_MODULES: dict[str, str] = {
+    "rocba": "harness.ground_truth.rocba_parser",
     "nitroba": "harness.ground_truth.nitroba_parser",
     "nist-data-leakage": "harness.ground_truth.nist_data_leakage_parser",
     "nist-hacking-case": "harness.ground_truth.nist_hacking_case_parser",
