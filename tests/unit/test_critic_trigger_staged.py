@@ -39,7 +39,7 @@ def _write_findings(path: Path, count: int) -> None:
             "observation_id": f"O-{i + 1:03d}",
             "text": f"Observation {i + 1}",
             "audit_ids": [f"sift-aj-2026-{i + 1:03d}"],
-            "cited_spans": [],
+            "cited_spans": [{"record_id": i + 1, "span_text": f"evidence line {i + 1}"}],
             "interpretations": [
                 {
                     "interpretation_id": f"I-{i + 1:03d}",
@@ -70,19 +70,18 @@ def test_staged_findings_for_review_returns_post_watermark(tmp_path: Path) -> No
 
 
 # ---------------------------------------------------------------------------
-# 13. staged_findings_for_review populates cited_blob_paths
+# 13. staged_findings_for_review populates cited_evidence from cited_spans
 # ---------------------------------------------------------------------------
 
 
-def test_staged_findings_for_review_populates_blob_paths(tmp_path: Path) -> None:
+def test_staged_findings_for_review_populates_cited_evidence(tmp_path: Path) -> None:
     findings_path = tmp_path / "findings.json"
     _write_findings(findings_path, 2)
     trigger = _make_trigger(tmp_path, interval_findings=5)
     findings = trigger.staged_findings_for_review(findings_path)
     assert len(findings) == 2
-    for f in findings:
-        assert len(f.cited_blob_paths) == 1
-        assert f.cited_blob_paths[0].parent == tmp_path / "audit" / "blobs"
+    assert findings[0].cited_evidence == ("evidence line 1",)
+    assert findings[1].cited_evidence == ("evidence line 2",)
 
 
 # ---------------------------------------------------------------------------

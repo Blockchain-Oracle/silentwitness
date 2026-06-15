@@ -34,7 +34,7 @@ def test_system_prompt_contains_fresh_context_phrase() -> None:
 def test_system_prompt_contains_evaluate_against_evidence_phrase() -> None:
     from silentwitness_agent.critic import _SYSTEM_PROMPT
 
-    assert "evaluate it against ONLY the tool output" in _SYSTEM_PROMPT
+    assert "evaluate it against ONLY the evidence" in _SYSTEM_PROMPT
 
 
 def test_system_prompt_excludes_forbidden_phrases() -> None:

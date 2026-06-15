@@ -147,10 +147,8 @@ async def _do_agent_run(
     is_tty: bool,
     t_start: float,
 ) -> Any:  # pragma: no cover — integration-only seam (monkeypatched in tests)
-    """Test seam: monkeypatching this function in integration tests bypasses all model
-    construction (no API key or MCP server required). At runtime, builds the investigator
-    agent, runs it to completion, and returns InvestigatorResult.
-    """
+    """Test seam (monkeypatched in tests to bypass model construction); else builds
+    the investigator, runs it, returns InvestigatorResult."""
     from pydantic_ai.usage import UsageLimits
 
     from silentwitness_agent.hooks import build_investigator_hooks
@@ -162,30 +160,32 @@ async def _do_agent_run(
         InvestigatorResult,
         build_investigator,
     )
+    from silentwitness_agent.live_critic import (
+        build_live_critic_hooks,
+        register_pending_critique_instruction,
+    )
+    from silentwitness_agent.specialists._wiring import register_all_specialists
 
     stack = HypothesisStack(case_dir=case_dir, examiner=examiner)
     budget = BudgetEnforcer(default_token_budget=max_tokens)
     audit_hooks = build_investigator_hooks(case_dir, examiner, stack, budget)
     display_hooks = build_display_hooks(state, is_tty)
-
+    # Live closed-loop critic: CHALLENGEs route into deps.pending_critiques each turn.
+    critic_hooks = build_live_critic_hooks(case_dir, examiner, model=model)
     cfg = build_investigator(
         case_dir,
         examiner,
         model=model,
         max_iterations=max_iterations,
-        hooks=[audit_hooks, display_hooks],
+        hooks=[audit_hooks, display_hooks, critic_hooks],
     )
-    # Drive the HypothesisStack (without these tools the wedge stays at zero).
-    register_hypothesis_tools(cfg.agent)
-
-    # Wire the 4 dispatch_<x>_specialist tools, sharing the investigator's server.
-    from silentwitness_agent.specialists._wiring import register_all_specialists
-
+    register_hypothesis_tools(cfg.agent)  # without these the hypothesis wedge stays at zero
+    register_pending_critique_instruction(cfg.agent)
     register_all_specialists(cfg.agent, model=model, shared_server=cfg.mcp_server)
     deps = InvestigatorDeps(case_dir=case_dir, examiner=examiner, stack=stack, budget=budget)
 
-    # Surface registered evidence (exact paths + types) in the opening prompt so
-    # the agent does not burn iterations guessing paths that fail registration.
+    # Surface registered evidence in the opening prompt so the agent doesn't burn
+    # iterations guessing paths that fail registration.
     evidence_records = EvidenceRegistry(case_dir=case_dir).list_all()
     evidence_block = (
         "\n".join(f"- {rec.path} ({rec.type.value})" for rec in evidence_records)

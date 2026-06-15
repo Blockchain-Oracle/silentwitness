@@ -35,6 +35,18 @@ _DEFAULT_INTERVAL_FINDINGS = 5
 _DEFAULT_INTERVAL_MINUTES = 10.0
 
 
+def _cited_evidence(obs: dict[str, Any]) -> tuple[str, ...]:
+    """Verbatim span_texts from an observation's cited_spans, de-duplicated in
+    order. Each is a citation-gate-verified quote of an index record."""
+    seen: dict[str, None] = {}
+    for span in obs.get("cited_spans") or []:
+        if isinstance(span, dict):
+            text = span.get("span_text")
+            if isinstance(text, str) and text and text not in seen:
+                seen[text] = None
+    return tuple(seen)
+
+
 def _parse_interval_int(var: str, default: int) -> int:
     raw = os.environ.get(var)
     if not raw:
@@ -108,6 +120,27 @@ class CriticTrigger:
         time_threshold_hit = elapsed >= timedelta(minutes=self.interval_minutes)
         return findings_threshold_hit or time_threshold_hit
 
+    def advance_after_review(self, findings_json_path: Path) -> None:
+        """Advance the watermark past the leading CONTIGUOUS run of interpreted
+        records only — never past a record that is not yet interpreted.
+
+        record_observation and record_interpretation are separate calls, so an
+        observation can sit in findings.json before it has an interpretation. If
+        we advanced unconditionally to the total count, that observation would
+        fall below the watermark and never be reviewed once its interpretation
+        lands. Stopping at the first un-interpreted record keeps it eligible for
+        the next pass. (Records that become reviewable after an un-interpreted
+        gap may be re-reviewed — bounded token cost, never a silent skip.)
+        """
+        raw = self._read_findings_json(findings_json_path)
+        advance = self._state.last_critic_finding_count
+        for rec in raw[advance:]:
+            if isinstance(rec, dict) and rec.get("interpretations"):
+                advance += 1
+            else:
+                break
+        self.mark_fired(advance)
+
     def mark_fired(self, current_finding_count: int) -> None:
         """Persist the firing watermark atomically; thread-safe; monotonic-only.
 
@@ -146,9 +179,9 @@ class CriticTrigger:
         """Return findings staged after the last critic run as StagedFinding objects.
 
         Reads ``findings_json_path`` (the case ``findings.json``), slices to
-        entries with index ≥ ``last_critic_finding_count``, and attaches
-        ``cited_blob_paths`` pointing at ``case_dir/audit/blobs/<audit_id>.txt``
-        for every ``audit_id`` cited by the observation.
+        entries with index ≥ ``last_critic_finding_count``, and attaches the
+        verbatim ``cited_evidence`` (the span_texts from the observation's
+        cited_spans — citation-gate-verified quotes of index records).
 
         Observations without interpretations, or with empty text fields, are
         skipped — they cannot be evaluated by the critic.
@@ -157,7 +190,6 @@ class CriticTrigger:
         start = self._state.last_critic_finding_count
         pending = raw[start:]
 
-        blobs_dir = self._case_dir / "audit" / "blobs"
         results: list[StagedFinding] = []
         for obs in pending:
             if not isinstance(obs, dict):
@@ -180,7 +212,6 @@ class CriticTrigger:
             except ValueError:
                 confidence = Confidence.LOW
             audit_ids: list[str] = obs.get("audit_ids") or []
-            blob_paths = [blobs_dir / f"{aid}.txt" for aid in audit_ids]
             results.append(
                 StagedFinding(
                     finding_id=obs.get("observation_id", f"unknown-{len(results)}"),
@@ -188,7 +219,7 @@ class CriticTrigger:
                     interpretation_text=interp_text,
                     confidence=confidence,
                     cited_audit_ids=audit_ids,
-                    cited_blob_paths=blob_paths,
+                    cited_evidence=_cited_evidence(obs),
                 )
             )
         return results

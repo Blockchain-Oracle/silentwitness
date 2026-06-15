@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from pydantic_ai import Agent
 from pydantic_ai.models.test import TestModel
 
+from silentwitness_agent.critic import CriticVerdictRecord
 from silentwitness_agent.specialists._base import (
     SpecialistDeps,
     SpecialistFinding,
@@ -22,7 +23,7 @@ from silentwitness_agent.specialists.memory import (
     build_memory_specialist,
     register_as_investigator_tool,
 )
-from silentwitness_common.types import Confidence, CriticVerdict
+from silentwitness_common.types import Confidence
 
 # Firewall #1 (Phase 2/3): the specialist is an INDEX querier — it has the index query
 # tools, not the raw vol_* tools (those are demoted to ingest feeders).
@@ -253,12 +254,15 @@ def test_specialist_deps_absolute_path_enforced(tmp_path: Path) -> None:
 
 
 def test_specialist_deps_frozen_with_tuple_lists(tmp_path: Path) -> None:
+    challenge = CriticVerdictRecord(
+        finding_id="O-001", verdict="CHALLENGE", reason="needs corroboration"
+    )
     deps = SpecialistDeps(
         case_dir=tmp_path,
         examiner="analyst",
         hypothesis_id="H-001",
         evidence_paths=(tmp_path / "ev.img",),
-        pending_critiques=(CriticVerdict.CHALLENGE,),
+        pending_critiques=(challenge,),
     )
     assert isinstance(deps.evidence_paths, tuple)
     assert isinstance(deps.pending_critiques, tuple)

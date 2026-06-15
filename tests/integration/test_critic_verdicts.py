@@ -19,7 +19,6 @@ from silentwitness_agent.critic import (
     CriticDeps,
     CriticReport,
     StagedFinding,
-    _load_blob,
     critique,
 )
 from silentwitness_common.types import Confidence
@@ -198,80 +197,29 @@ async def test_critique_empty_findings_returns_empty_report(tmp_path: Path) -> N
     assert report.time_elapsed_ms == 0.0
 
 
-def test_load_blob_returns_empty_for_missing_file(tmp_path: Path) -> None:
-    result = _load_blob(tmp_path / "nonexistent.txt")
-    assert result == ""
-
-
-def test_load_blob_reads_small_file(tmp_path: Path) -> None:
-    blob = tmp_path / "small.txt"
-    blob.write_text("netcat binary present at C:\\Windows\\nc.exe", encoding="utf-8")
-    result = _load_blob(blob)
-    assert "netcat" in result
-    assert "[TRUNCATED]" not in result
-
-
-def test_load_blob_truncates_large_file(tmp_path: Path) -> None:
-    from silentwitness_agent.critic import _BLOB_TRUNCATION_BYTES
-
-    blob = tmp_path / "big.txt"
-    blob.write_bytes(b"A" * (_BLOB_TRUNCATION_BYTES + 100))
-    result = _load_blob(blob)
-    assert "[TRUNCATED]" in result
-    assert len(result) < _BLOB_TRUNCATION_BYTES + 200
-
-
 # ---------------------------------------------------------------------------
-# 5. critique() loads blobs from disk and cited_blob_paths
+# 5. critique() judges a finding against its inline cited_evidence (no blobs)
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.anyio
-async def test_critique_loads_blob_from_audit_dir(tmp_path: Path) -> None:
-    """critique() reads audit/blobs/<audit_id>.txt and passes content inline."""
-    blobs_dir = tmp_path / "audit" / "blobs"
-    blobs_dir.mkdir(parents=True)
-    (blobs_dir / "sift-aj-20260613-004.txt").write_text("nc.exe SHA256: deadbeef", encoding="utf-8")
-    finding = _make_finding(finding_id="f-blob-001", cited_audit_ids=["sift-aj-20260613-004"])
-    agree_payload = {
-        "verdicts": [
-            {
-                "finding_id": "f-blob-001",
-                "verdict": "AGREE",
-                "reason": "blob confirms binary.",
-                "suggested_revision": None,
-                "missing_corroboration": [],
-            }
-        ],
-        "tokens_spent": 10,
-        "time_elapsed_ms": 50.0,
-    }
-    test_agent = _make_agent(agree_payload)
-
-    with patch("silentwitness_agent.critic.build_critic", return_value=test_agent):
-        report = await critique(tmp_path, "aj", [finding])
-
-    assert report.verdicts[0].verdict == "AGREE"
-
-
-@pytest.mark.anyio
-async def test_critique_loads_blob_via_cited_blob_path(tmp_path: Path) -> None:
-    """critique() reads arbitrary blob paths in finding.cited_blob_paths."""
-    blob_file = tmp_path / "custom_blob.txt"
-    blob_file.write_text("MFT record confirms file creation.", encoding="utf-8")
+async def test_critique_uses_inline_cited_evidence(tmp_path: Path) -> None:
+    """critique() reads no blob files — it judges the finding against the
+    verbatim cited_evidence carried on the StagedFinding."""
     finding = StagedFinding(
-        finding_id="f-bpath-001",
-        observation_text="MFT entry present.",
-        interpretation_text="File was created by attacker.",
-        confidence=Confidence.MEDIUM,
-        cited_blob_paths=[blob_file],
+        finding_id="f-ev-001",
+        observation_text="nc.exe present at C:\\Windows\\nc.exe",
+        interpretation_text="Netcat staged for lateral movement.",
+        confidence=Confidence.HIGH,
+        cited_audit_ids=["sift-aj-20260613-004"],
+        cited_evidence=("nc.exe SHA256: deadbeef",),
     )
     agree_payload = {
         "verdicts": [
             {
-                "finding_id": "f-bpath-001",
+                "finding_id": "f-ev-001",
                 "verdict": "AGREE",
-                "reason": "MFT confirms creation.",
+                "reason": "cited evidence confirms the binary.",
                 "suggested_revision": None,
                 "missing_corroboration": [],
             }
@@ -284,7 +232,24 @@ async def test_critique_loads_blob_via_cited_blob_path(tmp_path: Path) -> None:
     with patch("silentwitness_agent.critic.build_critic", return_value=test_agent):
         report = await critique(tmp_path, "aj", [finding])
 
+    # No blobs dir was created — the critic ran purely on inline evidence.
+    assert not (tmp_path / "audit" / "blobs").exists()
     assert report.verdicts[0].verdict == "AGREE"
+
+
+def test_build_critique_prompt_includes_cited_evidence() -> None:
+    from silentwitness_agent.critic import _build_critique_prompt
+
+    finding = StagedFinding(
+        finding_id="f-ev-002",
+        observation_text="obs",
+        interpretation_text="interp",
+        confidence=Confidence.MEDIUM,
+        cited_evidence=("verbatim evidence quote ABC123",),
+    )
+    prompt = _build_critique_prompt([finding])
+    assert "verbatim evidence quote ABC123" in prompt
+    assert "Cited evidence" in prompt
 
 
 @pytest.mark.anyio

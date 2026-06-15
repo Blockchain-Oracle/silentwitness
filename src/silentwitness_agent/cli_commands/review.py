@@ -206,6 +206,11 @@ def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
             confidence = Confidence(str(interp.get("confidence", "LOW")).upper())
         except ValueError:
             confidence = Confidence.LOW
+        cited_evidence = tuple(
+            s["span_text"]
+            for s in (obs.get("cited_spans") or [])
+            if isinstance(s, dict) and isinstance(s.get("span_text"), str) and s["span_text"]
+        )
         staged.append(
             StagedFinding(
                 finding_id=str(f["finding_id"]),
@@ -213,6 +218,7 @@ def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
                 interpretation_text=str(interp_text),
                 confidence=confidence,
                 cited_audit_ids=list(obs.get("audit_ids") or []),
+                cited_evidence=cited_evidence,
             )
         )
     if not staged:
