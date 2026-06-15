@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
@@ -74,7 +75,7 @@ def build_disk_specialist(
     _LOG.debug("disk specialist: resolved model=%s", model_name)
 
     server = shared_server or MCPServerStdio(
-        "python",
+        sys.executable,  # not bare "python" (absent on SIFT OVA / VPS)
         ["-m", "silentwitness_mcp"],
         sampling_model=resolved,
     )
