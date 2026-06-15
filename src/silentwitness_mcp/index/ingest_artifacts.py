@@ -36,7 +36,11 @@ from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.index._feeder_util import Feeder, FeederStats
 from silentwitness_mcp.index.feeders_evtx import evtx_file_records
+from silentwitness_mcp.index.feeders_jumplist import jumplist_records
+from silentwitness_mcp.index.feeders_lnk import lnk_records
 from silentwitness_mcp.index.feeders_mft import mft_entry_records
+from silentwitness_mcp.index.feeders_prefetch import prefetch_records
+from silentwitness_mcp.index.feeders_pstranscript import pstranscript_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
 from silentwitness_mcp.index.feeders_srum import srum_records
 from silentwitness_mcp.index.feeders_usnjrnl import usnjrnl_records
@@ -50,13 +54,15 @@ _PREPARED = "prepared"
 
 # Closed set of artifact kinds; a Literal so a typo'd label is a type error, not a
 # silent misroute.
-Kind = Literal["evtx", "registry", "srum", "mft", "usnjrnl"]
+Kind = Literal[
+    "evtx", "registry", "srum", "mft", "usnjrnl", "prefetch", "lnk", "jumplist", "pstranscript"
+]
 # Direct artifact-type -> kind mapping.
 _KINDS: dict[EvidenceType, Kind] = {
     EvidenceType.EVTX: "evtx",
     EvidenceType.HIVE: "registry",
 }
-# Artifacts registered as OTHER are disambiguated by filename.
+# Artifacts registered as OTHER are disambiguated by exact filename.
 _OTHER_BY_NAME: dict[str, Kind] = {
     "SRUDB.DAT": "srum",
     "$MFT": "mft",
@@ -64,15 +70,35 @@ _OTHER_BY_NAME: dict[str, Kind] = {
     "_USNJRNL": "usnjrnl",
     "$USNJRNL": "usnjrnl",
 }
+# …or, failing an exact name, by file extension (the per-user activity glob set).
+_OTHER_BY_SUFFIX: dict[str, Kind] = {
+    ".pf": "prefetch",
+    ".lnk": "lnk",
+    ".automaticdestinations-ms": "jumplist",
+}
 
 
 def _kind_for(artifact_type: EvidenceType, name: str) -> Kind | None:
-    """Resolve an artifact's feeder kind from its type (and filename for OTHER)."""
+    """Resolve an artifact's feeder kind from its type, then OTHER name/suffix.
+
+    OTHER routing tries the exact uppercased name first ($MFT, SRUDB.DAT, …), then
+    the lowercased extension (.pf/.lnk/.automaticDestinations-ms), then the
+    PowerShell-transcript filename convention — so a typo'd label is unrouted (and
+    visibly skipped) rather than misrouted to the wrong parser."""
     direct = _KINDS.get(artifact_type)
     if direct is not None:
         return direct
-    if artifact_type == EvidenceType.OTHER:
-        return _OTHER_BY_NAME.get(name.upper())
+    if artifact_type != EvidenceType.OTHER:
+        return None
+    by_name = _OTHER_BY_NAME.get(name.upper())
+    if by_name is not None:
+        return by_name
+    lower = name.lower()
+    by_suffix = _OTHER_BY_SUFFIX.get(Path(lower).suffix)
+    if by_suffix is not None:
+        return by_suffix
+    if lower.startswith("powershell_transcript") and lower.endswith(".txt"):
+        return "pstranscript"
     return None
 
 
@@ -115,6 +141,10 @@ def _feeder_for(kind: Kind) -> Feeder:
         "srum": srum_records,
         "mft": mft_entry_records,
         "usnjrnl": usnjrnl_records,
+        "prefetch": prefetch_records,
+        "lnk": lnk_records,
+        "jumplist": jumplist_records,
+        "pstranscript": pstranscript_records,
     }
     return feeders[kind]
 

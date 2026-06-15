@@ -29,6 +29,14 @@ from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
         (EvidenceType.OTHER, "$MFT", "mft"),
         (EvidenceType.OTHER, "_MFT", "mft"),
         (EvidenceType.OTHER, "_UsnJrnl", "usnjrnl"),
+        (EvidenceType.OTHER, "NOTEPAD.EXE-12345678.pf", "prefetch"),  # suffix route
+        (EvidenceType.OTHER, "RCLONE.EXE-AABBCCDD.PF", "prefetch"),  # suffix is lowercased
+        (EvidenceType.OTHER, "report.docx.lnk", "lnk"),
+        (EvidenceType.OTHER, "5f7b5f1e01b83767.automaticDestinations-ms", "jumplist"),
+        (EvidenceType.OTHER, "PowerShell_transcript.HOST.abc.20201113.txt", "pstranscript"),
+        (EvidenceType.OTHER, "powershell_transcript.x.txt", "pstranscript"),  # name lowercased
+        (EvidenceType.OTHER, "PowerShell_transcript.HOST.log", None),  # right prefix, wrong ext
+        (EvidenceType.OTHER, "notes.txt", None),  # plain .txt is not a transcript
         (EvidenceType.OTHER, "UsrClass.dat", None),  # unmapped OTHER -> not ingested
         (EvidenceType.DISK_IMAGE, "img.e01", None),  # plaso path, not a targeted feeder
     ],
