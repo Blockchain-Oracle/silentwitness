@@ -6,6 +6,14 @@
 
 Built for the SANS [Find Evil!](https://findevil.devpost.com/) hackathon (2026).
 
+**New here? Start with the [complete step-by-step setup & usage guide](./docs/SETUP_GUIDE.md)** —
+written so anyone (not just developers) can go from a blank SIFT VM to a finished report.
+
+**Result on the real SANS ROCBA case:** with the enforced coverage gate and a capable model,
+SilentWitness recalled **10 of 10** ground-truth findings — see the honest measurement (and the
+failure modes we found and fixed) in the [Accuracy Report](./docs/ACCURACY_REPORT.md), and trace
+any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_TRACE.md).
+
 ## Demo
 
 📺 **2-minute demo:** <!-- DEMO_VIDEO_URL --> [youtu.be/PLACEHOLDER](https://youtu.be/PLACEHOLDER)
