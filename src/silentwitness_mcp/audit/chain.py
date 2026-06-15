@@ -8,10 +8,19 @@ row breaks both its own ``record_hash`` and the ``prev_record_hash`` of the row
 that follows, so a single tamper detectable at ``silentwitness verify
 --audit-chain`` time.
 
-Pure module. The :class:`AuditLogger` consumes :func:`compute_record_hash` at
-emit time; :mod:`silentwitness_agent.cli_commands.verify` consumes
-:func:`verify_chain_lines` at verify time. No I/O here; both callers handle the
-file boundary.
+Three consumer patterns:
+
+1. :class:`AuditLogger.emit` (``silentwitness_mcp.audit.logger``) consumes
+   :func:`compute_record_hash` for its own internally-buffered writes.
+2. Direct JSONL writers (hypothesis, findings, hooks, critic, CLI commands)
+   consume :func:`append_chained_jsonl_line`, which injects the chain fields,
+   serialises the read-prev/compute/append window under a per-path lock, and
+   atomically appends through ``atomic_io.append_jsonl_line``.
+3. :mod:`silentwitness_agent.cli_commands.verify` consumes
+   :func:`verify_chain_lines` at verify time.
+
+I/O is confined to :func:`append_chained_jsonl_line` and
+:func:`_read_last_record_hash`; everything else is pure.
 
 Design choices
 ==============
@@ -27,13 +36,20 @@ Design choices
   ``json.dumps(payload_dict_without_hash_fields, sort_keys=True,
   separators=(",", ":"))``. The on-disk line uses Pydantic's default format
   (different key order), so verification re-canonicalises before hashing.
+- **Loud failure over silent restart.** When the seed read fails (unreadable
+  file, malformed tail, chain mid-file regression), we raise
+  :class:`ChainSeedError` rather than starting a fresh chain head — the verifier
+  runs on demand, so a silent restart could mask days of evidence.
 """
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
-from collections.abc import Iterable
+import threading
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Final
@@ -42,13 +58,62 @@ from silentwitness_common.atomic_io import append_jsonl_line
 
 HASH_FIELDS: Final[frozenset[str]] = frozenset({"record_hash", "prev_record_hash"})
 
-# Process-scoped cache of the last record_hash per file path. Each entry is the
-# chain head; the first write to a new path seeds it by reading the file's last
-# row. Caller must be the sole writer to a given path within a process — two
-# concurrent writers would race the cache and produce siblings sharing the same
-# prev_record_hash. The audit files are single-writer by design (one backend per
-# logical producer); this assumption is documented in the module docstring.
+
+class ChainSeedError(RuntimeError):
+    """Raised when the chain helper can't safely seed itself from an existing
+    audit file. Silently restarting the chain head would mask the corruption
+    until the next ``silentwitness verify --audit-chain`` run, which can be
+    days away. Operator-visible failure is the safer default."""
+
+
+# Process-scoped cache of the last record_hash per RESOLVED file path. The cache
+# is keyed on ``path.resolve()`` so ``Path("./x")`` and ``Path("/abs/x")`` share
+# one entry. Each entry is the chain head; the first write to a new path seeds
+# it by reading the file's last row. Cache mutation is protected by the
+# per-path lock acquired in :func:`_chain_write_lock`.
 _LAST_HASH_CACHE: dict[Path, str | None] = {}
+
+# Per-path locks. Threading lock for in-process serialisation; ``fcntl.flock`` on
+# a sidecar ``.<filename>.chain.lock`` for cross-process. The two compose: the
+# threading lock is acquired first (cheap, no syscall) and the flock second
+# (cross-process, single audit-file lockfile).
+_THREAD_LOCKS: dict[Path, threading.Lock] = {}
+_THREAD_LOCKS_GUARD = threading.Lock()
+
+
+def _get_thread_lock(resolved_path: Path) -> threading.Lock:
+    """Return the per-path threading.Lock, creating it on first request.
+
+    The guard lock around the dict mutation is only ever held briefly enough to
+    insert into the dict — every other access goes through the path-specific
+    lock returned here, so contention on the guard is negligible."""
+    with _THREAD_LOCKS_GUARD:
+        lock = _THREAD_LOCKS.get(resolved_path)
+        if lock is None:
+            lock = threading.Lock()
+            _THREAD_LOCKS[resolved_path] = lock
+        return lock
+
+
+@contextmanager
+def _chain_write_lock(resolved_path: Path) -> Iterator[None]:
+    """Serialise the read-prev/compute/append/cache-update window for ``path``.
+
+    In-process threads block on the per-path ``threading.Lock``; cross-process
+    writers block on ``fcntl.flock`` against a sidecar lockfile. The sidecar
+    pattern keeps the lock independent of the audit file itself so
+    :func:`atomic_io.append_jsonl_line`'s ``O_APPEND`` fd is unaffected."""
+    thread_lock = _get_thread_lock(resolved_path)
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    sidecar = resolved_path.parent / f".{resolved_path.name}.chain.lock"
+    with thread_lock:
+        sidecar.touch(exist_ok=True)
+        with sidecar.open("rb+") as fh:
+            fcntl.flock(fh.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(fh.fileno(), fcntl.LOCK_UN)
 
 
 def canonical_payload(entry: dict[str, Any]) -> bytes:
@@ -81,36 +146,59 @@ def compute_record_hash(prev_record_hash: str | None, payload: dict[str, Any]) -
 
 
 def _read_last_record_hash(path: Path) -> str | None:
-    """Read the file's last non-empty JSON line and extract ``record_hash``.
+    """Seed the cache from an existing audit file.
 
-    Returns ``None`` if the file is missing, empty, contains no chain field
-    yet (pre-chain rows), or the last line is malformed. The caller treats
-    ``None`` as "start a fresh chain head" — the next chained write becomes
-    the first chained row."""
+    Returns ``None`` when the file is genuinely absent / empty / pre-chain
+    (no row has ever had a ``record_hash``). Raises :class:`ChainSeedError`
+    when the file exists but the seed cannot be trusted — unreadable file,
+    malformed JSON at the tail, non-object tail, or a tail that lacks
+    ``record_hash`` while earlier rows have one (a mid-file chain regression).
+    Silently starting a fresh chain head in any of those cases would mask the
+    corruption until the next on-demand verify run."""
     if not path.exists():
         return None
-    last_hash: str | None = None
     try:
         with path.open("r", encoding="utf-8") as fh:
+            last_line: str | None = None
+            saw_record_hash = False
             for raw in fh:
                 stripped = raw.strip()
                 if not stripped:
                     continue
+                last_line = stripped
                 try:
                     entry = json.loads(stripped)
                 except json.JSONDecodeError:
+                    # Defer; we only raise if the tail itself is malformed.
                     continue
-                if isinstance(entry, dict):
-                    candidate = entry.get("record_hash")
-                    if isinstance(candidate, str):
-                        last_hash = candidate
-    except OSError:
-        # Caller's atomic_io.append_jsonl_line will surface the real I/O error
-        # at write time; a transient read failure here just means we start a
-        # fresh chain head — annoying but not silent (the verifier reports the
-        # break point with file:line).
-        return None
-    return last_hash
+                if isinstance(entry, dict) and isinstance(entry.get("record_hash"), str):
+                    saw_record_hash = True
+    except OSError as exc:
+        raise ChainSeedError(f"failed to read audit chain seed from {path}: {exc}") from exc
+
+    if last_line is None:
+        return None  # file is whitespace-only
+
+    try:
+        last_entry = json.loads(last_line)
+    except json.JSONDecodeError as exc:
+        preview = last_line[:80]
+        raise ChainSeedError(
+            f"audit chain seed at {path} ends with malformed JSON: {preview!r}"
+        ) from exc
+    if not isinstance(last_entry, dict):
+        raise ChainSeedError(
+            f"audit chain seed at {path} ends with non-object JSON: {type(last_entry).__name__}"
+        )
+    last_hash = last_entry.get("record_hash")
+    if isinstance(last_hash, str):
+        return last_hash
+    if saw_record_hash:
+        raise ChainSeedError(
+            f"audit chain seed at {path}: tail row has no record_hash but "
+            "earlier rows do — refusing to silently restart the chain"
+        )
+    return None  # pre-chain file; safe to start a fresh chain head
 
 
 def append_chained_jsonl_line(path: Path, line: str) -> str:
@@ -121,56 +209,83 @@ def append_chained_jsonl_line(path: Path, line: str) -> str:
     is the canonical caller. The two hash fields are added (or overwritten if
     the caller naively set them) before the line is re-serialised + written.
 
-    The chain head per ``path`` is cached in-process for amortised O(1) writes.
-    On the first write to a path the helper seeks the file's last line to seed
-    the cache; subsequent writes from the same process use the cached value.
+    **Concurrency.** The read-prev/compute/append/cache-update window runs
+    under :func:`_chain_write_lock`: a per-path ``threading.Lock`` (in-process)
+    plus ``fcntl.flock`` on a sidecar ``.<filename>.chain.lock`` (cross-process).
+    Two concurrent writers cannot race the seed-read. Path keys are normalised
+    via ``path.resolve()`` so relative and absolute references to the same file
+    share one lock + one cache entry.
 
-    **Single-writer constraint.** Two writers (threads or processes) appending
-    to the same path concurrently would race: both could read the same prior
-    hash and produce siblings sharing a ``prev_record_hash``, which would
-    silently break the chain at verify time. Today every audit backend file has
-    one logical writer (one per producer module), so this assumption holds. If
-    we ever multiplex writers per file, wrap callers in an external lock.
+    The chain head per resolved path is cached in-process for amortised O(1)
+    writes — only the first write per ``(process, path)`` reads the file to
+    seed; subsequent writes use the cached value.
 
-    Returns the assigned ``record_hash`` (useful for tests / callers that want
-    to record what they just wrote)."""
+    **Failure modes are loud, not silent.** If the seed read fails (unreadable
+    file, malformed tail, chain regression), :class:`ChainSeedError` propagates
+    to the caller. If ``line`` is not a JSON object, :class:`ValueError` is
+    raised. The byte-level append delegates to
+    :func:`atomic_io.append_jsonl_line`, which also raises on ``OSError``.
+
+    Returns the assigned ``record_hash`` (useful for tests and for callers that
+    want to confirm what they just wrote)."""
     payload = json.loads(line)
     if not isinstance(payload, dict):
         raise ValueError(f"chained JSONL line must be a JSON object, got {type(payload).__name__}")
 
-    if path in _LAST_HASH_CACHE:
-        prev_hash = _LAST_HASH_CACHE[path]
-    else:
-        prev_hash = _read_last_record_hash(path)
+    resolved = path.resolve()
+    with _chain_write_lock(resolved):
+        if resolved in _LAST_HASH_CACHE:
+            prev_hash = _LAST_HASH_CACHE[resolved]
+        else:
+            prev_hash = _read_last_record_hash(resolved)
 
-    payload["prev_record_hash"] = prev_hash
-    record_hash = compute_record_hash(prev_hash, payload)
-    payload["record_hash"] = record_hash
+        payload["prev_record_hash"] = prev_hash
+        record_hash = compute_record_hash(prev_hash, payload)
+        payload["record_hash"] = record_hash
 
-    chained_line = json.dumps(payload, separators=(",", ":"), default=str)
-    append_jsonl_line(path, chained_line)
-    _LAST_HASH_CACHE[path] = record_hash
-    return record_hash
+        chained_line = json.dumps(payload, separators=(",", ":"), default=str)
+        append_jsonl_line(resolved, chained_line)
+        _LAST_HASH_CACHE[resolved] = record_hash
+        return record_hash
 
 
 def strip_chain_fields_from_line(line: str) -> str:
     """Return ``line`` with the two chain fields removed — for Pydantic models
     declared ``extra="forbid"`` that need to round-trip a chained JSONL row
     back through ``model_validate_json``. The model's invariants stay strict
-    (no foreign fields allowed) while the audit-trail consumer still parses."""
+    (no foreign fields allowed) while the audit-trail consumer still parses.
+
+    Raises :class:`ValueError` on non-object input — symmetric with
+    :func:`append_chained_jsonl_line`. A caller piping a corrupted line would
+    otherwise see a confusing Pydantic ``ValidationError`` downstream with no
+    pointer to the strip step.
+
+    Note: the returned bytes are re-canonicalised (tight separators, sorted
+    keys are NOT applied — only ``separators=(",", ":")``); byte equality with
+    the original on-disk line is not preserved. Use :func:`verify_chain_lines`
+    for tamper detection, not byte comparison."""
     payload = json.loads(line)
     if not isinstance(payload, dict):
-        return line
+        raise ValueError(
+            f"strip_chain_fields_from_line expects a JSON object, got {type(payload).__name__}"
+        )
     payload.pop("prev_record_hash", None)
     payload.pop("record_hash", None)
     return json.dumps(payload, separators=(",", ":"), default=str)
 
 
-def reset_chain_cache() -> None:
-    """Drop the in-process last-hash cache. Test seam — production code should
-    not call this. Useful when a test resets ``audit/`` mid-run and expects the
-    next write to re-seed from disk."""
+def _reset_chain_cache() -> None:
+    """Drop the in-process last-hash cache and per-path lock registry.
+
+    **Test-only seam — not exported, not for production use.** Production code
+    cannot safely call this: any concurrent writer would lose chain continuity.
+    Tests import the private name explicitly (``from ... chain import
+    _reset_chain_cache``); the underscore is the contract. The companion
+    autouse pytest fixture in ``tests/conftest.py`` invokes this between every
+    test so cross-test cache leakage is impossible."""
     _LAST_HASH_CACHE.clear()
+    with _THREAD_LOCKS_GUARD:
+        _THREAD_LOCKS.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -267,11 +382,11 @@ def verify_chain_lines(lines: Iterable[str]) -> ChainVerifyResult:
 __all__ = [
     "HASH_FIELDS",
     "ChainBreak",
+    "ChainSeedError",
     "ChainVerifyResult",
     "append_chained_jsonl_line",
     "canonical_payload",
     "compute_record_hash",
-    "reset_chain_cache",
     "strip_chain_fields_from_line",
     "verify_chain_lines",
 ]

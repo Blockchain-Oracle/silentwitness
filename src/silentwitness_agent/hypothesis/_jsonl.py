@@ -11,9 +11,10 @@ from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 def emit_hypothesis_event(case_dir: Path, event: HypothesisEvent) -> None:
     """Append one HypothesisEvent line to ``<case_dir>/audit/hypothesis.jsonl``.
 
-    Uses the same fsync-after-append discipline as the MCP audit logger
-    (via ``append_jsonl_line``) so the JSONL file survives a process crash
-    mid-write without corruption.
+    Uses the same fsync-after-append discipline as the MCP audit logger:
+    :func:`append_chained_jsonl_line` injects the chain fields then delegates
+    to :func:`atomic_io.append_jsonl_line` for the actual fsync, so the JSONL
+    file survives a process crash mid-write without corruption.
     """
     log_path = case_dir / "audit" / "hypothesis.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)

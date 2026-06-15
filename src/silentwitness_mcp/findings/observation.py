@@ -335,8 +335,9 @@ def _write_audit_row(
     )
     # Scrub line-terminator chars from observation text BEFORE building
     # params dict — round-2 silent-failure C2: attacker-controlled
-    # U+2028/U+2029 in payload.text would otherwise make
-    # append_jsonl_line raise inside this function and erase the row.
+    # U+2028/U+2029 in payload.text would otherwise trip the underlying
+    # atomic_io.append_jsonl_line validator that append_chained_jsonl_line
+    # calls — raising inside this function and erasing the row.
     scrubbed_params: dict[str, object] = {
         "text": scrub_line_terminators(payload.text),
         "cited_spans": [s.model_dump(mode="json") for s in payload.cited_spans],

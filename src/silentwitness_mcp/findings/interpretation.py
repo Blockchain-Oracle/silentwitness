@@ -293,8 +293,10 @@ def _write_audit_row(
 ) -> None:
     """Canonical :class:`AuditEntry` (architecture §4.4). U+2028/U+2029
     are scrubbed from agent-controlled text before serialization so a
-    line-terminator attack can't make append_jsonl_line raise inside
-    this function and erase the row."""
+    line-terminator attack can't trip the underlying
+    ``atomic_io.append_jsonl_line`` validator that
+    :func:`append_chained_jsonl_line` calls — which would otherwise raise
+    inside this function and erase the row."""
     elapsed_ms = (time.monotonic() - start) * 1000.0
     summary_json = result.model_dump_json()
     artefact_path = (

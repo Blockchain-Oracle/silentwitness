@@ -251,8 +251,9 @@ def _handle_reject(
 
 
 def _emit_line(path: Path, record: dict[str, Any]) -> None:
-    # ensure_ascii=True prevents U+2028/U+2029/NEL slipping through to append_jsonl_line's
-    # forbidden-character validator (json.dumps with ensure_ascii=False preserves them).
+    # ensure_ascii=True prevents U+2028/U+2029/NEL slipping through to the underlying
+    # atomic_io.append_jsonl_line forbidden-character validator that
+    # append_chained_jsonl_line calls (json.dumps with ensure_ascii=False preserves them).
     append_chained_jsonl_line(path, json.dumps(record, ensure_ascii=True, sort_keys=True))
 
 

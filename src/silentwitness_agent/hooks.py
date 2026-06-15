@@ -72,8 +72,10 @@ def _hyp_id(stack: HypothesisStack) -> str | None:
 def _append_agent_jsonl(case_dir: Path, payload: dict[str, Any]) -> None:
     """Append one audit event to ``audit/agent.jsonl`` using atomic fsync-append.
 
-    Delegates to ``atomic_io.append_jsonl_line`` which fsyncs after each write and
-    validates for forbidden line-terminator characters (LF, CR, Unicode line separators).
+    Delegates to :func:`append_chained_jsonl_line` which injects the audit
+    hash-chain fields and forwards to ``atomic_io.append_jsonl_line`` for the
+    fsync-after-each-write and forbidden-line-terminator validation (LF, CR,
+    Unicode line separators).
     """
     path = case_dir / "audit" / "agent.jsonl"
     append_chained_jsonl_line(path, json.dumps(payload, default=str))
