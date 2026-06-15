@@ -149,7 +149,12 @@ def _detection_records(
     context = " ".join(
         f"{name}={fields[name]}" for name in _DETECTION_CONTEXT_FIELDS if fields.get(name)
     )
-    for det in evaluate_event(fields):
+    try:
+        detections = evaluate_event(fields)
+    except Exception as exc:  # a detection-engine fault must not cost the event evidence
+        _LOG.warning("evtx: sigma evaluation failed on an event (%s) — event row kept", exc)
+        return
+    for det in detections:
         tags = ",".join(det.tags)
         text = (
             f"SIGMA DETECTION level={det.level} rule={det.title} "

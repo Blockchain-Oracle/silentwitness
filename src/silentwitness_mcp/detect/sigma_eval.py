@@ -22,6 +22,7 @@ unit-tested; pysigma is a pure-Python dependency so the whole engine runs in CI.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -30,7 +31,29 @@ from pathlib import Path
 from typing import Any
 
 _LOG = logging.getLogger(__name__)
-_RULES_DIR = Path(__file__).parent / "rules"
+# The bundled rules are a small, offline *seed* — NOT the product. The engine is
+# pack-agnostic: point ``SILENTWITNESS_SIGMA_RULES_DIR`` at a full community SigmaHQ
+# Windows ruleset (install.sh can fetch a pinned release) and every compatible rule is
+# loaded. Rules this lightweight matcher can't represent are skipped loudly, so a broad
+# pack degrades gracefully to the supported subset instead of failing.
+_SEED_RULES_DIR = Path(__file__).parent / "rules"
+_RULES_DIR_ENV = "SILENTWITNESS_SIGMA_RULES_DIR"
+
+
+def _resolve_rules_dir() -> Path:
+    override = os.environ.get(_RULES_DIR_ENV)
+    if override:
+        path = Path(override)
+        if path.is_dir():
+            return path
+        _LOG.error("sigma: %s=%s is not a directory — using bundled seed", _RULES_DIR_ENV, override)
+    return _SEED_RULES_DIR
+
+
+# Process-creation events: Sysmon EID 1 and Security EID 4688. Rules whose logsource is
+# ``category: process_creation`` are gated to these so an ``Image|endswith`` rule can't fire
+# on an unrelated channel that happens to carry a same-named field.
+_PROC_EVENT_IDS = frozenset({"1", "4688"})
 
 # A compiled rule predicate: True iff the event dict satisfies the rule's condition.
 _Predicate = Callable[[Mapping[str, str]], bool]
@@ -57,11 +80,13 @@ class Detection:
     tags: tuple[str, ...]
 
 
-def _sigmastring_regex(value: Any) -> re.Pattern[str]:
-    """Compile a ``SigmaString`` (literal parts + ``*``/``?`` wildcards) to an anchored regex.
+def _sigmastring_regex(value: Any, *, anchored: bool) -> re.Pattern[str]:
+    """Compile a ``SigmaString`` (literal parts + ``*``/``?`` wildcards) to a regex.
 
-    Sigma string matching is full-value (modifiers like ``contains`` already bake the
-    surrounding ``*`` into the value) and case-insensitive by default."""
+    ``anchored`` distinguishes the two Sigma string semantics: a *field* value is a
+    full-value match (``^…$``; modifiers like ``contains`` already bake the surrounding
+    ``*`` in), whereas a *keyword* (value-only, no field) is a substring match against the
+    event. Both are case-insensitive."""
     from sigma.types import SpecialChars
 
     out: list[str] = []
@@ -72,11 +97,16 @@ def _sigmastring_regex(value: Any) -> re.Pattern[str]:
             out.append(".")
         else:
             out.append(re.escape(part))
-    return re.compile("^" + "".join(out) + "$", re.IGNORECASE | re.DOTALL)
+    body = "".join(out)
+    pattern = f"^{body}$" if anchored else body
+    return re.compile(pattern, re.IGNORECASE | re.DOTALL)
 
 
-def _compile_value(value: Any) -> _ValueTest:
-    """Compile one Sigma value to a field-value test. Raises ``UnsupportedRuleError`` if unknown."""
+def _compile_value(value: Any, *, anchored: bool = True) -> _ValueTest:
+    """Compile one Sigma value to a field-value test. Raises ``UnsupportedRuleError`` if unknown.
+
+    ``anchored=False`` (keyword/value-only matching) makes string/regex tests substring
+    rather than full-value."""
     from sigma.types import (
         SigmaNull,
         SigmaNumber,
@@ -87,8 +117,8 @@ def _compile_value(value: Any) -> _ValueTest:
     if isinstance(value, SigmaNull):
         return lambda actual: actual is None or actual == ""
     if isinstance(value, SigmaString):
-        pattern = _sigmastring_regex(value)
-        return lambda actual: actual is not None and pattern.match(actual) is not None
+        pattern = _sigmastring_regex(value, anchored=anchored)
+        return lambda actual: actual is not None and pattern.search(actual) is not None
     if isinstance(value, SigmaNumber):
         target = float(value.number)
         return lambda actual: _num_eq(actual, target)
@@ -130,46 +160,81 @@ def _compile_condition(node: Any) -> _Predicate:
         field = node.field
         test = _compile_value(node.value)
         return lambda ev: test(ev.get(field))
-    if cls == "ConditionValueExpression":  # keyword (no field): match any field's value
-        test = _compile_value(node.value)
+    if cls == "ConditionValueExpression":  # keyword (no field): substring-match any value
+        test = _compile_value(node.value, anchored=False)
         return lambda ev: any(test(v) for v in ev.values())
     raise UnsupportedRuleError(f"condition node {cls}")
 
 
+def _logsource_predicate(logsource: Any) -> _Predicate | None:
+    """A channel guard derived from a rule's ``logsource``, or None if no gate is needed.
+
+    Generic Windows-log semantics (not case-specific): a ``process_creation`` rule may have
+    no EventID in its condition (only ``Image|endswith``), so without a gate it would fire on
+    any channel carrying a same-named field. Restrict those to Sysmon EID 1 / Security 4688.
+    EventID-gated rules need no logsource guard — their condition already self-selects."""
+    category = str(getattr(logsource, "category", "") or "").lower()
+    if category == "process_creation":
+        return lambda ev: (
+            ev.get("EventID") in _PROC_EVENT_IDS or "sysmon" in ev.get("Channel", "").lower()
+        )
+    return None
+
+
 def _compile_rule(rule: Any) -> _Predicate:
-    """Compile a rule's (possibly multi-expression) condition into one OR-combined predicate."""
+    """Compile a rule's (multi-expression) condition + logsource gate into one predicate."""
     preds = [_compile_condition(sc.parse()) for sc in rule.detection.parsed_condition]
-    if len(preds) == 1:
-        return preds[0]
-    return lambda ev: any(p(ev) for p in preds)
+    condition = preds[0] if len(preds) == 1 else (lambda ev: any(p(ev) for p in preds))
+    gate = _logsource_predicate(rule.logsource)
+    if gate is None:
+        return condition
+    return lambda ev: gate(ev) and condition(ev)
 
 
 class SigmaRuleset:
     """A loaded, compiled pack of Sigma rules ready to match against event dicts."""
 
-    def __init__(self, rules_dir: Path = _RULES_DIR) -> None:
+    def __init__(self, rules_dir: Path | None = None) -> None:
         self._rules: list[tuple[Detection, _Predicate]] = []
         self._skipped: list[tuple[str, str]] = []  # (rule title/id, reason)
-        self._load(rules_dir)
+        self._load(rules_dir if rules_dir is not None else _resolve_rules_dir())
 
     def _load(self, rules_dir: Path) -> None:
         from sigma.collection import SigmaCollection
         from sigma.exceptions import SigmaError
 
-        paths = sorted(rules_dir.glob("*.yml"))
+        paths = sorted(rules_dir.glob("*.yml")) + sorted(rules_dir.glob("*.yaml"))
         if not paths:
-            _LOG.warning("sigma: no rule files found in %s", rules_dir)
+            _LOG.error("sigma: no rule files in %s — detection is OFF for this run", rules_dir)
             return
-        collection = SigmaCollection.load_ruleset([str(p) for p in paths])
-        for rule in collection.rules:
-            label = rule.title or str(rule.id)
+        # Load one file at a time so a single malformed rule in a large community pack is
+        # skipped (counted) rather than aborting the whole ruleset — and so a parse failure
+        # never propagates out to abort the EVTX ingest carrying the underlying evidence.
+        for path in paths:
             try:
-                predicate = _compile_rule(rule)
-            except (UnsupportedRuleError, SigmaError) as exc:
-                _LOG.warning("sigma: skipped rule %r: %s", label, exc)
-                self._skipped.append((label, str(exc)))
+                rules = SigmaCollection.load_ruleset([str(path)]).rules
+            except Exception as exc:  # a bad rule file must never be fatal to detection
+                _LOG.debug("sigma: skipped unparseable rule file %s: %s", path.name, exc)
+                self._skipped.append((path.name, str(exc)))
                 continue
-            self._rules.append((_detection_of(rule), predicate))
+            for rule in rules:
+                label = rule.title or str(rule.id)
+                try:
+                    predicate = _compile_rule(rule)
+                except (UnsupportedRuleError, SigmaError) as exc:
+                    # A rule this matcher can't represent is skipped *loudly* — it must not
+                    # look like a rule that found nothing. Full SigmaHQ packs use modifiers /
+                    # pipelines we don't implement, so a non-zero skip count is expected there.
+                    _LOG.debug("sigma: skipped rule %r: %s", label, exc)
+                    self._skipped.append((label, str(exc)))
+                    continue
+                self._rules.append((_detection_of(rule), predicate))
+        _LOG.info(
+            "sigma: %d rule(s) compiled, %d skipped from %s",
+            len(self._rules),
+            len(self._skipped),
+            rules_dir,
+        )
 
     @property
     def rule_count(self) -> int:
