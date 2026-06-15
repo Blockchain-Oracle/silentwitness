@@ -17,9 +17,11 @@ tool does NOT validate its existence. ``abandoning_evidence`` is
 frozen to a tuple at parse time so a handler cannot mutate the input
 between the pipeline pass and the audit-row pass.
 
-Persistence note: ``_PivotEvent.reason`` carries the sanitizer's
-wrapped envelope verbatim. A downstream consumer comparing to
-user-supplied strings must unwrap via the sanitizer's envelope.
+Persistence note: ``_PivotEvent.reason`` is the **unwrapped** sanitized
+content (task #20). The sanitizer's ``[UNTRUSTED EVIDENCE BEGIN/END]``
+wrap is a hot-path LLM-prompt visibility seam — it is applied at
+gate time and stripped before persistence so the markers do not leak
+into ``hypothesis.jsonl``.
 """
 
 from __future__ import annotations
@@ -44,9 +46,8 @@ from silentwitness_mcp.findings._pivot_store import (
     max_pivot_seq,
 )
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
+from silentwitness_mcp.findings._wrap import content_after_wrap
 from silentwitness_mcp.verification.sanitizer import (
-    _MARKER_BEGIN,
-    _MARKER_END,
     StripEvent,
     StripEventWriter,
     sanitize,
@@ -69,10 +70,6 @@ _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 # Zero-padded 3-digit form matches the allocator output.
 _HYPOTHESIS_ID_PATTERN: Final = re.compile(r"^H-\d{3,}$")
 _HYPOTHESIS_JSONL: Final = "hypothesis.jsonl"
-# Single source of truth: pull the sanitizer's wrap markers so the
-# post-sanitize unwrap stays in lockstep with the sanitizer envelope.
-_WRAP_BEGIN: Final = f"{_MARKER_BEGIN}\n"
-_WRAP_END: Final = f"\n{_MARKER_END}"
 
 
 class PivotInput(BaseModel):
@@ -149,14 +146,6 @@ class _JsonlStripWriter(StripEventWriter):
 
     def emit(self, event: StripEvent) -> None:
         append_jsonl_line(self._path, event.model_dump_json())
-
-
-def _content_after_wrap(sanitized: str) -> str:
-    """Strip the sanitizer envelope so emptiness check operates on
-    content, not wrap markers."""
-    if sanitized.startswith(_WRAP_BEGIN) and sanitized.endswith(_WRAP_END):
-        return sanitized[len(_WRAP_BEGIN) : -len(_WRAP_END)]
-    return sanitized
 
 
 def _hypothesis_log(case_dir: Path) -> Path:
@@ -246,7 +235,7 @@ def _run_pipeline(
     writer = _JsonlStripWriter(sanitizer_log)
     s_reason = sanitize(payload.reason, pre_audit_id, audit_writer=writer).wrapped_text
 
-    if not _content_after_wrap(s_reason).strip():
+    if not content_after_wrap(s_reason).strip():
         return PivotResult(
             success=False,
             reason=PivotRejectReason.MISSING_REQUIRED_FIELD,
@@ -268,12 +257,14 @@ def _run_pipeline(
         )
 
     pivot_id = f"P-{max_pivot_seq(hypothesis_log) + 1:03d}"
+    # Strip the sanitizer wrap before persisting (task #20). Gates above ran on the
+    # wrapped form; on-disk form is unwrapped so markers don't leak into hypothesis.jsonl.
     event = _PivotEvent(
         ts=datetime.now(UTC),
         hypothesis_id=payload.from_hypothesis_id,
         pivot_id=pivot_id,
         to_hypothesis_id=payload.to_hypothesis_id,
-        reason=s_reason,
+        reason=content_after_wrap(s_reason),
         related_audit_ids=payload.abandoning_evidence,
     )
     hypothesis_log.parent.mkdir(parents=True, exist_ok=True)

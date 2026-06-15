@@ -244,7 +244,9 @@ def test_sanitizer_strips_xml_role_token_from_reason(
     ]
     pivot_reason = next(r["reason"] for r in persisted_rows if r.get("type") == "pivot")
     assert "<system>" not in pivot_reason
-    assert "[UNTRUSTED EVIDENCE BEGIN]" in pivot_reason
+    # Task #20: wrap markers stripped at storage seam — sanitize ran on wrapped form.
+    assert "[UNTRUSTED EVIDENCE BEGIN]" not in pivot_reason
+    assert "[UNTRUSTED EVIDENCE END]" not in pivot_reason
     sanitizer_log = case_dir / "audit" / "sanitizer.jsonl"
     assert sanitizer_log.exists()
     assert sanitizer_log.read_text(encoding="utf-8").strip() != ""

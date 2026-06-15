@@ -34,9 +34,8 @@ from silentwitness_mcp.findings._narrative_store import (
     existing_pivot_ids,
 )
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
+from silentwitness_mcp.findings._wrap import content_after_wrap
 from silentwitness_mcp.verification.sanitizer import (
-    _MARKER_BEGIN,
-    _MARKER_END,
     StripEvent,
     StripEventWriter,
     sanitize,
@@ -61,8 +60,6 @@ _OBSERVATION_ID_PATTERN: Final = re.compile(r"^O-\d{3,}$")
 _PIVOT_ID_PATTERN: Final = re.compile(r"^P-\d{3,}$")
 _INITIAL_HYPOTHESIS_MIN: Final = 20
 _ATTACK_CHAIN_GAPS_THRESHOLD: Final = 3
-_WRAP_BEGIN: Final = f"{_MARKER_BEGIN}\n"
-_WRAP_END: Final = f"\n{_MARKER_END}"
 # Sections architecture §5.4 reserves for the examiner / renderer.
 _NON_AGENT_WRITABLE: Final[frozenset[ReportSection]] = frozenset(
     {ReportSection.RECOMMENDATIONS, ReportSection.APPENDIX_AUDIT}
@@ -141,18 +138,6 @@ class _JsonlStripWriter(StripEventWriter):
 
     def emit(self, event: StripEvent) -> None:
         append_jsonl_line(self._path, event.model_dump_json())
-
-
-def _content_after_wrap(sanitized: str) -> str:
-    """Strip the sanitizer envelope so emptiness checks see content.
-    Raises :class:`NarrativeStoreError` if the envelope is missing —
-    a sanitizer regression would otherwise let the emptiness check
-    silently pass on non-wrapped raw input."""
-    if sanitized.startswith(_WRAP_BEGIN) and sanitized.endswith(_WRAP_END):
-        return sanitized[len(_WRAP_BEGIN) : -len(_WRAP_END)]
-    raise NarrativeStoreError(
-        "sanitizer envelope contract broken: wrap markers missing from output"
-    )
 
 
 def record_narrative(
@@ -272,7 +257,7 @@ def _run_pipeline(
         for step in payload.attack_chain
     )
 
-    if not _content_after_wrap(s_hyp).strip():
+    if not content_after_wrap(s_hyp).strip():
         return NarrativeResult(
             success=False,
             reason=NarrativeRejectReason.MISSING_REQUIRED_FIELD,
@@ -282,7 +267,7 @@ def _run_pipeline(
     # Conditional gaps floor — count gaps with non-empty post-sanitize
     # content; an entry that sanitizes to wrap-markers-only would
     # otherwise degrade the floor to a tuple-length check.
-    non_empty_gaps = [g for g in s_gaps if _content_after_wrap(g).strip()]
+    non_empty_gaps = [g for g in s_gaps if content_after_wrap(g).strip()]
     if len(s_chain) > _ATTACK_CHAIN_GAPS_THRESHOLD and not non_empty_gaps:
         return NarrativeResult(
             success=False,
@@ -315,13 +300,25 @@ def _run_pipeline(
                     context={"pivot_id": pid},
                 )
 
+    # Strip the sanitizer's `[UNTRUSTED EVIDENCE BEGIN/END]` wrap before persisting.
+    # Same task #20 invariant as record_interpretation: gates above run on the WRAPPED
+    # form (injection defense intact); only the on-disk form is unwrapped so the
+    # markers do not leak into findings.json.
+    clean_chain = [
+        AttackChainStep(
+            observation_id=step.observation_id,
+            interpretation_id=step.interpretation_id,
+            note=content_after_wrap(step.note) if step.note is not None else None,
+        )
+        for step in s_chain
+    ]
     narrative_record = {
         "section": payload.section.value,
-        "text": s_text,
-        "initial_hypothesis": s_hyp,
-        "attack_chain": [step.model_dump(mode="json") for step in s_chain],
+        "text": content_after_wrap(s_text),
+        "initial_hypothesis": content_after_wrap(s_hyp),
+        "attack_chain": [step.model_dump(mode="json") for step in clean_chain],
         "pivots": list(payload.pivots),
-        "gaps": list(s_gaps),
+        "gaps": [content_after_wrap(g) for g in s_gaps],
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     nid = allocate_narrative_id(case_dir, narrative_record)
