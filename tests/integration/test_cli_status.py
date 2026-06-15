@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import select
 import signal
 import subprocess
 import sys
@@ -205,14 +206,31 @@ def test_status_watch_exits_130_on_sigint(tmp_path: Path, monkeypatch: pytest.Mo
         stderr=subprocess.PIPE,
         env={**__import__("os").environ, **env},
     )
-    time.sleep(0.6)
+    # Deterministic readiness sync (replaces a flaky fixed sleep(0.6)): the watch
+    # loop renders its first frame to stdout only AFTER its SIGINT handler is
+    # installed, so wait for that first byte before signalling. A fixed sleep
+    # raced startup — on a loaded CI box imports exceed it, SIGINT lands mid-import,
+    # and the process exits with the wrong code (the long-standing flake).
+    assert proc.stdout is not None
+    deadline = time.monotonic() + 10.0
+    while time.monotonic() < deadline:
+        if proc.poll() is not None:
+            proc.wait()
+            pytest.fail(f"--watch exited before rendering (code {proc.returncode})")
+        readable, _, _ = select.select([proc.stdout], [], [], 0.2)
+        if readable and proc.stdout.read(1):
+            break  # first frame rendered → loop is running, handler installed
+    else:
+        proc.kill()
+        proc.wait()
+        pytest.fail("--watch never rendered a frame within 10s")
     proc.send_signal(signal.SIGINT)
     try:
-        proc.wait(timeout=3.0)
+        proc.wait(timeout=5.0)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-        pytest.fail("--watch did not exit after SIGINT within 3s")
+        pytest.fail("--watch did not exit within 5s of SIGINT")
     assert proc.returncode == 130
 
 
