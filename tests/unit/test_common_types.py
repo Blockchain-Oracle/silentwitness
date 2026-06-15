@@ -19,7 +19,6 @@ from silentwitness_common.types import (
     AuditEntry,
     CitedSpan,
     Confidence,
-    CriticVerdict,
     DataProvenance,
     EvidenceType,
     Finding,
@@ -185,7 +184,6 @@ def test_string_enums_are_stable_strings() -> None:
         SpecialistName.MEMORY,
         ReportSection.FINDINGS,
         FindingStatus.DRAFT,
-        CriticVerdict.AGREE,
     ):
         assert isinstance(member.value, str)
         assert member.value == str(member.value)

@@ -81,10 +81,6 @@ class CriticVerdictRecord(BaseModel):
     missing_corroboration: list[str] = Field(default_factory=list)
 
 
-# Backwards-compatible alias: avoids shadowing silentwitness_common.types.CriticVerdict (StrEnum).
-CriticVerdict = CriticVerdictRecord
-
-
 class CriticReport(BaseModel):
     """Structured output returned by the critic agent after reviewing all findings."""
 
@@ -230,7 +226,6 @@ async def critique(
 __all__ = [
     "CriticDeps",
     "CriticReport",
-    "CriticVerdict",
     "CriticVerdictRecord",
     "StagedFinding",
     "build_critic",

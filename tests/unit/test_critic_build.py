@@ -13,7 +13,7 @@ from pydantic_ai.models.test import TestModel
 from silentwitness_agent.critic import (
     CriticDeps,
     CriticReport,
-    CriticVerdict,
+    CriticVerdictRecord,
     StagedFinding,
     _select_model_str,
     build_critic,
@@ -120,7 +120,7 @@ def test_critic_report_has_expected_fields() -> None:
 
 def test_critic_verdict_has_expected_fields() -> None:
     expected = {"finding_id", "verdict", "reason", "suggested_revision", "missing_corroboration"}
-    assert set(CriticVerdict.model_fields) == expected
+    assert set(CriticVerdictRecord.model_fields) == expected
 
 
 def test_staged_finding_is_frozen() -> None:

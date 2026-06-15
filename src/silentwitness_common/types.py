@@ -150,12 +150,6 @@ class FindingStatus(StrEnum):
     ARCHIVED = "ARCHIVED"
 
 
-class CriticVerdict(StrEnum):
-    AGREE = "AGREE"
-    CHALLENGE = "CHALLENGE"
-    REJECT = "REJECT"
-
-
 # ---------------------------------------------------------------------------
 # Core types — citation + provenance
 # ---------------------------------------------------------------------------
