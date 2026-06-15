@@ -265,11 +265,16 @@ def _run_pipeline(
             },
         )
 
+    # Strip the sanitizer's `[UNTRUSTED EVIDENCE BEGIN/END]` wrap before persisting.
+    # The wrap is an LLM-prompt visibility seam — it must NOT leak into stored findings
+    # (the report compose layer used to scrub it on read; that papered over the leak).
+    # Entity-gate / length checks above run on the wrapped form (unchanged), so the
+    # injection-defense surface is intact; only the on-disk form is unwrapped.
     interpretation_record = {
-        "text": s_text,
+        "text": _content_after_wrap(s_text),
         "confidence": payload.confidence.value,
-        "justification": s_just,
-        _FALSIFICATION_FIELD: s_fals,
+        "justification": _content_after_wrap(s_just),
+        _FALSIFICATION_FIELD: _content_after_wrap(s_fals),
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     iid = allocate_interpretation_id(case_dir, payload.observation_id, interpretation_record)

@@ -257,11 +257,15 @@ def test_sanitizer_strips_xml_role_token_from_text(
         payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
     )
     assert envelope.data.success is True
-    # The persisted record contains the wrapped sanitized text.
+    # The persisted record contains the sanitized text (xml-role token stripped).
+    # The sanitizer's [UNTRUSTED EVIDENCE BEGIN/END] wrap markers are an LLM-prompt
+    # visibility seam and MUST NOT leak into findings.json (task #20). The entity
+    # gate ran on the wrapped form above; persistence unwraps after that.
     findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
     persisted_text = findings[0]["interpretations"][0]["text"]
     assert "<system>" not in persisted_text
-    assert "[UNTRUSTED EVIDENCE BEGIN]" in persisted_text
+    assert "[UNTRUSTED EVIDENCE BEGIN]" not in persisted_text
+    assert "[UNTRUSTED EVIDENCE END]" not in persisted_text
     # A sanitizer JSONL entry was emitted.
     sanitizer_log = case_dir / "audit" / "sanitizer.jsonl"
     assert sanitizer_log.exists()
