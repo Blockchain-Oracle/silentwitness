@@ -15,6 +15,7 @@ from silentwitness_agent.cli_commands._evidence_types import (
     human_size,
     sha256_hex,
 )
+from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.evidence.registry import (
     EvidenceContentDriftError,
@@ -32,6 +33,7 @@ def run(
     recursive: bool,
     examiner: str,
     no_color: bool,
+    as_type: EvidenceType | None = None,
 ) -> int:
     out = Console(no_color=no_color)
     err = Console(stderr=True, no_color=no_color)
@@ -60,12 +62,19 @@ def run(
         err.print(f"[red]✗[/red] no files found under '{path}'{hint}", highlight=False)
         return 1
 
+    def resolve_type(p: Path) -> EvidenceType:
+        """`--as` overrides only when registering a single file — applying one type to
+        every leaf of a recursive walk would mis-label all but one of them."""
+        if as_type is not None and len(files) == 1:
+            return as_type
+        return detect_evidence_type(p)
+
     if dry_run:
         for p in files:
             try:
                 digest, _ = sha256_hex(p)
                 out.print(
-                    f"DRY-RUN sha256:{digest}  {p.name}  ({detect_evidence_type(p)})",
+                    f"DRY-RUN sha256:{digest}  {p.name}  ({resolve_type(p)})",
                     highlight=False,
                 )
             except PermissionError as exc:
@@ -91,7 +100,7 @@ def run(
     failed = 0
     for p in files:
         try:
-            record = registry.register(p, detect_evidence_type(p), invocation_audit_id)
+            record = registry.register(p, resolve_type(p), invocation_audit_id)
             if record.registered_audit_id != invocation_audit_id:
                 out.print(
                     f"[yellow]⚠[/yellow] already registered (sha256 matches): {p.name}",

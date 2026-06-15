@@ -374,8 +374,18 @@ def register_evidence(
     path: Path = typer.Argument(..., readable=False),
     dry_run: bool = typer.Option(False, "--dry-run"),
     recursive: bool = typer.Option(False, "--recursive"),
+    as_type: str | None = typer.Option(
+        None,
+        "--as",
+        help=(
+            "Override auto-classification (suffix-based, see _evidence_types._SUFFIX_TYPE). "
+            "Useful when a memory dump is named `.raw` (auto-classified as disk_image). "
+            "Values: disk_image, memory_dump, evtx, pcap, hive, ids_rules, other."
+        ),
+    ),
 ) -> None:
     from silentwitness_agent.cli_commands.register_evidence import run as _run
+    from silentwitness_common.types import EvidenceType
 
     cli_ctx: _CliCtx = ctx.obj
     err = _console(cli_ctx.no_color, stderr=True)
@@ -383,6 +393,14 @@ def register_evidence(
     if not case_dir.exists():
         err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
         raise typer.Exit(code=1)
+    override: EvidenceType | None = None
+    if as_type is not None:
+        try:
+            override = EvidenceType(as_type)
+        except ValueError:
+            allowed = ", ".join(t.value for t in EvidenceType)
+            err.print(f"[red]✗[/red] invalid --as '{as_type}'. Allowed: {allowed}", highlight=False)
+            raise typer.Exit(code=2) from None
     examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
     code = _run(
         case_dir,
@@ -390,6 +408,7 @@ def register_evidence(
         path,
         dry_run=dry_run,
         recursive=recursive,
+        as_type=override,
         examiner=examiner,
         no_color=cli_ctx.no_color,
     )
