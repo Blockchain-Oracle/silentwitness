@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+/* SilentWitness brand tokens — indigo for trust, forest-green for evidence,
+ * warm-beige as the ground tone. Mirrors the designer's cdr-kit palette
+ * vendored under `design/` (see plan track F4). OKLCh values give us
+ * predictable contrast in both light and dark mode without per-mode tuning.
+ */
+:root {
+  --color-brand-indigo: oklch(0.42 0.18 264);
+  --color-brand-indigo-soft: oklch(0.72 0.12 264);
+  --color-brand-forest: oklch(0.45 0.13 158);
+  --color-brand-forest-soft: oklch(0.78 0.09 158);
+  --color-brand-beige: oklch(0.95 0.025 78);
+  --color-brand-beige-soft: oklch(0.98 0.012 78);
+  --color-brand-ink: oklch(0.18 0.025 264);
+}
+
+.dark {
+  --color-brand-beige: oklch(0.16 0.025 264);
+  --color-brand-beige-soft: oklch(0.21 0.025 264);
+  --color-brand-ink: oklch(0.94 0.02 78);
+  --color-brand-indigo-soft: oklch(0.78 0.14 264);
+  --color-brand-forest-soft: oklch(0.78 0.10 158);
+}
+
+@theme inline {
+  --color-primary: var(--color-brand-indigo);
+  --color-primary-foreground: var(--color-brand-beige-soft);
+  --color-accent: var(--color-brand-forest);
+  --color-accent-foreground: var(--color-brand-beige-soft);
+}
+
+body {
+  background: var(--color-brand-beige-soft);
+  color: var(--color-brand-ink);
+}

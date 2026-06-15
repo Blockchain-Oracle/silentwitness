@@ -62,6 +62,14 @@ node_modules/
 package-lock.json
 yarn.lock
 
+# Node / Next.js / Fumadocs site under apps/site/
+apps/**/.next/
+apps/**/.source/
+apps/**/.vercel/
+apps/**/*.tsbuildinfo
+apps/**/public/pagefind/
+.pnpm-store/
+
 # Sub-agent research scratch
 /tmp/
 .claude/*.lock
