@@ -24,6 +24,11 @@ from silentwitness_mcp.index.store import IndexRecord
 # Cap referenced filenames per row — a prefetch can list hundreds; the first slice plus
 # MAX_TEXT keeps the row searchable without bloating the index.
 _MAX_FILES = 60
+# Prefetch carries a fixed array of last-run timestamps (8 on Win8+, 1 on Win7); libscca
+# exposes them by index with no count property, so we read the fixed maximum and stop at
+# the first index it refuses. Unused slots are returned as the FILETIME zero epoch.
+_MAX_LAST_RUN_TIMES = 8
+_FILETIME_EPOCH = datetime(1601, 1, 1)
 
 
 def _prefetch_to_record(
@@ -61,14 +66,18 @@ def _latest_run_iso(times: list[datetime]) -> str:
 
 
 def _last_run_times(scca: Any) -> list[datetime]:
-    """Collect the recorded (non-null) last-run datetimes, best-effort per slot."""
+    """Collect the recorded (non-empty) last-run datetimes from the fixed-size slot array.
+
+    libscca exposes no count for the run-time array, so we read the fixed maximum and stop
+    at the first index it refuses (older single-slot formats). Unused slots come back as the
+    FILETIME zero epoch and are dropped — including them would back-date the row's ``ts``."""
     times: list[datetime] = []
-    for index in range(getattr(scca, "number_of_last_run_times", 0)):
+    for index in range(_MAX_LAST_RUN_TIMES):
         try:
             value = scca.get_last_run_time(index)
         except (OSError, ValueError):
-            continue
-        if isinstance(value, datetime):
+            break
+        if isinstance(value, datetime) and value != _FILETIME_EPOCH:
             times.append(value)
     return times
 

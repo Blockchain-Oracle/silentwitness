@@ -16,7 +16,12 @@ from silentwitness_mcp.index.feeders_lnk import (
     _lnk_to_record,
     _network_share,
 )
-from silentwitness_mcp.index.feeders_prefetch import _latest_run_iso, _prefetch_to_record
+from silentwitness_mcp.index.feeders_prefetch import (
+    _FILETIME_EPOCH,
+    _last_run_times,
+    _latest_run_iso,
+    _prefetch_to_record,
+)
 from silentwitness_mcp.index.feeders_pstranscript import (
     _decode,
     _parse_header,
@@ -93,6 +98,30 @@ def test_latest_run_iso_picks_most_recent() -> None:
     times = [datetime(2020, 11, 1, tzinfo=UTC), datetime(2020, 11, 13, 8, tzinfo=UTC)]
     assert _latest_run_iso(times) == "2020-11-13T08:00:00+00:00"
     assert _latest_run_iso([]) == ""
+
+
+class _FakeScca:
+    """Duck-typed pyscca.file: fixed run-time slots, raising past the available count."""
+
+    def __init__(self, times: list[datetime]) -> None:
+        self._times = times
+
+    def get_last_run_time(self, index: int) -> datetime:
+        if index >= len(self._times):
+            raise OSError("no such run-time slot")
+        return self._times[index]
+
+
+def test_last_run_times_drops_filetime_epoch_sentinels() -> None:
+    real = datetime(2020, 11, 14, 4, 49, tzinfo=UTC)
+    scca = _FakeScca([real, _FILETIME_EPOCH, _FILETIME_EPOCH])
+    assert _last_run_times(scca) == [real]
+
+
+def test_last_run_times_stops_at_first_refused_slot() -> None:
+    a = datetime(2020, 11, 14, 4, tzinfo=UTC)
+    b = datetime(2020, 11, 14, 3, tzinfo=UTC)
+    assert _last_run_times(_FakeScca([a, b])) == [a, b]
 
 
 def test_prefetch_to_record_carries_exe_and_files() -> None:
