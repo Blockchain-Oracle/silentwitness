@@ -88,7 +88,7 @@ def test_render_creates_report_md(tmp_path: Path) -> None:
     result = _make_writer(case_dir).render()
     assert (case_dir / "report.md").exists()
     assert isinstance(result, ReportRenderResult)
-    assert result.sections_rendered == 9
+    assert result.sections_rendered == 10
 
 
 def test_report_sections_in_canonical_order(tmp_path: Path) -> None:

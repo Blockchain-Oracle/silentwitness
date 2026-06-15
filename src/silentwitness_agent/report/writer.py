@@ -21,6 +21,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from silentwitness_agent.report.compose import (
     compose_appendix_audit,
+    compose_attack_techniques,
     compose_engagement_overview,
     compose_executive_summary,
     compose_findings,
@@ -85,7 +86,7 @@ class ReportWriter:
     # ------------------------------------------------------------------
 
     def render(self) -> ReportRenderResult:
-        """Load findings.json, compose 9 sections, atomically write report.md."""
+        """Load findings.json, compose 10 sections, atomically write report.md."""
         case_id = self._case_dir.name
         now = datetime.now(UTC)
 
@@ -110,7 +111,7 @@ class ReportWriter:
                 elif status == "DRAFT":
                     draft.append(item)
 
-        # Compose all 9 sections
+        # Compose all 10 sections
         section_bodies: dict[ReportSection, str] = {
             ReportSection.EXECUTIVE_SUMMARY: compose_executive_summary(approved, obs_map),
             ReportSection.ENGAGEMENT_OVERVIEW: compose_engagement_overview(
@@ -120,6 +121,7 @@ class ReportWriter:
             ReportSection.FINDINGS: compose_findings(approved, obs_map),
             ReportSection.TIMELINE: compose_timeline(approved, obs_map),
             ReportSection.IOCS: compose_iocs(approved, obs_map),
+            ReportSection.ATTACK: compose_attack_techniques(self._case_dir),
             ReportSection.RECOMMENDATIONS: compose_recommendations(),
             ReportSection.GAPS: compose_gaps(self._case_dir),
             ReportSection.APPENDIX_AUDIT: compose_appendix_audit(self._case_dir),

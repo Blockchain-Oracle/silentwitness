@@ -129,6 +129,7 @@ class ReportSection(StrEnum):
     FINDINGS = "findings"
     TIMELINE = "timeline"
     IOCS = "iocs"
+    ATTACK = "attack"
     RECOMMENDATIONS = "recommendations"
     GAPS = "gaps"
     APPENDIX_AUDIT = "appendix_audit"
