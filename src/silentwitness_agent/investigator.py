@@ -20,9 +20,9 @@ from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent._caching import cache_settings
+from silentwitness_agent.critic import CriticVerdictRecord
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
-from silentwitness_common.types import CriticVerdict
 from silentwitness_mcp._case_env import build_server_env
 
 _LOG = logging.getLogger(__name__)
@@ -51,8 +51,10 @@ class InvestigatorDeps(BaseModel):
     examiner: str = Field(min_length=1)
     stack: HypothesisStack
     budget: BudgetEnforcer
-    # Populated by story-critic-verdict-handling; read by agent at turn start.
-    pending_critiques: list[CriticVerdict] = Field(default_factory=list)
+    # Populated by the live critic handler when a CHALLENGE fires; surfaced back
+    # into the agent's context each turn by the pending-critique instruction so
+    # the investigator can revise or corroborate the challenged finding.
+    pending_critiques: list[CriticVerdictRecord] = Field(default_factory=list)
 
 
 class InvestigatorResult(BaseModel):
@@ -277,7 +279,7 @@ async def investigate(
 
 
 __all__ = [
-    "CriticVerdict",
+    "CriticVerdictRecord",
     "InvestigatorDeps",
     "InvestigatorResult",
     "build_investigator",

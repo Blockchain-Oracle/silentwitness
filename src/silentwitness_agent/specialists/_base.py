@@ -14,7 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import Model, infer_model
 
-from silentwitness_common.types import AuditId, Confidence, CriticVerdict, SpecialistName
+from silentwitness_agent.critic import CriticVerdictRecord
+from silentwitness_common.types import AuditId, Confidence, SpecialistName
 
 _GLOBAL_MODEL_ENV = "SILENTWITNESS_MODEL"
 _QUALITY_ENV = "SILENTWITNESS_MODEL_QUALITY"
@@ -54,7 +55,7 @@ class SpecialistDeps(BaseModel):
     examiner: str = Field(min_length=1)
     hypothesis_id: str = Field(min_length=1)
     evidence_paths: tuple[Path, ...] = Field(default_factory=tuple)
-    pending_critiques: tuple[CriticVerdict, ...] = Field(default_factory=tuple)
+    pending_critiques: tuple[CriticVerdictRecord, ...] = Field(default_factory=tuple)
 
     @model_validator(mode="after")
     def _case_dir_absolute(self) -> SpecialistDeps:
