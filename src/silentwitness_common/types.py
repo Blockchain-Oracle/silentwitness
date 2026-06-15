@@ -336,7 +336,11 @@ class LedgerEntry(BaseModel):
 
 
 class AuditEntry(BaseModel):
-    """One line of audit/<backend>.jsonl. Verbatim BRAINSTORM §4 schema."""
+    """One line of audit/<backend>.jsonl. Verbatim BRAINSTORM §4 schema +
+    Phase 6b hash-chain fields. ``prev_record_hash`` is ``None`` for the first
+    row of a chain; ``record_hash`` is mandatory once chaining is enabled and
+    None on the legacy plain-JSONL fallback path. The chain is verified by
+    :func:`silentwitness_mcp.audit.chain.verify_chain_lines`."""
 
     model_config = _BASE_CONFIG
 
@@ -351,6 +355,8 @@ class AuditEntry(BaseModel):
     examiner: str = Field(min_length=1)
     model_used: str = Field(min_length=1)
     model_token_count: dict[str, int] = Field(default_factory=dict)
+    prev_record_hash: Sha256Hex | None = None
+    record_hash: Sha256Hex | None = None
 
 
 TPayload = TypeVar("TPayload", bound=BaseModel)

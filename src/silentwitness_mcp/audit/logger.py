@@ -50,6 +50,7 @@ from typing import IO
 from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.ids import make_audit_id, parse_audit_id
 from silentwitness_common.types import AuditEntry
+from silentwitness_mcp.audit.chain import compute_record_hash
 
 _BACKEND_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 _LOCK_FILENAME = ".lock"
@@ -89,6 +90,10 @@ class AuditLogger:
         self._lock_handle: IO[bytes] | None = None
         self._acquire_singleton_lock()
         self._seq_by_date: dict[date, int] = self._load_sequence_state()
+        # Phase 6b: last record_hash per backend, loaded at startup so
+        # cross-restart the chain continues. None = no chain on disk yet
+        # (first append for that backend).
+        self._last_hash_by_backend: dict[str, str | None] = self._load_chain_state()
 
     def close(self) -> None:
         """Release the singleton flock + close the lock fd. Idempotent."""
@@ -163,7 +168,13 @@ class AuditLogger:
             today = now.date()
             seq = self._seq_by_date.get(today, 0) + 1
             audit_id = make_audit_id(self._examiner, today, seq)
-            entry = AuditEntry(
+            prev_hash = self._last_hash_by_backend.get(backend)
+            # Construct the entry once with placeholder hash fields, then
+            # canonicalise via the same JSON-roundtrip that `verify` will use.
+            # This guarantees the hash computed here matches the hash recomputed
+            # at verify time even if Pydantic's datetime/Path serialisation
+            # differs from a hand-built dict.
+            draft = AuditEntry(
                 ts=now,
                 audit_id=audit_id,
                 tool=tool,
@@ -175,13 +186,19 @@ class AuditLogger:
                 examiner=self._examiner,
                 model_used=model_used,
                 model_token_count=model_token_count if model_token_count is not None else {},
+                prev_record_hash=prev_hash,
+                record_hash=None,
             )
+            draft_dict = json.loads(draft.model_dump_json())
+            record_hash = compute_record_hash(prev_hash, draft_dict)
+            entry = draft.model_copy(update={"record_hash": record_hash})
             line = entry.model_dump_json()
             append_jsonl_line(target, line)
-            # Only commit the sequence reservation AFTER a successful write —
-            # if any step above raised, the seq is NOT consumed and the next
-            # caller gets the same number.
+            # Only commit the sequence reservation + chain advance AFTER a
+            # successful write — if any step above raised, the seq is NOT
+            # consumed and the chain head does not advance.
             self._seq_by_date[today] = seq
+            self._last_hash_by_backend[backend] = record_hash
         return entry
 
     # ------------------------------------------------------------------ Private
@@ -242,6 +259,37 @@ class AuditLogger:
                     prior = out.get(parts.day, 0)
                     if parts.seq > prior:
                         out[parts.day] = parts.seq
+        return out
+
+    def _load_chain_state(self) -> dict[str, str | None]:
+        """Scan each backend file's LAST non-empty line for ``record_hash``.
+
+        Returns ``{backend: last_hash_or_None}``. None means the file is empty
+        or the last entry pre-dates chaining (no ``record_hash`` field). For an
+        empty backend file the next emit starts a fresh chain (prev=None);
+        for a legacy pre-chain file the next emit will likewise produce a
+        chain-start row — the legacy rows fail ``verify --audit-chain`` but
+        do not block new writes."""
+        out: dict[str, str | None] = {}
+        for jsonl in sorted(self._audit_dir.glob("*.jsonl")):
+            backend_stem = jsonl.stem
+            if not _BACKEND_NAME_PATTERN.fullmatch(backend_stem):
+                continue
+            last_hash: str | None = None
+            with jsonl.open("r", encoding="utf-8") as fh:
+                for raw in fh:
+                    stripped = raw.strip()
+                    if not stripped:
+                        continue
+                    try:
+                        obj = json.loads(stripped)
+                    except json.JSONDecodeError:
+                        continue
+                    if isinstance(obj, dict):
+                        candidate = obj.get("record_hash")
+                        if isinstance(candidate, str):
+                            last_hash = candidate
+            out[backend_stem] = last_hash
         return out
 
     @staticmethod
