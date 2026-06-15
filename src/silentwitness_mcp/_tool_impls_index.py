@@ -17,6 +17,7 @@ import hashlib
 import json
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +102,37 @@ def _sanitized_records(
             text = _REDACTED
         out.append(_record_dict(rec, sanitize_text=text))
     return out
+
+
+def _detection_summary(
+    counts: dict[str, int],
+    fetch: Callable[[str, int], list[IndexRecord]],
+    limit: int,
+) -> tuple[int, dict[str, int], list[IndexRecord]]:
+    """Reduce ``source_tool -> count`` into (total, by_level, samples).
+
+    ``by_level`` is ordered highest-severity-first and ALWAYS reconciles with ``total``: any
+    ``sigma:*`` tool whose level isn't one of the standard severities lands in an ``other``
+    bucket rather than being silently dropped from the summary. Samples are drawn
+    highest-severity-first until the (clamped) ``limit`` budget is exhausted."""
+    total = sum(counts.values())
+    by_level: dict[str, int] = {}
+    samples: list[IndexRecord] = []
+    remaining = min(max(1, limit), _MAX_LIMIT)
+    for level in _DETECTION_LEVELS:
+        count = counts.get(f"{_DETECTION_PREFIX}{level}", 0)
+        if not count:
+            continue
+        by_level[level] = count
+        if remaining > 0:
+            rows = fetch(f"{_DETECTION_PREFIX}{level}", remaining)
+            samples.extend(rows)
+            remaining -= len(rows)
+    known = {f"{_DETECTION_PREFIX}{lvl}" for lvl in _DETECTION_LEVELS}
+    other = sum(n for tool, n in counts.items() if tool not in known)
+    if other:
+        by_level["other"] = other
+    return total, by_level, samples
 
 
 def _emit(
@@ -208,22 +240,11 @@ def register_index_tools(mcp: FastMCP, guard_mount: _GuardFn) -> None:
         audit_id = audit.next_audit_id()
         with EvidenceIndex(index_path) as idx:
             counts = idx.count_by_source_prefix(_DETECTION_PREFIX)
-            samples: list[IndexRecord] = []
-            remaining = min(max(1, limit), _MAX_LIMIT)
-            for level in _DETECTION_LEVELS:
-                if remaining <= 0:
-                    break
-                tool = f"{_DETECTION_PREFIX}{level}"
-                if counts.get(tool):
-                    rows = idx.recent(source_tool=tool, limit=remaining)
-                    samples.extend(rows)
-                    remaining -= len(rows)
-        by_level = {
-            lvl: counts[f"{_DETECTION_PREFIX}{lvl}"]
-            for lvl in _DETECTION_LEVELS
-            if counts.get(f"{_DETECTION_PREFIX}{lvl}")
-        }
-        total = sum(counts.values())
+            total, by_level, samples = _detection_summary(
+                counts,
+                lambda tool, lim: idx.recent(source_tool=tool, limit=lim),
+                limit,
+            )
         results = _sanitized_records(samples, audit_id=audit_id, case_dir=case_dir)
         _emit(
             audit,
