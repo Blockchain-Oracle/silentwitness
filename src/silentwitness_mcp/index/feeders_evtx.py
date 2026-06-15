@@ -32,6 +32,21 @@ from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
 
+# Salient identity fields appended to a detection row so 18k brute-force hits aren't
+# indistinguishable — the account/host/IP/command is what makes a hit actionable and
+# searchable. Order is the display order; absent fields are skipped.
+_DETECTION_CONTEXT_FIELDS = (
+    "TargetUserName",
+    "SubjectUserName",
+    "IpAddress",
+    "WorkstationName",
+    "LogonType",
+    "NewProcessName",
+    "Image",
+    "CommandLine",
+    "ScriptBlockText",
+)
+
 
 def _local(tag: object) -> str:
     """Local element name with any ``{namespace}`` prefix stripped."""
@@ -131,12 +146,15 @@ def _detection_records(
 
     channel = system.get("Channel", "")
     ts = system.get("TimeCreated", "")
+    context = " ".join(
+        f"{name}={fields[name]}" for name in _DETECTION_CONTEXT_FIELDS if fields.get(name)
+    )
     for det in evaluate_event(fields):
         tags = ",".join(det.tags)
         text = (
             f"SIGMA DETECTION level={det.level} rule={det.title} "
-            f"tags={tags} event_id={eid} channel={channel}"
-        )
+            f"tags={tags} event_id={eid} channel={channel} {context}"
+        ).strip()
         yield IndexRecord(
             text=text[:MAX_TEXT],
             source_tool=f"sigma:{det.level}",
