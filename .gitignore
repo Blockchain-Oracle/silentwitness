@@ -68,3 +68,4 @@ yarn.lock
 *,cover
 docs/EVIDENCE_INVENTORY.md
 tests/fixtures/.harness-*.log
+.playwright-mcp/

@@ -1,14 +1,10 @@
-"""``approve_finding`` — password-gated HMAC ledger transition
-(architecture §4.2, §4.9). Pipeline (under :func:`findings_lock`):
-read F-NNN → DRAFT check → CASE.yaml salt → HMACLedger bind →
-PBKDF2-SHA256 → HMAC → append → flip status → atomic rename → zero
-key → audit row. Audit row writes on EVERY path.
-
-Zeroing is honest but partial: ``SecretStr.get_secret_value()`` and
-``HMACLedger.derive_key`` both return immutable copies we cannot
-wipe; only the bytearray buffer fed to ``ledger.append`` is zeroed.
-Password / derived key NEVER reach the audit row.
-"""
+"""``approve_finding`` — password-gated HMAC ledger transition (architecture
+§4.2 + §4.9). Pipeline under :func:`findings_lock`: read F-NNN → DRAFT check →
+CASE.yaml salt → HMACLedger bind → PBKDF2-SHA256 → HMAC → append → flip status →
+atomic rename → zero key → audit row. Audit row writes on EVERY path. Zeroing is
+honest but partial: ``SecretStr.get_secret_value()`` and ``HMACLedger.derive_key``
+both return immutable copies we cannot wipe; only the bytearray buffer fed to
+``ledger.append`` is zeroed. Password / derived key NEVER reach the audit row."""
 
 from __future__ import annotations
 
@@ -22,13 +18,14 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
-from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
+from silentwitness_common.atomic_io import write_json_atomic
 from silentwitness_common.types import (
     AuditEntry,
     Confidence,
     LedgerItemType,
     ToolResponse,
 )
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.audit.ledger import (
     HMACLedger,
     InterpretationParts,
@@ -374,7 +371,7 @@ def _write_audit_row(
         model_token_count={},
     )
     findings_log.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(findings_log, entry.model_dump_json())
+    append_chained_jsonl_line(findings_log, entry.model_dump_json())
 
 
 def _wrap_envelope(

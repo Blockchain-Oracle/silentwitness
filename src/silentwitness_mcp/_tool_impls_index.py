@@ -24,9 +24,9 @@ from typing import Any
 from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.session import ServerSession
 
-from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_mcp._lifecycle import AppContext
 from silentwitness_mcp._tool_impls import _case_deps, _GuardFn, _refuse
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.index.store import EvidenceIndex, EvidenceIndexError, IndexRecord
 from silentwitness_mcp.verification.sanitizer import StripEvent, StripEventWriter, sanitize
@@ -64,7 +64,7 @@ class _StripWriter(StripEventWriter):
         self._path = log_path
 
     def emit(self, event: StripEvent) -> None:
-        append_jsonl_line(self._path, event.model_dump_json())
+        append_chained_jsonl_line(self._path, event.model_dump_json())
 
 
 def _record_dict(rec: IndexRecord, *, sanitize_text: str | None = None) -> dict[str, Any]:

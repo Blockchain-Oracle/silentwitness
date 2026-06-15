@@ -162,15 +162,17 @@ def test_audit_store_unwritable_when_append_fails(
     _seed(case_dir)
 
     real_append = __import__(
-        "silentwitness_mcp.findings.pivot", fromlist=["append_jsonl_line"]
-    ).append_jsonl_line
+        "silentwitness_mcp.findings.pivot", fromlist=["append_chained_jsonl_line"]
+    ).append_chained_jsonl_line
 
     def _raise_on_hypothesis(path: Path, line: str) -> None:
         if path.name == "hypothesis.jsonl":
             raise OSError("simulated disk full")
         real_append(path, line)
 
-    monkeypatch.setattr("silentwitness_mcp.findings.pivot.append_jsonl_line", _raise_on_hypothesis)
+    monkeypatch.setattr(
+        "silentwitness_mcp.findings.pivot.append_chained_jsonl_line", _raise_on_hypothesis
+    )
     payload = PivotInput(
         from_hypothesis_id="H-001",
         to_hypothesis_id="H-002",
@@ -193,15 +195,17 @@ def test_audit_write_failure_preserves_original_rejection(
     _seed(case_dir)
 
     real_append = __import__(
-        "silentwitness_mcp.findings.pivot", fromlist=["append_jsonl_line"]
-    ).append_jsonl_line
+        "silentwitness_mcp.findings.pivot", fromlist=["append_chained_jsonl_line"]
+    ).append_chained_jsonl_line
 
     def _raise_on_findings(path: Path, line: str) -> None:
         if path.name == "findings.jsonl":
             raise OSError("simulated disk full")
         real_append(path, line)
 
-    monkeypatch.setattr("silentwitness_mcp.findings.pivot.append_jsonl_line", _raise_on_findings)
+    monkeypatch.setattr(
+        "silentwitness_mcp.findings.pivot.append_chained_jsonl_line", _raise_on_findings
+    )
     payload = PivotInput(
         from_hypothesis_id="H-999",
         to_hypothesis_id="H-002",

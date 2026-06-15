@@ -35,9 +35,20 @@ import hashlib
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Final
 
+from silentwitness_common.atomic_io import append_jsonl_line
+
 HASH_FIELDS: Final[frozenset[str]] = frozenset({"record_hash", "prev_record_hash"})
+
+# Process-scoped cache of the last record_hash per file path. Each entry is the
+# chain head; the first write to a new path seeds it by reading the file's last
+# row. Caller must be the sole writer to a given path within a process — two
+# concurrent writers would race the cache and produce siblings sharing the same
+# prev_record_hash. The audit files are single-writer by design (one backend per
+# logical producer); this assumption is documented in the module docstring.
+_LAST_HASH_CACHE: dict[Path, str | None] = {}
 
 
 def canonical_payload(entry: dict[str, Any]) -> bytes:
@@ -61,6 +72,105 @@ def compute_record_hash(prev_record_hash: str | None, payload: dict[str, Any]) -
         h.update(prev_record_hash.encode("utf-8"))
     h.update(canonical_payload(payload))
     return h.hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Chained-append helper — for direct JSONL writers (hypothesis, findings, hooks,
+# critic) that bypass :class:`silentwitness_mcp.audit.logger.AuditLogger.emit`.
+# ---------------------------------------------------------------------------
+
+
+def _read_last_record_hash(path: Path) -> str | None:
+    """Read the file's last non-empty JSON line and extract ``record_hash``.
+
+    Returns ``None`` if the file is missing, empty, contains no chain field
+    yet (pre-chain rows), or the last line is malformed. The caller treats
+    ``None`` as "start a fresh chain head" — the next chained write becomes
+    the first chained row."""
+    if not path.exists():
+        return None
+    last_hash: str | None = None
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for raw in fh:
+                stripped = raw.strip()
+                if not stripped:
+                    continue
+                try:
+                    entry = json.loads(stripped)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(entry, dict):
+                    candidate = entry.get("record_hash")
+                    if isinstance(candidate, str):
+                        last_hash = candidate
+    except OSError:
+        # Caller's atomic_io.append_jsonl_line will surface the real I/O error
+        # at write time; a transient read failure here just means we start a
+        # fresh chain head — annoying but not silent (the verifier reports the
+        # break point with file:line).
+        return None
+    return last_hash
+
+
+def append_chained_jsonl_line(path: Path, line: str) -> str:
+    """Inject ``prev_record_hash`` + ``record_hash`` into a JSONL line, then
+    atomically append it.
+
+    ``line`` MUST be a valid JSON object — Pydantic ``model_dump_json()`` output
+    is the canonical caller. The two hash fields are added (or overwritten if
+    the caller naively set them) before the line is re-serialised + written.
+
+    The chain head per ``path`` is cached in-process for amortised O(1) writes.
+    On the first write to a path the helper seeks the file's last line to seed
+    the cache; subsequent writes from the same process use the cached value.
+
+    **Single-writer constraint.** Two writers (threads or processes) appending
+    to the same path concurrently would race: both could read the same prior
+    hash and produce siblings sharing a ``prev_record_hash``, which would
+    silently break the chain at verify time. Today every audit backend file has
+    one logical writer (one per producer module), so this assumption holds. If
+    we ever multiplex writers per file, wrap callers in an external lock.
+
+    Returns the assigned ``record_hash`` (useful for tests / callers that want
+    to record what they just wrote)."""
+    payload = json.loads(line)
+    if not isinstance(payload, dict):
+        raise ValueError(f"chained JSONL line must be a JSON object, got {type(payload).__name__}")
+
+    if path in _LAST_HASH_CACHE:
+        prev_hash = _LAST_HASH_CACHE[path]
+    else:
+        prev_hash = _read_last_record_hash(path)
+
+    payload["prev_record_hash"] = prev_hash
+    record_hash = compute_record_hash(prev_hash, payload)
+    payload["record_hash"] = record_hash
+
+    chained_line = json.dumps(payload, separators=(",", ":"), default=str)
+    append_jsonl_line(path, chained_line)
+    _LAST_HASH_CACHE[path] = record_hash
+    return record_hash
+
+
+def strip_chain_fields_from_line(line: str) -> str:
+    """Return ``line`` with the two chain fields removed — for Pydantic models
+    declared ``extra="forbid"`` that need to round-trip a chained JSONL row
+    back through ``model_validate_json``. The model's invariants stay strict
+    (no foreign fields allowed) while the audit-trail consumer still parses."""
+    payload = json.loads(line)
+    if not isinstance(payload, dict):
+        return line
+    payload.pop("prev_record_hash", None)
+    payload.pop("record_hash", None)
+    return json.dumps(payload, separators=(",", ":"), default=str)
+
+
+def reset_chain_cache() -> None:
+    """Drop the in-process last-hash cache. Test seam — production code should
+    not call this. Useful when a test resets ``audit/`` mid-run and expects the
+    next write to re-seed from disk."""
+    _LAST_HASH_CACHE.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -158,7 +268,10 @@ __all__ = [
     "HASH_FIELDS",
     "ChainBreak",
     "ChainVerifyResult",
+    "append_chained_jsonl_line",
     "canonical_payload",
     "compute_record_hash",
+    "reset_chain_cache",
+    "strip_chain_fields_from_line",
     "verify_chain_lines",
 ]

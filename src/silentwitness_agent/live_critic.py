@@ -29,7 +29,7 @@ from silentwitness_agent.contradiction_detectors import run_contradiction_detect
 from silentwitness_agent.critic import CriticReport, CriticVerdictRecord, StagedFinding, critique
 from silentwitness_agent.critic_trigger import CriticTrigger
 from silentwitness_agent.investigator import InvestigatorDeps
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 
 _LOG = logging.getLogger(__name__)
 
@@ -57,7 +57,7 @@ def _audit_critic_error(case_dir: Path, examiner: str) -> None:
     log = case_dir / _CRITIC_JSONL
     log.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(Exception):
-        append_jsonl_line(
+        append_chained_jsonl_line(
             log,
             json.dumps(
                 {
@@ -106,7 +106,7 @@ def route_live_verdicts(
     # raises before any pending_critiques mutation, so the in-memory list never
     # disagrees with the audit log.
     for v in verdicts:
-        append_jsonl_line(
+        append_chained_jsonl_line(
             critic_log,
             json.dumps(
                 {

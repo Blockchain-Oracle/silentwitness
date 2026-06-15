@@ -21,7 +21,8 @@ from silentwitness_agent.cli_commands.review import (
     _find_obs,
     _print_block,
 )
-from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
+from silentwitness_common.atomic_io import write_json_atomic
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.audit.ledger import HMACLedger, LedgerCorruptionError, LedgerSecurityError
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._approval_store import (
@@ -125,7 +126,7 @@ def _write_cli_audit(
         }
     )
     try:
-        append_jsonl_line(cli_log, entry)
+        append_chained_jsonl_line(cli_log, entry)
     except (OSError, ValueError) as exc:
         # cli.jsonl is secondary; the tamper-evident record is the HMACLedger entry.
         Console(stderr=True).print(

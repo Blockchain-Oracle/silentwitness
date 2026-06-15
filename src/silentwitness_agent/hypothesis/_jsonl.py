@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from silentwitness_agent.hypothesis.types import HypothesisEvent
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 
 
 def emit_hypothesis_event(case_dir: Path, event: HypothesisEvent) -> None:
@@ -17,7 +17,7 @@ def emit_hypothesis_event(case_dir: Path, event: HypothesisEvent) -> None:
     """
     log_path = case_dir / "audit" / "hypothesis.jsonl"
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(log_path, event.model_dump_json())
+    append_chained_jsonl_line(log_path, event.model_dump_json())
 
 
 __all__ = ["emit_hypothesis_event"]

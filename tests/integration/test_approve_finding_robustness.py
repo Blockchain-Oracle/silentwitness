@@ -249,8 +249,8 @@ def test_audit_write_failure_preserves_original_finding_id(
     _seed_case_salt(case_dir)
 
     real_append = __import__(
-        "silentwitness_mcp.findings.approval", fromlist=["append_jsonl_line"]
-    ).append_jsonl_line
+        "silentwitness_mcp.findings.approval", fromlist=["append_chained_jsonl_line"]
+    ).append_chained_jsonl_line
 
     def _raise_on_findings_log(path: Path, line: str, **kwargs: object) -> None:
         if path.name == "findings.jsonl":
@@ -258,7 +258,7 @@ def test_audit_write_failure_preserves_original_finding_id(
         real_append(path, line, **kwargs)  # type: ignore[arg-type]
 
     monkeypatch.setattr(
-        "silentwitness_mcp.findings.approval.append_jsonl_line", _raise_on_findings_log
+        "silentwitness_mcp.findings.approval.append_chained_jsonl_line", _raise_on_findings_log
     )
     envelope = approve_finding(
         ApproveInput(finding_id="F-001", password=SecretStr(_VALID_PASSWORD)),

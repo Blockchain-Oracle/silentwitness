@@ -37,8 +37,8 @@ from typing import Any, Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, ToolResponse
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._pivot_store import (
     HypothesisStoreError,
@@ -145,7 +145,7 @@ class _JsonlStripWriter(StripEventWriter):
         self._path = sanitizer_log
 
     def emit(self, event: StripEvent) -> None:
-        append_jsonl_line(self._path, event.model_dump_json())
+        append_chained_jsonl_line(self._path, event.model_dump_json())
 
 
 def _hypothesis_log(case_dir: Path) -> Path:
@@ -268,7 +268,7 @@ def _run_pipeline(
         related_audit_ids=payload.abandoning_evidence,
     )
     hypothesis_log.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(hypothesis_log, event.model_dump_json())
+    append_chained_jsonl_line(hypothesis_log, event.model_dump_json())
     return PivotResult(success=True, pivot_id=pivot_id)
 
 
@@ -311,7 +311,7 @@ def _write_audit_row(
         model_token_count={},
     )
     findings_log.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(findings_log, entry.model_dump_json())
+    append_chained_jsonl_line(findings_log, entry.model_dump_json())
 
 
 def _wrap_envelope(

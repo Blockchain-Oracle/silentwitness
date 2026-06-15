@@ -358,7 +358,7 @@ def test_audit_write_failure_preserves_original_rejection(
     case_dir, logger = case_env
     _seed(case_dir)
     monkeypatch.setattr(
-        "silentwitness_mcp.findings.interpretation.append_jsonl_line",
+        "silentwitness_mcp.findings.interpretation.append_chained_jsonl_line",
         lambda *_a, **_kw: (_ for _ in ()).throw(OSError("audit fail")),
     )
     payload = InterpretationInput(

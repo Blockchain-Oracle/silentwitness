@@ -24,7 +24,8 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from silentwitness_agent.critic import CriticVerdictRecord
-from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
+from silentwitness_common.atomic_io import write_json_atomic
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 
 _LOG = logging.getLogger(__name__)
 _LOCK = threading.Lock()
@@ -252,7 +253,7 @@ def _handle_reject(
 def _emit_line(path: Path, record: dict[str, Any]) -> None:
     # ensure_ascii=True prevents U+2028/U+2029/NEL slipping through to append_jsonl_line's
     # forbidden-character validator (json.dumps with ensure_ascii=False preserves them).
-    append_jsonl_line(path, json.dumps(record, ensure_ascii=True, sort_keys=True))
+    append_chained_jsonl_line(path, json.dumps(record, ensure_ascii=True, sort_keys=True))
 
 
 def _read_json_list(path: Path) -> list[Any]:

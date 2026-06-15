@@ -72,7 +72,12 @@ def test_form_jsonl_line_parses_as_hypothesis_event(tmp_path: Path) -> None:
     s = _stack(tmp_path)
     s.form(_STMT, SpecialistName.MEMORY)
     raw = (tmp_path / "audit" / "hypothesis.jsonl").read_text().strip()
-    event = HypothesisEvent.model_validate_json(raw)
+    # Chain fields (prev_record_hash / record_hash) ride alongside the event
+    # payload — strip them before validation against the strict HypothesisEvent
+    # model (extra="forbid").
+    from silentwitness_mcp.audit.chain import strip_chain_fields_from_line
+
+    event = HypothesisEvent.model_validate_json(strip_chain_fields_from_line(raw))
     assert event.type.value == "form"
 
 
@@ -289,7 +294,7 @@ def test_emit_oserror_propagates_and_leaves_state_unchanged(
     def _raise(*_a: object, **_kw: object) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(_jmod, "append_jsonl_line", _raise)
+    monkeypatch.setattr(_jmod, "append_chained_jsonl_line", _raise)
 
     with pytest.raises(OSError, match="disk full"):
         s.confirm(h.id, ["sift-aj-001"])

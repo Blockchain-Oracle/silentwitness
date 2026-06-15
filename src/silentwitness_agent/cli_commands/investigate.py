@@ -38,7 +38,7 @@ from silentwitness_agent.cli_commands._live_render import (
     stream_hypothesis_events,
 )
 from silentwitness_agent.config import SilentWitnessConfig
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.evidence.registry import EvidenceRegistry
 
 # Held during an active investigation so tests can trigger cancellation.
@@ -87,7 +87,7 @@ def _emit_sigint_checkpoint(case_dir: Path, step: int) -> None:
     }
     # Best-effort: ValueError (forbidden chars) or OSError (disk) must not abort SIGINT exit.
     with contextlib.suppress(Exception):
-        append_jsonl_line(case_dir / "audit" / "agent.jsonl", json.dumps(payload))
+        append_chained_jsonl_line(case_dir / "audit" / "agent.jsonl", json.dumps(payload))
 
 
 def _load_checkpoint(case_dir: Path) -> dict[str, Any] | None:

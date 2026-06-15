@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from silentwitness_mcp.audit.chain import (
+    append_chained_jsonl_line,
     canonical_payload,
     compute_record_hash,
+    reset_chain_cache,
     verify_chain_lines,
 )
 
@@ -158,3 +161,94 @@ def test_genesis_with_non_null_prev_is_break() -> None:
     result = verify_chain_lines([line])
     assert result.ok is False
     assert any(b.reason == "prev_record_hash_mismatch" for b in result.breaks)
+
+
+# ---------------------------------------------------------------------------
+# append_chained_jsonl_line — the direct-writer helper (production seam)
+# ---------------------------------------------------------------------------
+
+
+def test_chained_append_first_row_has_null_prev(tmp_path: Path) -> None:
+    reset_chain_cache()
+    path = tmp_path / "agent.jsonl"
+    rh = append_chained_jsonl_line(path, json.dumps({"tool": "x", "n": 1}))
+    line = path.read_text(encoding="utf-8").strip()
+    entry = json.loads(line)
+    assert entry["prev_record_hash"] is None
+    assert entry["record_hash"] == rh
+    assert entry["tool"] == "x"
+
+
+def test_chained_append_second_row_links_to_first(tmp_path: Path) -> None:
+    reset_chain_cache()
+    path = tmp_path / "agent.jsonl"
+    h1 = append_chained_jsonl_line(path, json.dumps({"tool": "x"}))
+    h2 = append_chained_jsonl_line(path, json.dumps({"tool": "y"}))
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert json.loads(lines[1])["prev_record_hash"] == h1
+    assert json.loads(lines[1])["record_hash"] == h2
+
+
+def test_chained_append_three_rows_verify_clean(tmp_path: Path) -> None:
+    reset_chain_cache()
+    path = tmp_path / "findings.jsonl"
+    for i in range(3):
+        append_chained_jsonl_line(path, json.dumps({"event": "i", "n": i}))
+    result = verify_chain_lines(path.read_text(encoding="utf-8").splitlines())
+    assert result.ok is True
+    assert result.rows_checked == 3
+
+
+def test_chained_append_resumes_from_existing_file_on_cold_cache(tmp_path: Path) -> None:
+    """Simulates a fresh process landing on an existing audit file — the
+    helper must read the file's last record_hash to seed its cache."""
+    path = tmp_path / "critic.jsonl"
+    # Write a chained row through the helper, then drop the cache to simulate
+    # a process restart.
+    h1 = append_chained_jsonl_line(path, json.dumps({"verdict": "AGREE"}))
+    reset_chain_cache()
+    h2 = append_chained_jsonl_line(path, json.dumps({"verdict": "CHALLENGE"}))
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert json.loads(lines[1])["prev_record_hash"] == h1
+    assert json.loads(lines[1])["record_hash"] == h2
+    # Full-file verify still clean across the cold-start boundary.
+    result = verify_chain_lines(lines)
+    assert result.ok is True
+
+
+def test_chained_append_rejects_non_object_line(tmp_path: Path) -> None:
+    reset_chain_cache()
+    path = tmp_path / "x.jsonl"
+    import pytest as _p
+
+    with _p.raises(ValueError, match="must be a JSON object"):
+        append_chained_jsonl_line(path, json.dumps(["array", "not", "object"]))
+
+
+def test_chained_append_overwrites_caller_supplied_hash_fields(tmp_path: Path) -> None:
+    """A naive caller that pre-populated record_hash / prev_record_hash gets
+    those values silently corrected — the helper is the source of truth."""
+    reset_chain_cache()
+    path = tmp_path / "z.jsonl"
+    h = append_chained_jsonl_line(
+        path,
+        json.dumps({"tool": "y", "record_hash": "deadbeef", "prev_record_hash": "cafebabe"}),
+    )
+    entry = json.loads(path.read_text(encoding="utf-8").strip())
+    assert entry["record_hash"] == h
+    assert entry["prev_record_hash"] is None  # genuinely the first row
+
+
+def test_chained_append_independent_chains_per_path(tmp_path: Path) -> None:
+    """Two files write in parallel; their chains advance independently."""
+    reset_chain_cache()
+    a = tmp_path / "agent.jsonl"
+    c = tmp_path / "critic.jsonl"
+    ha1 = append_chained_jsonl_line(a, json.dumps({"event": "a1"}))
+    hc1 = append_chained_jsonl_line(c, json.dumps({"event": "c1"}))
+    ha2 = append_chained_jsonl_line(a, json.dumps({"event": "a2"}))
+    # Critic's second row chains to its own first, not to agent's.
+    hc2 = append_chained_jsonl_line(c, json.dumps({"event": "c2"}))
+    assert ha1 != hc1 and ha2 != hc2
+    assert json.loads(a.read_text(encoding="utf-8").splitlines()[1])["prev_record_hash"] == ha1
+    assert json.loads(c.read_text(encoding="utf-8").splitlines()[1])["prev_record_hash"] == hc1

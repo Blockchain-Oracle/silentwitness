@@ -17,7 +17,8 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
-from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
+from silentwitness_common.atomic_io import write_json_atomic
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 from silentwitness_mcp.findings._approval_store import (
     findings_lock,
     locate_finding,
@@ -103,7 +104,7 @@ def _reject(case_dir: Path, finding_id: str, reason: str, examiner: str, *, err:
         }
     )
     try:
-        append_jsonl_line(cli_log, entry)
+        append_chained_jsonl_line(cli_log, entry)
     except (OSError, ValueError) as exc:
         err.print(
             f"[red]✗[/red] rejection committed but audit write failed: {exc}",

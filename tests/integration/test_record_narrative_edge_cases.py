@@ -137,8 +137,8 @@ def test_audit_write_failure_on_success_path_preserves_narrative_id(
     _seed_observations(case_dir, ("O-001",))
 
     real_append = __import__(
-        "silentwitness_mcp.findings.narrative", fromlist=["append_jsonl_line"]
-    ).append_jsonl_line
+        "silentwitness_mcp.findings.narrative", fromlist=["append_chained_jsonl_line"]
+    ).append_chained_jsonl_line
 
     def _raise_on_findings_log(path: Path, line: str) -> None:
         if path.name == "findings.jsonl":
@@ -146,7 +146,7 @@ def test_audit_write_failure_on_success_path_preserves_narrative_id(
         real_append(path, line)
 
     monkeypatch.setattr(
-        "silentwitness_mcp.findings.narrative.append_jsonl_line", _raise_on_findings_log
+        "silentwitness_mcp.findings.narrative.append_chained_jsonl_line", _raise_on_findings_log
     )
     payload = _valid_payload()
     envelope = record_narrative(payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL)

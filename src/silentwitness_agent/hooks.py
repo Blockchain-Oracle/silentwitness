@@ -37,7 +37,7 @@ from pydantic_ai.tools import ToolDefinition
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
 from silentwitness_agent.investigator import InvestigatorDeps
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chain import append_chained_jsonl_line
 
 _LOG = logging.getLogger(__name__)
 
@@ -76,7 +76,7 @@ def _append_agent_jsonl(case_dir: Path, payload: dict[str, Any]) -> None:
     validates for forbidden line-terminator characters (LF, CR, Unicode line separators).
     """
     path = case_dir / "audit" / "agent.jsonl"
-    append_jsonl_line(path, json.dumps(payload, default=str))
+    append_chained_jsonl_line(path, json.dumps(payload, default=str))
 
 
 # ---------------------------------------------------------------------------
