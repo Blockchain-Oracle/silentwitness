@@ -1,0 +1,27 @@
+title: Outbound RDP via mstsc
+id: a1f0c001-0005-4a01-9001-000000000005
+status: experimental
+description: Execution of the RDP client mstsc.exe with a target host on the command line — an outbound Remote Desktop connection from this host (pivot / lateral movement). Matches both the Sysmon (Image) and Security-4688 (NewProcessName) field taxonomies.
+author: SilentWitness
+date: 2026-06-15
+references:
+    - https://attack.mitre.org/techniques/T1021/001/
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    image:
+        Image|endswith: '\mstsc.exe'
+    newproc:
+        NewProcessName|endswith: '\mstsc.exe'
+    args:
+        CommandLine|contains:
+            - '/v:'
+            - '/prompt'
+    condition: (image or newproc) and args
+falsepositives:
+    - Legitimate remote administration
+level: medium
+tags:
+    - attack.lateral_movement
+    - attack.t1021.001

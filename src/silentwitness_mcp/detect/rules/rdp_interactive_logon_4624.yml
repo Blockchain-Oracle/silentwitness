@@ -1,0 +1,25 @@
+title: RDP Interactive Logon
+id: a1f0c001-0002-4a01-9001-000000000002
+status: experimental
+description: A successful logon (4624) with LogonType 10 (RemoteInteractive) or 7 (Unlock of an RDP session) — the on-host signature of a Remote Desktop session, the suspected access vector.
+author: SilentWitness
+date: 2026-06-15
+references:
+    - https://attack.mitre.org/techniques/T1021/001/
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4624
+    logon_type:
+        LogonType:
+            - 10
+            - 7
+    condition: selection and logon_type
+falsepositives:
+    - Legitimate remote administration over RDP
+level: medium
+tags:
+    - attack.lateral_movement
+    - attack.t1021.001
