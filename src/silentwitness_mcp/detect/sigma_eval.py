@@ -39,6 +39,22 @@ _LOG = logging.getLogger(__name__)
 _SEED_RULES_DIR = Path(__file__).parent / "rules"
 _RULES_DIR_ENV = "SILENTWITNESS_SIGMA_RULES_DIR"
 
+# Field-name aliasing — a minimal, general stand-in for a Sigma field-mapping pipeline.
+# Community SigmaHQ rules are written against the Sysmon taxonomy (Image/CommandLine/...),
+# but Windows Security-audit events (4688/4624/...) carry the same facts under different
+# names. Before matching we expose the canonical (Sysmon) name as an alias of the audit
+# name so a community process-creation rule can fire on a Security-4688 event too. This is
+# generic Windows-DFIR field mapping, not tied to any case.
+_FIELD_ALIASES: dict[str, str] = {
+    "Image": "NewProcessName",
+    "ParentImage": "ParentProcessName",
+    "User": "SubjectUserName",
+    "TargetFilename": "ObjectName",
+    "DestinationIp": "DestAddress",
+    "DestinationPort": "DestPort",
+    "SourceIp": "IpAddress",
+}
+
 
 def _resolve_rules_dir() -> Path:
     override = os.environ.get(_RULES_DIR_ENV)
@@ -246,8 +262,26 @@ class SigmaRuleset:
         return list(self._skipped)
 
     def match(self, event: Mapping[str, str]) -> list[Detection]:
-        """Every Detection whose rule fires on ``event`` (a field-name -> value dict)."""
-        return [det for det, pred in self._rules if pred(event)]
+        """Every Detection whose rule fires on ``event`` (a field-name -> value dict).
+
+        The event is normalised once (canonical Sysmon field names aliased onto the
+        equivalent Security-audit names) so community rules match across log taxonomies."""
+        return [det for det, pred in self._rules if pred(_normalize_event(event))]
+
+
+def _normalize_event(event: Mapping[str, str]) -> Mapping[str, str]:
+    """Expose canonical Sysmon field names as aliases of their Security-audit equivalents.
+
+    Returns the event unchanged when no alias applies (the common case), so the hot path
+    pays a copy only for events that actually carry an aliasable field."""
+    extra = {
+        canon: event[src]
+        for canon, src in _FIELD_ALIASES.items()
+        if canon not in event and src in event
+    }
+    if not extra:
+        return event
+    return {**event, **extra}
 
 
 def _detection_of(rule: Any) -> Detection:

@@ -228,6 +228,25 @@ def test_empty_rules_dir_loads_to_zero_without_raising(tmp_path: Path) -> None:
     assert rs.match({"EventID": "4625"}) == []
 
 
+def test_field_alias_lets_sysmon_rule_match_security_event(tmp_path: Path) -> None:
+    # A community process_creation rule written against the Sysmon `Image` field should
+    # fire on a Security-4688 event that carries the path as `NewProcessName`.
+    rule = """
+title: rclone exec
+id: 00000000-0000-0000-0000-0000000000c0
+level: high
+logsource: {product: windows, category: process_creation}
+detection:
+    sel: {Image|endswith: '\\rclone.exe'}
+    condition: sel
+"""
+    rs = _ruleset_from(tmp_path, rule)
+    assert rs.match({"EventID": "4688", "NewProcessName": "C:\\tools\\rclone.exe"})
+    # explicit Image still wins / works
+    assert rs.match({"EventID": "1", "Image": "C:\\tools\\rclone.exe"})
+    assert rs.match({"EventID": "4688", "NewProcessName": "C:\\notepad.exe"}) == []
+
+
 def test_uncompilable_rule_is_skipped_not_fatal(tmp_path: Path) -> None:
     good = """
 title: good
