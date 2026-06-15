@@ -28,15 +28,38 @@ def _rec(source_tool: str, text: str = "x") -> IndexRecord:
 
 
 def test_categorize_known_prefixes() -> None:
+    # Memory (vol3 plugins)
     assert categorize("vol:pslist") == "memory"
     assert categorize("vol:netscan") == "memory"
+    assert categorize("vol:cmdline") == "memory"
+    assert categorize("vol:malfind") == "memory"
+    assert categorize("vol:psscan") == "memory"
+    # System log
     assert categorize("evtx:Security") == "system_log"
+    assert categorize("evtx:System") == "system_log"
+    assert categorize("evtx:Application") == "system_log"
+    # PowerShell transcripts are emitted as `powershell:transcript` — the round-1
+    # review caught this being silently miscategorised as `other` when the map
+    # keyed `pstranscript` instead.
+    assert categorize("powershell:transcript") == "system_log"
+    # Registry (incl. Amcache subkey)
     assert categorize("regipy:NTUSER") == "registry"
+    assert categorize("regipy:Amcache_associations") == "registry"
+    # Filesystem
     assert categorize("mft") == "filesystem"
     assert categorize("usnjrnl") == "filesystem"
+    # User activity (SRUM lives here too — net+app-usage telemetry)
     assert categorize("prefetch") == "user_activity"
+    assert categorize("lnk") == "user_activity"
+    assert categorize("jumplist:auto") == "user_activity"
+    assert categorize("srum:network_usage") == "user_activity"
+    # Detection (Sigma — any severity bucket)
     assert categorize("sigma:critical") == "detection"
+    assert categorize("sigma:high") == "detection"
+    assert categorize("sigma:medium") == "detection"
+    # Timeline breadth
     assert categorize("plaso") == "timeline_breadth"
+    assert categorize("plaso:winreg") == "timeline_breadth"
 
 
 def test_categorize_unknown_falls_to_other() -> None:
@@ -121,3 +144,41 @@ def test_one_known_plus_one_unknown_is_confirmed() -> None:
     tier, categories = classify(records)
     assert tier is CorroborationTier.CONFIRMED
     assert categories == frozenset({"memory", "other"})
+
+
+# ---------------------------------------------------------------------------
+# Drift gate — couples the category map to actual feeder emissions
+# ---------------------------------------------------------------------------
+
+
+def test_every_feeder_source_tool_prefix_is_mapped() -> None:
+    """Walk every ``feeders_*.py`` + ``ingest.py`` for ``source_tool=`` literals.
+    Every prefix MUST resolve to a real category (not ``other``).
+
+    Round-1 review caught ``powershell:transcript`` silently classifying as
+    ``other`` because the map keyed ``pstranscript`` instead. This test exists
+    so the next feeder rename / addition fails LOUDLY here instead of silently
+    downgrading findings in production."""
+    import re
+    from pathlib import Path
+
+    index_dir = Path(__file__).resolve().parents[2] / "src" / "silentwitness_mcp" / "index"
+    # Match `source_tool="…"` and `source_tool=f"…"` — string-literal RHS only.
+    # Skips variable pass-throughs like ``source_tool=source_tool``.
+    pattern = re.compile(r'source_tool\s*=\s*f?"(?P<value>[^"]+)"')
+    found_prefixes: set[str] = set()
+    for py in [*sorted(index_dir.glob("feeders_*.py")), index_dir / "ingest.py"]:
+        for match in pattern.finditer(py.read_text(encoding="utf-8")):
+            raw = match.group("value")
+            # Strip f-string placeholders ({channel}, {plugin}, …) so we get the
+            # static family prefix.
+            family = raw.split(":")[0].split("{")[0]
+            if family and family.isidentifier():
+                found_prefixes.add(family)
+
+    misrouted = {p for p in found_prefixes if categorize(p) == "other"}
+    assert not misrouted, (
+        f"Source_tool prefixes {sorted(misrouted)} fall through to 'other'. "
+        f"Add them to _SOURCE_CATEGORY in findings/corroboration.py — "
+        f"a silently-'other' prefix can falsely upgrade a finding to CONFIRMED."
+    )

@@ -52,23 +52,30 @@ class CorroborationTier(StrEnum):
 # exact match first, then the ``<family>:`` prefix. Anything not mapped lands in
 # the catch-all ``other`` category so we never silently drop a row.
 _SOURCE_CATEGORY: Final[dict[str, str]] = {
-    # Memory (vol3 plugins)
+    # Memory (vol3 plugins) — vol:pslist, vol:netscan, vol:malfind, …
     "vol": "memory",
-    # System / application event logs
+    # System / application event logs — evtx:Security/System/…; powershell:transcript.
+    # NB: PowerShell-transcript rows are emitted as ``powershell:transcript`` by the
+    # feeder, NOT ``pstranscript`` — keying it as ``powershell`` is load-bearing
+    # (round-1 review caught this as a silent miscategorisation to ``other``).
     "evtx": "system_log",
-    "pstranscript": "system_log",
-    # Windows registry
+    "powershell": "system_log",
+    # Windows registry — regipy:NTUSER, regipy:Amcache_*, …
+    # Amcache (program-execution registry hive) lives here, not under user_activity,
+    # because the hive is the lens; bucketing Amcache rows separately from other
+    # regipy rows would let a single-hive finding read as CONFIRMED.
     "regipy": "registry",
     # Filesystem metadata
     "mft": "filesystem",
     "usnjrnl": "filesystem",
-    # User activity artifacts
+    # User-activity artifacts. SRUM (System Resource Usage Monitor) covers
+    # network + energy + app-usage tables; we bucket it as user_activity so it
+    # pairs against Prefetch/LNK rather than double-counting against future
+    # netflow feeders.
     "prefetch": "user_activity",
     "lnk": "user_activity",
     "jumplist": "user_activity",
-    "amcache": "user_activity",
-    # Network / app-usage telemetry
-    "srum": "network",
+    "srum": "user_activity",
     # Detection layer (Sigma) — single category regardless of severity bucket
     "sigma": "detection",
     # Plaso super-timeline breadth

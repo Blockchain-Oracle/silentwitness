@@ -123,3 +123,79 @@ def test_categories_list_is_sorted_for_stable_rendering(tmp_path: Path) -> None:
     cats = finding["corroboration_categories"]
     assert cats == sorted(cats)
     assert set(cats) == {"memory", "filesystem", "system_log"}
+
+
+def test_materialise_is_idempotent_tier_does_not_change_on_second_call(tmp_path: Path) -> None:
+    """Running materialize_findings twice on the same case must not re-tier — the
+    `covered` set skips already-materialised observations, so the tier is frozen
+    on the first call. Round-1 review flagged this as a merge-blocker (a future
+    refactor could silently re-tier against a later index state)."""
+    rids = _seed_index(tmp_path, [_rec("regipy:NTUSER"), _rec("vol:netscan")])
+    _seed_observation(tmp_path, "O-001", rids, "I-001")
+
+    created_a = materialize_findings(tmp_path)
+    findings_a = read_findings(tmp_path)
+    finding_a = next(f for f in findings_a if f.get("finding_id") == "F-001")
+    snapshot_tier = finding_a["corroboration_tier"]
+    snapshot_cats = list(finding_a["corroboration_categories"])
+
+    # Second call — no new observations to materialise.
+    created_b = materialize_findings(tmp_path)
+    assert created_a == ["F-001"]
+    assert created_b == []  # no new findings
+
+    findings_b = read_findings(tmp_path)
+    finding_b = next(f for f in findings_b if f.get("finding_id") == "F-001")
+    assert finding_b["corroboration_tier"] == snapshot_tier
+    assert finding_b["corroboration_categories"] == snapshot_cats
+
+
+def test_two_observations_independently_classified(tmp_path: Path) -> None:
+    """The realistic flow: an investigation stages multiple observations with
+    disjoint cited-record sets. Each must get its OWN tier, not a global rollup."""
+    # 2 categories for O-001 → CONFIRMED; 1 record for O-002 → UNVERIFIED.
+    rids = _seed_index(
+        tmp_path,
+        [_rec("regipy:NTUSER"), _rec("vol:netscan"), _rec("sigma:critical")],
+    )
+    obs_records = [
+        {
+            "observation_id": "O-001",
+            "text": "first",
+            "audit_ids": ["A"],
+            "cited_spans": [
+                {"record_id": rids[0], "span_text": "row text"},
+                {"record_id": rids[1], "span_text": "row text"},
+            ],
+            "interpretations": [{"interpretation_id": "I-001", "text": "interp"}],
+        },
+        {
+            "observation_id": "O-002",
+            "text": "second",
+            "audit_ids": ["A"],
+            "cited_spans": [{"record_id": rids[2], "span_text": "row text"}],
+            "interpretations": [{"interpretation_id": "I-002", "text": "interp"}],
+        },
+    ]
+    (tmp_path / "findings.json").write_text(json.dumps(obs_records), encoding="utf-8")
+    materialize_findings(tmp_path)
+
+    findings = read_findings(tmp_path)
+    f1 = next(f for f in findings if f.get("finding_id") == "F-001")
+    f2 = next(f for f in findings if f.get("finding_id") == "F-002")
+    assert f1["corroboration_tier"] == CorroborationTier.CONFIRMED.value
+    assert f2["corroboration_tier"] == CorroborationTier.UNVERIFIED.value
+    assert set(f1["corroboration_categories"]) == {"registry", "memory"}
+    assert f2["corroboration_categories"] == ["detection"]
+
+
+def test_powershell_transcript_classifies_as_system_log(tmp_path: Path) -> None:
+    """Round-1 review caught `powershell:transcript` silently routing to `other`.
+    This test pins the corrected categorisation end-to-end."""
+    rids = _seed_index(tmp_path, [_rec("evtx:Security"), _rec("powershell:transcript")])
+    _seed_observation(tmp_path, "O-001", rids, "I-001")
+    materialize_findings(tmp_path)
+    finding = next(f for f in read_findings(tmp_path) if f.get("finding_id") == "F-001")
+    # Both rows are `system_log` → INFERRED (not CONFIRMED, not phantom 'other').
+    assert finding["corroboration_tier"] == CorroborationTier.INFERRED.value
+    assert finding["corroboration_categories"] == ["system_log"]
