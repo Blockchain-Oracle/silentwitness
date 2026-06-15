@@ -16,11 +16,14 @@ from typing import IO, Any, Final
 import yaml
 
 from silentwitness_common.atomic_io import write_json_atomic
+from silentwitness_mcp.findings.corroboration import CorroborationTier, classify
+from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
 
 _FINDINGS_FILENAME: Final = "findings.json"
 _CASE_YAML_FILENAME: Final = "CASE.yaml"
+_INDEX_DB: Final = "index.db"
 _LOCK_FILENAME: Final = ".findings.lock"
 _FINDING_SEQ_RE: Final = re.compile(r"^F-(\d+)$")
 
@@ -98,6 +101,52 @@ def locate_finding(findings: list[Any], finding_id: str) -> tuple[int, dict[str,
     return None
 
 
+def _observation_record_ids(observation_dict: dict[str, Any]) -> set[int]:
+    """Extract integer record_ids from an observation's cited_spans.
+
+    Robust to absent / malformed schema — corroboration is advisory, so a malformed
+    cited_spans field yields an empty set (which classifies as UNVERIFIED) instead
+    of crashing the materialise step."""
+    out: set[int] = set()
+    for span in observation_dict.get("cited_spans", []) or []:
+        if not isinstance(span, dict):
+            continue
+        rid = span.get("record_id")
+        if isinstance(rid, int):
+            out.add(rid)
+    return out
+
+
+def _resolve_cited_records(case_dir: Path, record_ids: set[int]) -> list[IndexRecord]:
+    """Fetch IndexRecords for ``record_ids`` from the case index.
+
+    Mirrors ``_tool_impls_findings._cited_records`` — duplicating the small helper
+    rather than importing it avoids a circular dep (``_tool_impls_findings`` already
+    imports from this module via the approval-pipeline path). Returns ``[]`` if the
+    index does not exist yet (e.g. a case approved before any indexing ran) — the
+    classifier treats the empty set as UNVERIFIED, which is the correct semantics."""
+    index_path = case_dir / _INDEX_DB
+    if not record_ids or not index_path.exists():
+        return []
+    out: list[IndexRecord] = []
+    with EvidenceIndex(index_path) as idx:
+        for rid in record_ids:
+            rec = idx.get(rid)
+            if rec is not None:
+                out.append(rec)
+    return out
+
+
+def _classify_observation(
+    case_dir: Path, observation_dict: dict[str, Any]
+) -> tuple[CorroborationTier, list[str]]:
+    """Resolve the observation's cited records and classify their corroboration."""
+    record_ids = _observation_record_ids(observation_dict)
+    records = _resolve_cited_records(case_dir, record_ids)
+    tier, categories = classify(records)
+    return tier, sorted(categories)
+
+
 def _max_finding_seq(findings: list[Any]) -> int:
     mx = 0
     for item in findings:
@@ -149,6 +198,11 @@ def materialize_findings(case_dir: Path) -> list[str]:
                 continue
             seq += 1
             fid = f"F-{seq:03d}"
+            # Phase 6a: advisory corroboration tier from cited-record category diversity.
+            # Computed once at materialise time so the tier reflects the evidence the
+            # observation was actually staged against; if the index later gains rows,
+            # the tier does NOT auto-upgrade (the agent must re-cite to lift it).
+            tier, categories = _classify_observation(case_dir, item)
             findings.append(
                 {
                     "finding_id": fid,
@@ -156,6 +210,8 @@ def materialize_findings(case_dir: Path) -> list[str]:
                     "interpretation_id": iid,
                     "status": "DRAFT",
                     "staged_at": datetime.now(UTC).isoformat(),
+                    "corroboration_tier": tier.value,
+                    "corroboration_categories": categories,
                 }
             )
             covered.add(oid)

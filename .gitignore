@@ -67,3 +67,4 @@ yarn.lock
 .claude/*.lock
 *,cover
 docs/EVIDENCE_INVENTORY.md
+tests/fixtures/.harness-*.log
