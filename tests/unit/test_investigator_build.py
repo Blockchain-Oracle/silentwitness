@@ -190,7 +190,14 @@ def test_investigator_result_has_expected_fields() -> None:
 
 
 def test_investigator_deps_has_expected_fields() -> None:
-    expected = {"case_dir", "examiner", "stack", "budget", "pending_critiques"}
+    expected = {
+        "case_dir",
+        "examiner",
+        "stack",
+        "budget",
+        "pending_critiques",
+        "coverage_gate_attempts",
+    }
     assert set(InvestigatorDeps.model_fields) == expected
 
 

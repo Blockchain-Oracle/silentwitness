@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
-from pydantic_ai import Agent
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
@@ -30,6 +30,11 @@ _LOG = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "anthropic:claude-opus-4-7"
 _DEFAULT_MAX_ITERS = 50
+# How many times the coverage gate may bounce the agent back before it is allowed to
+# finalize regardless — so a genuinely-unanswerable question can't deadlock the run. Must
+# be < the Agent ``retries`` budget below (each bounce consumes one output-retry).
+_MAX_COVERAGE_GATE_ATTEMPTS = 4
+_OUTPUT_RETRIES = 8
 
 try:
     _SYSTEM_PROMPT: str = (
@@ -56,6 +61,10 @@ class InvestigatorDeps(BaseModel):
     # into the agent's context each turn by the pending-critique instruction so
     # the investigator can revise or corroborate the challenged finding.
     pending_critiques: list[CriticVerdictRecord] = Field(default_factory=list)
+    # How many times the coverage gate has bounced this run back (see the output
+    # validator); capped at _MAX_COVERAGE_GATE_ATTEMPTS so an unanswerable question
+    # can't deadlock the agent.
+    coverage_gate_attempts: int = 0
 
 
 class InvestigatorResult(BaseModel):
@@ -181,7 +190,30 @@ def build_investigator(
         toolsets=[mcp_server],
         capabilities=capabilities,
         model_settings=cache_settings(resolved_model),
+        retries=_OUTPUT_RETRIES,
     )
+
+    @agent.output_validator
+    def _enforce_question_coverage(
+        ctx: RunContext[InvestigatorDeps], output: InvestigatorResult
+    ) -> InvestigatorResult:
+        """Refuse to finalize while a Key Question has no supporting observation.
+
+        Structural breadth: instead of trusting the model to explore, the gate reads the
+        recorded observations and bounces the agent back (``ModelRetry``) naming each
+        unanswered question + the artifact types that bear on it — until all five are
+        addressed or the bounce budget is spent (so an unanswerable question can't
+        deadlock the run)."""
+        from silentwitness_agent.coverage import analyze_coverage, coverage_gap_message
+
+        if ctx.deps.coverage_gate_attempts >= _MAX_COVERAGE_GATE_ATTEMPTS:
+            return output
+        message = coverage_gap_message(analyze_coverage(ctx.deps.case_dir))
+        if message is None:
+            return output
+        ctx.deps.coverage_gate_attempts += 1
+        raise ModelRetry(message)
+
     return _AgentConfig(
         agent=agent, model_str=model_str, max_iters=max_iters, mcp_server=mcp_server
     )
