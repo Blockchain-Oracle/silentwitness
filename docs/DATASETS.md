@@ -11,6 +11,36 @@ This catalog documents every evidence dataset SilentWitness is tested against (P
 | NIST CFReDS Hacking Case (Mr. Evil) | ~6 GB E01 | Active — verify entity-gate behavior under high-memorization pressure | **High** (canonical answers in hundreds of writeups) | active |
 | case-trapdoor (synthetic adversary pair) | n/a | Optional / Epic 15 | None (synthetic, no public answers) | optional (skipped until Epic 15 ships) |
 
+## Official SANS Find Evil! 2026 datasets (Egnyte share)
+
+The hackathon's official cases live behind a public Egnyte share — no account, no API key, just `python scripts/download_starter_cases.py`. The script speaks the Egnyte share-link API directly (the same one their web UI uses), paginates folder listings, and streams files in 1 MiB chunks with on-the-fly SHA256.
+
+```bash
+# Enumerate every case at the share root (counts + sizes)
+python scripts/download_starter_cases.py list
+
+# Output (as of 2026-06-15):
+#   Compromised APT Attack Scenarios: 33 files, 177.44 GiB
+#   Standard Forensic Case:            3 files,  27.38 GiB
+#   Standard Forensics Case 2:         2 files,  40.73 GiB
+
+# Drill into one case
+python scripts/download_starter_cases.py list "Standard Forensic Case"
+#       38.3 MiB  /HACKATHON-2026/Standard Forensic Case/ROCBA-BACKGROUND.pptx
+#      22.05 GiB  /HACKATHON-2026/Standard Forensic Case/rocba-cdrive.e01
+#       5.29 GiB  /HACKATHON-2026/Standard Forensic Case/Rocba-Memory.zip
+
+# Dry-run a download (no GETs, just prints what it would do)
+python scripts/download_starter_cases.py download "Standard Forensic Case" /evidence/rocba --dry-run
+
+# Real download — idempotent, resumable (skips files already at expected size)
+python scripts/download_starter_cases.py download "Standard Forensic Case" /evidence/rocba
+```
+
+Verified locally on 2026-06-15: `ROCBA-BACKGROUND.pptx` (38.3 MiB) downloads cleanly with SHA256 `44a12c54d1324339…`. The large E01 + memory archives weren't downloaded during scaffolding; their size matches the Egnyte UI to the byte.
+
+**Multi-host scope.** SilentWitness's submission demonstrates the single-host spine end-to-end on the ROCBA case (Standard Forensic Case). The downloader works for ALL three cases — including the 177 GiB multi-host APT bundle — but full cross-host investigation correlation is tracked as Phase 10 follow-up (out of scope for the v1.0.0-hackathon-2026 tag). The 33-file APT case is downloadable + per-host indexable today; the cross-host hypothesis linker lands later.
+
 ## Reproducibility recipe
 
 Prerequisites: `uv==0.11.18` (or any 0.11.x; CLAUDE.md pins this), Python 3.12, and a working `bash`. The `evidence/` directory is `.gitignore`'d so binaries never enter the git index.
