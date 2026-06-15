@@ -1,0 +1,180 @@
+/* ============================================================
+   cdr-kit — component styles
+   Ported verbatim from apps/site/app/globals.css + landing.css
+   (github.com/Blockchain-Oracle/cdr-kit). Buttons, badges, cards,
+   code windows, copy fields, tabs, the vault card, terminal.
+   Pairs with colors_and_type.css.
+   ============================================================ */
+
+/* ---------- Buttons ---------- */
+.btn {
+  display: inline-flex; align-items: center; gap: 9px;
+  font-family: var(--sans); font-weight: 600; font-size: 0.94rem;
+  padding: 11px 18px; border-radius: var(--r-md);
+  border: 1px solid transparent; line-height: 1;
+  transition: background-color .16s ease, border-color .16s ease,
+              box-shadow .18s ease, transform .12s ease, color .16s ease;
+  white-space: nowrap; position: relative; cursor: pointer;
+}
+.btn:active { transform: translateY(1px); }
+/* Premium primary: layered indigo gradient + outer glow + inset highlight. */
+.btn-primary {
+  color: var(--on-primary);
+  background: linear-gradient(180deg, oklch(0.62 0.21 268) 0%, var(--primary) 60%, oklch(0.46 0.20 268) 100%);
+  border: 1px solid oklch(0.42 0.20 268);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.22) inset,
+    0 -1px 0 oklch(0 0 0 / 0.18) inset,
+    0 1px 2px oklch(0 0 0 / 0.10),
+    0 6px 18px -6px oklch(0.52 0.21 268 / 0.45);
+}
+.btn-primary:hover {
+  background: linear-gradient(180deg, oklch(0.66 0.21 268) 0%, oklch(0.54 0.21 268) 60%, oklch(0.48 0.20 268) 100%);
+  box-shadow:
+    0 1px 0 oklch(1 0 0 / 0.28) inset,
+    0 -1px 0 oklch(0 0 0 / 0.20) inset,
+    0 2px 3px oklch(0 0 0 / 0.12),
+    0 10px 24px -8px oklch(0.52 0.21 268 / 0.60);
+  transform: translateY(-1px);
+}
+.btn-primary:disabled {
+  background: oklch(0.55 0.10 268); border-color: oklch(0.46 0.10 268);
+  box-shadow: none; cursor: default; opacity: 0.7; transform: none;
+}
+.btn-ghost {
+  background: transparent; color: var(--ink); border-color: var(--line-2);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 0.04) inset;
+}
+.btn-ghost:hover { background: var(--paper-2); border-color: var(--ink-3); box-shadow: 0 1px 2px oklch(0 0 0 / 0.06); }
+.btn-sm { padding: 8px 13px; font-size: 0.86rem; }
+.btn svg { width: 16px; height: 16px; }
+
+/* ---------- Badges / pills ---------- */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+  padding: 4px 9px; border-radius: 999px;
+  border: 1px solid var(--line-2); color: var(--ink-2);
+  background: var(--card); white-space: nowrap;
+}
+.badge .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.badge-live { color: var(--signal); border-color: var(--signal-line); background: var(--signal-soft); }
+.badge-live .dot { background: var(--signal); animation: pulse 2.2s infinite; }
+.badge-primary { color: var(--primary); border-color: var(--primary-line); background: var(--primary-soft); }
+.badge-primary .dot { background: var(--primary); }
+.badge-warn { color: var(--warn); border-color: var(--warn-line); background: var(--warn-soft); }
+.badge-warn .dot { background: var(--warn); }
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 var(--signal-soft); }
+  70% { box-shadow: 0 0 0 6px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* ---------- Cards ---------- */
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--sh-1); }
+
+/* ---------- Eyebrow + tick ---------- */
+.eyebrow {
+  font-family: var(--mono); font-size: 0.72rem; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.eyebrow .tick { color: var(--primary); }
+.mono { font-family: var(--mono); }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+
+/* ---------- Code ---------- */
+.code {
+  font-family: var(--mono); font-size: 0.85rem; line-height: 1.65;
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--r-md); overflow: auto;
+}
+.code pre { padding: 16px 18px; margin: 0; white-space: pre; }
+.tok-key { color: var(--primary); }
+.tok-str { color: var(--signal); }
+.tok-com { color: var(--ink-3); font-style: italic; }
+.tok-fn  { color: oklch(0.55 0.16 28); }
+[data-theme="dark"] .tok-fn { color: oklch(0.78 0.13 40); }
+.tok-punc { color: var(--ink-2); }
+.tok-num { color: var(--warn); }
+
+/* code window chrome */
+.win { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--card); overflow: hidden; box-shadow: var(--sh-2); }
+.win-bar { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.win-bar .lights { display: flex; gap: 6px; }
+.win-bar .lights i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); display: block; }
+.win-title { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-3); }
+.win .code { border: none; border-radius: 0; background: transparent; }
+
+/* ---------- Copy field ---------- */
+.copyline {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font-family: var(--mono); font-size: 0.92rem; padding: 12px 12px 12px 16px;
+  border: 1px solid var(--line-2); border-radius: var(--r-md); background: var(--card);
+}
+.copyline .cmd { color: var(--ink); }
+.copyline .cmd .pfx { color: var(--primary); }
+.copybtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 0.72rem; color: var(--ink-2);
+  padding: 6px 10px; border-radius: var(--r-sm); border: 1px solid var(--line);
+  background: var(--paper-2); transition: all .15s; cursor: pointer;
+}
+.copybtn:hover { color: var(--ink); border-color: var(--ink-3); }
+.copybtn.copied { color: var(--signal); border-color: var(--signal-line); }
+
+/* ---------- Tabs (install) ---------- */
+.tabs { display: flex; gap: 2px; }
+.tab { font-family: var(--mono); font-size: 0.8rem; padding: 7px 13px; color: var(--ink-3); border-radius: var(--r-sm); transition: all .15s; cursor: pointer; background: none; border: none; }
+.tab[aria-selected="true"] { color: var(--ink); background: var(--paper-2); }
+.tab:hover { color: var(--ink); }
+.qs-tabbar { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px 8px 12px; border-bottom: 1px solid var(--line); background: var(--paper-2); }
+.rule { height: 1px; background: var(--line); border: none; }
+
+/* ---------- Hairline grid background motif ---------- */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ============================================================
+   Vault card (signature) — apps/site landing.css
+   ============================================================ */
+.vault-card { position: relative; }
+.vault-meta { padding: 16px 18px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 12px; }
+.vault-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.84rem; }
+.vault-row .k { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-3); letter-spacing: 0.02em; }
+.vault-row .v { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); white-space: nowrap; }
+.vault-body { padding: 18px; }
+.vault-payload {
+  font-family: var(--mono); font-size: 0.82rem; line-height: 1.7; color: var(--ink);
+  background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--r-sm);
+  padding: 14px 16px; min-height: 92px; word-break: break-all; transition: color .3s;
+}
+.vault-payload.locked { color: var(--ink-3); }
+.vault-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.vault-status { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 0.76rem; }
+.vault-status .ic { width: 14px; height: 14px; }
+.vault-status.is-locked { color: var(--warn); }
+.vault-status.is-open { color: var(--signal); }
+.lat { font-family: var(--mono); font-size: 0.72rem; color: var(--ink-3); white-space: nowrap; }
+.vault-chip {
+  position: absolute; left: -16px; bottom: 26px; z-index: 3;
+  background: var(--card); border: 1px solid var(--line-2); border-radius: var(--r-md);
+  box-shadow: var(--sh-3); padding: 9px 13px;
+  display: flex; align-items: center; gap: 9px; font-family: var(--mono); font-size: 0.74rem;
+}
+.vault-chip .ck { color: var(--primary); }
+
+/* ---------- Pillar / why card ---------- */
+.pillar { display: flex; flex-direction: column; padding: 26px; transition: border-color .2s, transform .2s, box-shadow .2s; }
+.pillar:hover { border-color: var(--line-2); transform: translateY(-3px); box-shadow: var(--sh-2); }
+.pillar-no { font-family: var(--mono); font-size: 0.74rem; color: var(--ink-3); margin-bottom: 18px; display: flex; justify-content: space-between; }
+.pillar-no .tag { color: var(--primary); }
+.pillar h3 { margin-bottom: 8px; font-family: var(--display); font-size: 1.32rem; font-weight: 700; letter-spacing: -0.02em; }
+.pillar .p-desc { font-size: 0.96rem; color: var(--ink-2); margin-bottom: 18px; flex: 1; }
+.pillar .mini-code { font-family: var(--mono); font-size: 0.76rem; background: var(--paper-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 12px 14px; line-height: 1.6; color: var(--ink-2); margin-bottom: 16px; }
+.pillar .p-link { font-size: 0.86rem; font-weight: 600; color: var(--primary); display: inline-flex; align-items: center; gap: 6px; }
+.pillar .p-link svg { width: 14px; height: 14px; }

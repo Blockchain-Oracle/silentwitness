@@ -1,0 +1,172 @@
+/* ============================================================
+   cdr-kit — colors & type foundations
+   Ported verbatim from the live design system at
+   github.com/Blockchain-Oracle/cdr-kit · apps/site/app/globals.css
+   Refined-technical · light-first · encrypted→decrypted motif
+   Display: Bricolage Grotesque · Body: Hanken Grotesk · Mono: JetBrains Mono
+   ============================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap");
+
+/* ---------- Raw tokens · LIGHT (default) ---------- */
+:root {
+  /* surfaces */
+  --paper:    oklch(0.992 0.004 95);   /* page background — warm near-white */
+  --paper-2:  oklch(0.972 0.006 92);   /* sunken / code wells / strips */
+  --paper-3:  oklch(0.955 0.007 90);   /* deepest sunken */
+  --card:     oklch(1 0 0);            /* raised card surface — pure white */
+
+  /* ink (text) */
+  --ink:      oklch(0.235 0.013 65);   /* primary text — warm near-black */
+  --ink-2:    oklch(0.50 0.012 68);    /* secondary text */
+  --ink-3:    oklch(0.64 0.010 70);    /* tertiary / faint / meta */
+
+  /* hairlines */
+  --line:     oklch(0.905 0.006 85);   /* default border */
+  --line-2:   oklch(0.86 0.007 85);    /* stronger border / hover */
+
+  /* primary — indigo */
+  --primary:      oklch(0.52 0.20 268);
+  --primary-2:    oklch(0.46 0.20 268);
+  --primary-soft: oklch(0.52 0.20 268 / 0.10);  /* badge / hover fills */
+  --primary-line: oklch(0.52 0.20 268 / 0.32);  /* tinted borders */
+  --on-primary:   oklch(0.99 0.004 95);
+
+  /* semantic */
+  --signal:      oklch(0.58 0.15 152);          /* success · "decrypted" green */
+  --signal-soft: oklch(0.58 0.15 152 / 0.12);
+  --signal-line: oklch(0.58 0.15 152 / 0.34);
+  --warn:        oklch(0.66 0.15 65);           /* warnings · "locked" amber */
+  --warn-soft:   oklch(0.66 0.15 65 / 0.12);
+  --warn-line:   oklch(0.66 0.15 65 / 0.34);
+  --danger:      oklch(0.55 0.21 26);           /* errors (#D32D2D family) */
+  --danger-soft: oklch(0.55 0.21 26 / 0.12);
+  --danger-line: oklch(0.55 0.21 26 / 0.34);
+
+  /* ---------- Type families ---------- */
+  --display: "Bricolage Grotesque", system-ui, sans-serif; /* @kind font */
+  --sans:    "Hanken Grotesk", system-ui, sans-serif; /* @kind font */
+  --mono:    "JetBrains Mono", ui-monospace, SFMono-Regular, monospace; /* @kind font */
+
+  /* ---------- Radii ---------- */
+  --r-sm: 5px;
+  --r-md: 9px;
+  --r-lg: 14px;
+
+  /* ---------- Elevation ---------- */
+  --sh-1: 0 1px 2px oklch(0.3 0.02 70 / 0.05), 0 1px 1px oklch(0.3 0.02 70 / 0.04);
+  --sh-2: 0 2px 8px oklch(0.3 0.02 70 / 0.06), 0 1px 2px oklch(0.3 0.02 70 / 0.05);
+  --sh-3: 0 18px 50px -18px oklch(0.3 0.05 70 / 0.22), 0 2px 8px oklch(0.3 0.02 70 / 0.06);
+
+  /* ---------- Layout ---------- */
+  --maxw: 1180px;
+  --nav-h: 60px;
+}
+
+/* ---------- Raw tokens · DARK ---------- */
+[data-theme="dark"] {
+  --paper:    oklch(0.175 0.008 265);
+  --paper-2:  oklch(0.205 0.009 265);
+  --paper-3:  oklch(0.235 0.010 265);
+  --card:     oklch(0.215 0.009 265);
+
+  --ink:      oklch(0.955 0.004 95);
+  --ink-2:    oklch(0.72 0.012 250);
+  --ink-3:    oklch(0.56 0.012 250);
+
+  --line:     oklch(0.30 0.010 265);
+  --line-2:   oklch(0.37 0.012 265);
+
+  --primary:      oklch(0.66 0.18 268);
+  --primary-2:    oklch(0.73 0.17 268);
+  --primary-soft: oklch(0.66 0.18 268 / 0.16);
+  --primary-line: oklch(0.66 0.18 268 / 0.40);
+  --on-primary:   oklch(0.16 0.01 265);
+
+  --signal:      oklch(0.74 0.16 152);
+  --signal-soft: oklch(0.74 0.16 152 / 0.16);
+  --signal-line: oklch(0.74 0.16 152 / 0.40);
+  --warn:        oklch(0.76 0.14 70);
+  --warn-soft:   oklch(0.76 0.14 70 / 0.16);
+  --warn-line:   oklch(0.76 0.14 70 / 0.40);
+  --danger:      oklch(0.68 0.19 26);
+  --danger-soft: oklch(0.68 0.19 26 / 0.16);
+  --danger-line: oklch(0.68 0.19 26 / 0.40);
+
+  --sh-1: 0 1px 2px oklch(0 0 0 / 0.4);
+  --sh-2: 0 3px 10px oklch(0 0 0 / 0.45);
+  --sh-3: 0 24px 60px -20px oklch(0 0 0 / 0.7), 0 2px 8px oklch(0 0 0 / 0.4);
+}
+
+/* ============================================================
+   SEMANTIC TYPE SCALE
+   Apply these classes (or copy the rules) for consistent type.
+   Base: 16px / 1.6 / letter-spacing -0.005em.
+   ============================================================ */
+
+.ds-body {
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.6;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+/* Display — hero headline. Bricolage 800, tight. */
+.ds-display {
+  font-family: var(--display);
+  font-weight: 800;
+  font-size: clamp(2.7rem, 6.2vw, 5.1rem);
+  line-height: 0.97;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+}
+
+/* Section heading — h2. */
+.ds-h-sec {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(1.9rem, 3.6vw, 3rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+}
+
+/* Card / sub heading — h3. */
+.ds-h-card {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.32rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* Lede — supporting paragraph under a heading. */
+.ds-lede {
+  font-family: var(--sans);
+  font-weight: 400;
+  font-size: clamp(1.06rem, 1.6vw, 1.32rem);
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+/* Eyebrow — mono, uppercase, tracked. Section kicker. */
+.ds-eyebrow {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+/* Mono — addresses, code, kbd, "encoded" numbers. */
+.ds-mono {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  letter-spacing: 0;
+}
+
+/* Tabular numerals — for vault uuids, prices, stats. */
+.ds-tnum { font-variant-numeric: tabular-nums; }

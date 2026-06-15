@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  .swroot{
+    --paper:#fbfbf9;--paper2:#f3f3ee;--ink:#1b1b18;--ink2:#5d5d56;--ink3:#8c8c82;
+    --line:#e6e5df;--line2:#d8d7cf;--ac:#2e7d5b;--ac-d:#236a49;--ac-soft:rgba(46,125,91,.10);
+    --red:#b3402e;--redsoft:rgba(179,64,46,.10);--amber:#a9781f;--ambersoft:rgba(169,120,31,.10);
+    --dark:#1b1c19;--cream:#f4f2ea;
+    --disp:'Schibsted Grotesk',system-ui,sans-serif;--sans:'Hanken Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;
+    font-family:var(--sans);color:var(--ink);background:#26261f;min-height:100vh;
+  }
+  .pagehead{padding:30px 32px 8px;color:#cfcec4;font-family:var(--mono);font-size:13px;letter-spacing:.04em}
+  .board{display:flex;flex-direction:column;gap:34px;padding:18px 32px 80px;align-items:flex-start}
+  .item .label{font-family:var(--mono);font-size:12px;color:#a3a299;margin-bottom:8px;letter-spacing:.05em}
+  .frame{position:relative;overflow:hidden;background:var(--paper);box-shadow:0 14px 50px -20px rgba(0,0,0,.6)}
+  .frame.dark{background:var(--dark);color:var(--cream)}
+  .swroot.exporting{background:#fbfbf9}
+  .swroot.exporting .pagehead{display:none}
+  .swroot.exporting .board{padding:0;gap:0}
+  .swroot.exporting .item .label{display:none}
+  .swroot.exporting .frame{box-shadow:none}
+
+  .mk{display:inline-block;width:22px;height:22px;flex:none;line-height:0}
+  .mk svg{width:100%;height:100%;display:block}
+  .corner{position:absolute;top:22px;right:26px;display:flex;align-items:center;gap:8px;z-index:3}
+  .corner b{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:-.02em;color:var(--ink2)}
+  .kick{font-family:var(--mono);font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ac-d)}
+  .dark .kick{color:#7fc69e}
+  .h{font-family:var(--disp);letter-spacing:-.03em;line-height:1.02;color:var(--ink)}
+  .dark .h{color:var(--cream)}
+  .mono{font-family:var(--mono)}
+  .tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:11px;border-radius:999px;padding:2px 9px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+  .tag.arch{color:var(--ac-d);border-color:var(--ac);background:var(--ac-soft)}
+  .tag.supp{color:var(--amber);border-color:rgba(169,120,31,.4);background:var(--ambersoft)}
+  .tag.det{color:var(--red);border-color:var(--red);background:var(--redsoft)}
+  .gridbg{position:absolute;inset:0;background-image:linear-gradient(rgba(244,242,234,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(244,242,234,.06) 1px,transparent 1px);background-size:34px 34px;pointer-events:none}
+  .gridbg.lt{background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);-webkit-mask-image:radial-gradient(120% 90% at 70% 0%,#000 30%,transparent 75%);mask-image:radial-gradient(120% 90% at 70% 0%,#000 30%,transparent 75%)}
+  .box{border:1.5px solid var(--line2);border-radius:12px;background:var(--paper);padding:14px 16px}
+  .box.acc{border-color:var(--ac);background:var(--ac-soft)}
+  .box.dash{border-style:dashed;border-color:var(--amber);background:var(--ambersoft)}
+  .box .bt{font-family:var(--disp);font-weight:700;font-size:15px;color:var(--ink)}
+  .box .bs{font-size:12.5px;color:var(--ink2);line-height:1.4;margin-top:2px}
+  .chip{font-family:var(--mono);font-size:11px;color:var(--ink2);background:var(--paper2);border:1px solid var(--line);border-radius:5px;padding:3px 7px}
+  .conn{display:flex;align-items:center;justify-content:center;color:var(--ac);font-size:14px}
+  .fwrow{display:flex;align-items:center;gap:9px;margin:4px auto;border-radius:8px;background:var(--paper);padding:7px 11px;border:1px solid var(--line2);border-left:3px solid var(--ac)}
+  .fwrow.supp{border:1px dashed var(--amber);border-left:3px solid var(--amber)}
+  .fwrow .fn{font-family:var(--mono);font-size:10.5px;color:var(--ink3)}
+  .fwrow .ft{font-family:var(--disp);font-weight:700;font-size:12.5px;color:var(--ink);flex:1}
+  .fwrow .fb{font-family:var(--mono);font-size:9px;border-radius:4px;padding:1px 5px;color:var(--ac-d);border:1px solid var(--ac)}
+  .fwrow.supp .fb{color:var(--amber);border-color:var(--amber)}
+</style>
+</helmet>
+
+<div class="swroot" id="swroot">
+<div class="pagehead">SilentWitness — asset board · each frame is exact export size · scroll to review</div>
+<div class="board">
+
+  <div class="item" data-id="banner">
+    <div class="label">README banner · 1280 × 320</div>
+    <div class="frame dark" style="width:1280px;height:320px">
+      <div class="gridbg"></div>
+      <div style="position:absolute;inset:0;padding:46px 56px;display:flex;flex-direction:column;justify-content:center;gap:18px;max-width:840px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="mk" style="width:34px;height:34px"><svg width="34" height="34" viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#f4f2ea" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#7fc69e" stroke-width="2.3"/></svg></span>
+          <span class="h" style="font-weight:800;font-size:34px">SilentWitness</span>
+          <span class="tag arch" style="margin-left:4px">SANS Find Evil! 2026</span>
+        </div>
+        <div class="h" style="font-weight:700;font-size:30px;line-height:1.12;max-width:20ch;color:var(--cream)">The AI incident-response analyst that has to <span style="color:#7fc69e">prove every claim.</span></div>
+        <div class="mono" style="font-size:13.5px;color:#a3a299">hypothesis-first DFIR · cites every finding · architectural guardrails, not prompts</div>
+      </div>
+      <div style="position:absolute;right:52px;top:50%;transform:translateY(-50%);width:300px;border:1px solid #34352e;border-radius:12px;background:#212219;padding:14px 16px">
+        <div class="mono" style="font-size:11px;color:#7e7d72;display:flex;justify-content:space-between"><span>record_id 2514417</span><span style="color:#7fc69e">✓ verified</span></div>
+        <div class="mono" style="font-size:11.5px;color:#d7d6cb;line-height:1.55;margin-top:9px;background:#191a15;border:1px solid #2e2f28;border-radius:7px;padding:9px 11px;word-break:break-all">LNK target=…\SRL-Projects - Airwolf</div>
+        <div class="mono" style="font-size:10.5px;color:#7fc69e;margin-top:9px">citation gate · span ⊆ record · sha256 ✓</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="social">
+    <div class="label">Social / OG card · 1200 × 630</div>
+    <div class="frame dark" style="width:1200px;height:630px">
+      <div class="gridbg"></div>
+      <div style="position:absolute;inset:0;padding:76px;display:flex;flex-direction:column;justify-content:center;gap:26px">
+        <div style="display:flex;align-items:center;gap:14px">
+          <span class="mk" style="width:40px;height:40px"><svg width="40" height="40" viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#f4f2ea" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#7fc69e" stroke-width="2.3"/></svg></span>
+          <span class="h" style="font-weight:800;font-size:38px">SilentWitness</span>
+        </div>
+        <div class="h" style="font-weight:800;font-size:60px;line-height:1.02;max-width:17ch;color:var(--cream)">Prove <span style="color:#7fc69e">every claim.</span></div>
+        <div class="mono" style="font-size:18px;color:#a3a299;max-width:46ch;line-height:1.5">A hypothesis-first DFIR investigator whose report writes itself — with every claim locked to the tool that produced it.</div>
+        <div style="display:flex;gap:10px;margin-top:6px;flex-wrap:wrap">
+          <span class="tag arch" style="font-size:13px;padding:5px 12px">10/10 recalled · ROCBA</span>
+          <span class="tag" style="font-size:13px;padding:5px 12px;color:#b7b6ab;border-color:#3a3b33;background:#212219">27 typed MCP tools</span>
+          <span class="tag" style="font-size:13px;padding:5px 12px;color:#b7b6ab;border-color:#3a3b33;background:#212219">architectural guardrails</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="logo">
+    <div class="label">Logo lockup · transparent · 760 × 300</div>
+    <div class="frame" style="width:760px;height:300px;background:transparent">
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:20px">
+        <span class="mk" style="width:78px;height:78px"><svg viewBox="0 0 24 24" fill="none"><mask id="lk"><rect width="24" height="24" fill="#fff"/><rect x="8.5" y="8.6" width="5" height="6.8" rx="2.5" fill="#000"/></mask><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3" mask="url(#lk)"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span>
+        <span class="h" style="font-weight:800;font-size:56px;letter-spacing:-.04em">SilentWitness</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="arch">
+    <div class="label">Diagram A · System architecture · 1280 × 800</div>
+    <div class="frame" style="width:1280px;height:800px">
+      <div class="gridbg lt"></div>
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:40px 48px;display:flex;flex-direction:column;gap:14px">
+        <div><div class="kick">System architecture</div><div class="h" style="font-weight:800;font-size:30px;margin-top:6px">Eight trust boundaries · six enforced in code</div></div>
+        <div style="display:flex;gap:14px;margin-bottom:2px"><span class="tag arch">architectural · enforced</span><span class="tag supp">supplementary · prompt-based</span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+          <div class="box"><div class="bt">Examiner — SIFT CLI <span class="tag arch">arch</span></div><div class="bs mono" style="margin-top:6px">register-evidence → prepare → index → investigate → review → export</div></div>
+          <div class="box acc"><div class="bt">/evidence — read-only · TRUST BOUNDARY</div><div class="bs">ro, noexec, nosuid · ROCBA .E01 + memory · agent never crosses it</div></div>
+        </div>
+        <div class="box" style="padding:13px 16px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><div class="bt">Offline ingest spine <span class="tag arch">arch</span></div><div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap"><span class="chip">dfVFS extract</span><span class="conn">→</span><span class="chip">9 feeders</span><span class="conn">+</span><span class="chip">pySigma</span><span class="conn">→</span><span class="chip" style="border-color:var(--ac);color:var(--ac-d)">FTS5 · sha256 + audit_id</span></div></div></div>
+        <div style="text-align:center;color:var(--ink3);font-family:var(--mono);font-size:11px">queried, never read raw ▼</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch">
+          <div class="box acc"><div class="bt">silentwitness-mcp — MCP server <span class="tag" style="background:var(--paper);border-color:var(--ac);color:var(--ac-d)">the product</span></div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:9px">
+              <div class="bs"><b style="color:var(--ink)">query tools</b> — the only discovery surface</div>
+              <div class="bs">adversarial sanitizer · <b style="color:var(--ink)">citation gate</b> · <b style="color:var(--ink)">entity gate</b></div>
+              <div class="bs">hash-chained audit · HMAC approval ledger</div>
+            </div>
+          </div>
+          <div class="box"><div class="bt">silentwitness-agent — Pydantic AI</div>
+            <div style="display:flex;flex-direction:column;gap:6px;margin-top:9px">
+              <div class="bs">investigator — form · pivot · confirm · abandon</div>
+              <div class="bs"><b style="color:var(--ink)">coverage gate</b> — output_validator (5/5 questions)</div>
+              <div class="bs">live critic + contradiction detectors → report</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <span class="tag arch" style="background:var(--paper)">↺ coverage gate → "ModelRetry: question N uncovered"</span>
+          <span class="tag arch" style="background:var(--paper)">↺ critic → "CHALLENGE → revise"</span>
+        </div>
+        <div class="box dash" style="margin-top:auto"><div class="bt" style="color:var(--amber)">External — supplementary</div><div class="bs">optional claude-code config (CLAUDE.md + settings.json) · model-agnostic LLM — anthropic / openai / google / ollama</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="ingest">
+    <div class="label">Diagram C · Ingest pipeline · 1280 × 440</div>
+    <div class="frame" style="width:1280px;height:440px">
+      <div class="gridbg lt"></div>
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:44px 48px;display:flex;flex-direction:column;gap:26px">
+        <div><div class="kick">Ingest pipeline</div><div class="h" style="font-weight:800;font-size:28px;margin-top:6px">Parse once, offline. Then only fast, bounded queries.</div></div>
+        <div style="display:flex;align-items:stretch;gap:0">
+          <div class="box acc" style="flex:1"><div class="bt" style="font-size:14px">Evidence image</div><div class="bs">read-only .E01</div></div>
+          <div class="conn" style="width:38px">→</div>
+          <div class="box" style="flex:1"><div class="bt" style="font-size:14px">dfVFS extract</div><div class="bs">artifacts, ro</div></div>
+          <div class="conn" style="width:38px">→</div>
+          <div class="box" style="flex:1.3"><div class="bt" style="font-size:14px">parsers + Sigma</div><div class="bs">9 feeders · pySigma</div></div>
+          <div class="conn" style="width:38px">→</div>
+          <div class="box acc" style="flex:1.2"><div class="bt" style="font-size:14px">FTS5 index</div><div class="bs">sha256 + audit_id / row</div></div>
+          <div class="conn" style="width:38px">→</div>
+          <div class="box" style="flex:1"><div class="bt" style="font-size:14px">agent queries</div><div class="bs">fast, bounded</div></div>
+        </div>
+        <div class="mono" style="font-size:13px;color:var(--ink2)">~2.67M records indexed once · the agent never reads raw evidence — it queries the index.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="firewall">
+    <div class="label">Diagram B · The hallucination firewall · 1200 × 675</div>
+    <div class="frame" style="width:1200px;height:675px">
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:34px 44px;display:flex;gap:34px">
+        <div style="flex:1;display:flex;flex-direction:column;gap:5px">
+          <div class="mono" style="font-size:11px;text-align:center;color:var(--red);border:1px dashed var(--red);border-radius:7px;padding:6px;background:var(--redsoft)">▼ raw, unverified claim enters</div>
+          {{ firewallRows }}
+          <div class="mono" style="font-size:11px;text-align:center;color:var(--ac-d);border:1px solid var(--ac);border-radius:7px;padding:7px;background:var(--ac-soft)">▼ grounded, cited finding exits</div>
+        </div>
+        <div style="width:300px;flex:none;display:flex;flex-direction:column;justify-content:center">
+          <div class="kick">The hallucination firewall</div>
+          <div class="h" style="font-weight:800;font-size:30px;margin-top:10px">Ten places a hallucination has to survive — and doesn't.</div>
+          <div style="display:flex;flex-direction:column;gap:9px;margin-top:20px">
+            <span class="tag arch" style="font-size:12px;padding:3px 10px">architectural — enforced</span>
+            <span class="tag supp" style="font-size:12px;padding:3px 10px">supplementary — prompt</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="loop">
+    <div class="label">Diagram D · Investigation loop · 1200 × 700</div>
+    <div class="frame" style="width:1200px;height:700px">
+      <div class="gridbg lt"></div>
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:40px 48px;display:flex;flex-direction:column;gap:16px">
+        <div><div class="kick">Investigation loop</div><div class="h" style="font-weight:800;font-size:28px;margin-top:6px">Hypothesis-first — and it can't stop early.</div></div>
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div class="box" style="display:flex;align-items:center;gap:12px"><span class="chip" style="border-color:var(--ac);color:var(--ac-d)">1</span><div class="bs" style="font-size:13.5px"><b style="color:var(--ink)">list_detections</b> — start from the staged Sigma alerts</div></div>
+          <div class="conn">↓</div>
+          <div class="box" style="display:flex;align-items:center;gap:12px"><span class="chip" style="border-color:var(--ac);color:var(--ac-d)">2</span><div class="bs" style="font-size:13.5px"><b style="color:var(--ink)">form hypothesis</b> → search_evidence / get_record</div></div>
+          <div class="conn">↓</div>
+          <div class="box" style="display:flex;align-items:center;gap:12px"><span class="chip" style="border-color:var(--ac);color:var(--ac-d)">3</span><div class="bs" style="font-size:13.5px"><b style="color:var(--ink)">record_observation</b> → <span style="color:var(--ac-d);font-weight:600">citation gate</span> → record_interpretation</div></div>
+          <div class="conn">↓</div>
+          <div class="box acc" style="display:flex;align-items:center;gap:12px"><span class="chip" style="border-color:var(--ac);color:var(--ac-d)">4</span><div class="bs" style="font-size:13.5px"><b style="color:var(--ink)">confirm / pivot</b> — next hypothesis</div></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:4px">
+          <div class="box" style="border-color:var(--ac)"><div class="bt" style="font-size:14px;color:var(--ac-d)">↺ critic — mid-run</div><div class="bs">CHALLENGE → revise · + model-free contradiction detectors</div></div>
+          <div class="box" style="border-color:var(--ac)"><div class="bt" style="font-size:14px;color:var(--ac-d)">↺ coverage gate — at finalize</div><div class="bs">blocks finalization until all 5 Key Questions are cited</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="recall">
+    <div class="label">Diagram E · Recall result card · 1200 × 675</div>
+    <div class="frame" style="width:1200px;height:675px">
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:48px 56px;display:flex;gap:48px;align-items:center">
+        <div style="flex:none;width:360px">
+          <div class="kick">Recall · real SANS ROCBA case</div>
+          <div class="h" style="font-weight:800;font-size:84px;line-height:.95;margin-top:14px">10<span style="color:var(--ink3);font-size:54px">/10</span></div>
+          <div class="h" style="font-weight:700;font-size:24px;color:var(--ink2);margin-top:4px">findings recalled</div>
+          <div style="font-size:14px;color:var(--ink2);line-height:1.5;margin-top:18px;max-width:34ch">The architecture put the evidence in reach; the coverage gate forced breadth; a capable model found all 10 of 10.</div>
+          <div class="mono" style="font-size:11.5px;color:var(--ink3);margin-top:12px">single run; recall varies by model — see accuracy report</div>
+        </div>
+        <div style="flex:1">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;height:360px;align-items:end;border-bottom:1px solid var(--line2)">
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div class="h" style="font-weight:800;font-size:22px">40%</div><div style="width:100%;height:40%;background:var(--paper2);border:1px solid var(--line2);border-radius:7px 7px 0 0;margin-top:8px"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div class="h" style="font-weight:800;font-size:22px">20%</div><div style="width:100%;height:20%;background:var(--paper2);border:1px solid var(--line2);border-radius:7px 7px 0 0;margin-top:8px"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div class="h" style="font-weight:800;font-size:22px">30–50%</div><div style="width:100%;height:50%;background:repeating-linear-gradient(135deg,var(--paper2),var(--paper2) 6px,#e6e5de 6px,#e6e5de 12px);border:1px solid var(--line2);border-radius:7px 7px 0 0;margin-top:8px"></div></div>
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%"><div class="h" style="font-weight:800;font-size:26px;color:var(--ac-d)">100%</div><div style="width:100%;height:100%;background:var(--ac);border:1px solid var(--ac);border-radius:7px 7px 0 0;margin-top:8px;box-shadow:0 10px 30px -8px rgba(46,125,91,.5)"></div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-top:11px" class="mono">
+            <div style="font-size:11px;color:var(--ink3);text-align:center;line-height:1.4">baseline<br>old arch</div>
+            <div style="font-size:11px;color:var(--ink3);text-align:center;line-height:1.4">gate OFF<br>premature</div>
+            <div style="font-size:11px;color:var(--ink3);text-align:center;line-height:1.4">gate · 5.2<br>variance</div>
+            <div style="font-size:11px;color:var(--ac-d);text-align:center;line-height:1.4;font-weight:500">gate · 5.5<br>10/10</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="trace">
+    <div class="label">Diagram F · Three-claim trace · 1200 × 675</div>
+    <div class="frame" style="width:1200px;height:675px">
+      <div class="gridbg lt"></div>
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:48px 52px;display:flex;flex-direction:column;gap:18px;justify-content:center">
+        <div><div class="kick">Chain of custody</div><div class="h" style="font-weight:800;font-size:30px;margin-top:6px;max-width:24ch">Any finding traces back to the tool execution that produced it.</div></div>
+        <div style="display:flex;align-items:stretch;gap:0;margin-top:8px">
+          <div class="box" style="flex:1"><div class="mono" style="font-size:10.5px;color:var(--ac-d)">FINDING O-003</div><div class="bt" style="font-size:14px;margin-top:4px">SRL files taken</div><div class="bs">Q2 · confidence HIGH</div></div>
+          <div class="conn" style="width:34px">→</div>
+          <div class="box" style="flex:1.2"><div class="mono" style="font-size:10.5px;color:var(--ac-d)">CITED RECORD</div><div class="bt" style="font-size:14px;margin-top:4px">record_id 2514417</div><div class="bs mono" style="font-size:10.5px;word-break:break-all">span "…SRL-Projects - Airwolf"</div></div>
+          <div class="conn" style="width:34px">→</div>
+          <div class="box" style="flex:1.2"><div class="mono" style="font-size:10.5px;color:var(--ac-d)">TOOL EXECUTION</div><div class="bt" style="font-size:14px;margin-top:4px">search_evidence</div><div class="bs mono" style="font-size:10.5px">audit 20260615-209 · 20 hits</div></div>
+          <div class="conn" style="width:34px">→</div>
+          <div class="box acc" style="flex:1"><div class="mono" style="font-size:10.5px;color:var(--ac-d)">SOURCE ARTIFACT</div><div class="bt" style="font-size:14px;margin-top:4px">read-only image</div><div class="bs">LNK feeder · sha256 ✓</div></div>
+        </div>
+        <div style="display:inline-flex;align-self:flex-start;align-items:center;gap:8px;border:1px solid var(--ac);background:var(--ac-soft);border-radius:999px;padding:7px 14px;margin-top:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--ac);display:inline-block"></span><span class="mono" style="font-size:12px;color:var(--ac-d)">live critic returned AGREE on O-003</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="item" data-id="selfcorrect">
+    <div class="label">Gallery · Self-correction · 1200 × 675</div>
+    <div class="frame" style="width:1200px;height:675px">
+      <div class="corner"><span class="mk"><svg viewBox="0 0 24 24" fill="none"><rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#1b1b18" stroke-width="2.3"/><rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="#2e7d5b" stroke-width="2.3"/></svg></span><b>SilentWitness</b></div>
+      <div style="position:absolute;inset:0;padding:56px 64px;display:flex;flex-direction:column;justify-content:center;gap:24px">
+        <div><div class="kick">Self-correction · logged, not staged</div><div class="h" style="font-weight:800;font-size:38px;margin-top:8px;max-width:22ch">It argues with itself — and revises.</div></div>
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:820px">
+          <div class="box" style="border-left:3px solid var(--red);background:var(--paper)"><div class="mono" style="font-size:12px;color:var(--red)">CRITIC · CHALLENGE</div><div class="bs" style="font-size:15px;color:var(--ink);margin-top:5px">“This logon claim is too broad — narrow it to the specific <span class="mono" style="font-size:13px">LogonType=3 NTLM / LogonType=10 RDP</span> records actually cited.”</div></div>
+          <div style="text-align:center;color:var(--ink3);font-family:var(--mono);font-size:13px">↓ revise</div>
+          <div class="box" style="border-left:3px solid var(--ac);background:var(--ac-soft)"><div class="mono" style="font-size:12px;color:var(--ac-d)">AGENT · REVISED</div><div class="bs" style="font-size:15px;color:var(--ink);margin-top:5px">“This revision removes the specific dates that were challenged and follows the critic guidance.”</div></div>
+        </div>
+        <div class="mono" style="font-size:13px;color:var(--ink2)">headline run · the live critic challenged <b style="color:var(--ink)">3 of 7</b> findings; the agent revised them</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const h = React.createElement;
+    const layers = [
+      ['01', 'No raw-evidence surface', 1], ['02', 'Typed tool vocabulary', 1], ['03', 'Adversarial sanitizer', 0],
+      ['04', 'Citation gate', 1], ['05', 'Entity gate', 1], ['06', 'Grounding score', 0], ['07', '≥2-source corroboration', 0],
+      ['08', 'Contradiction detectors', 1], ['09', 'Live closed-loop critic', 1], ['10', 'Enforced coverage gate', 1],
+    ];
+    const firewallRows = layers.map((l, i) => {
+      const arch = l[2] === 1;
+      return h('div', { key: i, className: 'fwrow' + (arch ? '' : ' supp'), style: { width: (100 - i * 1.6) + '%' } },
+        h('span', { className: 'fn' }, l[0]),
+        h('span', { className: 'ft' }, l[1]),
+        h('span', { className: 'fb' }, arch ? 'ARCH' : 'SUPP')
+      );
+    });
+    return { firewallRows };
+  }
+
+  componentDidMount() {
+    const root = document.getElementById('swroot');
+    window.exportMode = (id) => {
+      if (root) root.classList.add('exporting');
+      document.querySelectorAll('.board > .item').forEach((it) => { it.style.display = it.dataset.id === id ? 'flex' : 'none'; });
+      const item = document.querySelector('.item[data-id="' + id + '"]');
+      const fr = item.querySelector('.frame');
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const s = Math.min(vw / fr.offsetWidth, vh / fr.offsetHeight);
+      const transparent = (id === 'logo');
+      const dark = fr.classList.contains('dark');
+      const bg = transparent ? 'transparent' : (dark ? '#1b1c19' : '#fbfbf9');
+      item.style.alignItems = 'center'; item.style.justifyContent = 'center';
+      item.style.width = vw + 'px'; item.style.height = vh + 'px'; item.style.margin = '0';
+      fr.style.transform = 'scale(' + s + ')'; fr.style.transformOrigin = 'center center'; fr.style.boxShadow = 'none';
+      document.body.style.background = bg;
+      if (root) { root.style.background = bg; root.style.minHeight = '0'; }
+      window.scrollTo(0, 0);
+    };
+    window.showAll = () => {
+      if (root) { root.classList.remove('exporting'); root.style.background = '#26261f'; }
+      document.querySelectorAll('.board > .item').forEach((it) => { it.style.display = 'block'; });
+      document.body.style.width = ''; document.body.style.background = '';
+    };
+  }
+}
+</script>
+</body>
+</html>

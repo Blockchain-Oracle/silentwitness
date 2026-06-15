@@ -1,0 +1,15 @@
+/* ============================================================
+   cdr-kit — design system root stylesheet
+   Single entry point for consumers: link this one file and you
+   get the foundations (OKLCH color + dark theme, type families,
+   radii, shadows, layout, semantic type scale) and the ported
+   component styles (buttons, badges, cards, code windows, copy
+   fields, tabs, vault card, pillars).
+
+   The full-site recreation in ui_kits/cdrkit-site/ is a separate,
+   self-contained kit (it inlines its own tokens) — link those
+   files directly only when rebuilding that site.
+   ============================================================ */
+
+@import url("colors_and_type.css");
+@import url("preview/_cards.css");

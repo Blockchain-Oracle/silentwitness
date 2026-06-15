@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@500;600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  :root{
+    --bg:#fbfbf9;--bg2:#f3f3ee;--card:#fff;
+    --ink:#1b1b18;--ink2:#5d5d56;--ink3:#8c8c82;
+    --line:#e8e7e1;--line2:#dad9d1;
+    --ac:#2e7d5b;--ac-d:#236a49;--ac-soft:rgba(46,125,91,.10);
+    --red:#b3402e;--redsoft:rgba(179,64,46,.10);--amber:#a9781f;--ambersoft:rgba(169,120,31,.09);
+    --code-bg:#1b1c19;--code-ink:#e9e8e0;
+    --disp:'Schibsted Grotesk',system-ui,sans-serif;--sans:'Hanken Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;
+  }
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  a{color:inherit;text-decoration:none}
+
+  .topbar{position:sticky;top:0;z-index:60;height:60px;display:flex;align-items:center;gap:14px;padding:0 18px;background:rgba(251,251,249,.86);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:10px;white-space:nowrap}
+  .brand .mk{width:26px;height:26px;flex:none;background:center/contain no-repeat url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><mask id='c'><rect width='24' height='24' fill='white'/><rect x='8.5' y='8.6' width='5' height='6.8' rx='2.5' fill='black'/></mask><rect x='2.6' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%231b1b18' stroke-width='2.3' mask='url(%23c)'/><rect x='9.8' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%232e7d5b' stroke-width='2.3'/></svg>")}
+  .brand .mk i{display:none}
+  .fmk{display:inline-block;width:24px;height:24px;flex:none;background:center/contain no-repeat url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><mask id='f'><rect width='24' height='24' fill='white'/><rect x='8.5' y='8.6' width='5' height='6.8' rx='2.5' fill='black'/></mask><rect x='2.6' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%231b1b18' stroke-width='2.3' mask='url(%23f)'/><rect x='9.8' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%232e7d5b' stroke-width='2.3'/></svg>")}
+  .brand b{font-family:var(--disp);font-weight:700;font-size:1.02rem;letter-spacing:-.02em}
+  .brand .tg{font-family:var(--mono);font-size:.66rem;color:var(--ink3);border:1px solid var(--line2);border-radius:5px;padding:2px 6px}
+  .hamburger{display:none;align-items:center;justify-content:center;width:36px;height:36px;border-radius:8px;border:1px solid var(--line2);background:var(--card);cursor:pointer;color:var(--ink);font-size:1.1rem;flex:none}
+  .search-wrap{position:relative;margin-left:auto;width:min(330px,42vw)}
+  .search{width:100%;font-family:var(--sans);font-size:.86rem;color:var(--ink);background:var(--bg2);border:1px solid var(--line2);border-radius:8px;padding:9px 38px 9px 32px;outline:none;transition:border-color .15s,background .15s}
+  .search:focus{border-color:var(--ac);background:var(--card)}
+  .search-ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--ink3);font-size:.82rem;pointer-events:none}
+  .kbd{position:absolute;right:8px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:.64rem;color:var(--ink3);border:1px solid var(--line2);border-radius:4px;padding:1px 5px;background:var(--card);pointer-events:none}
+  .gh{flex:none;color:var(--ink2);font-family:var(--mono);font-size:.76rem;border:1px solid var(--line2);border-radius:8px;padding:8px 12px}
+  .gh:hover{color:var(--ink);border-color:var(--ink3)}
+  .results{position:absolute;top:46px;left:0;right:0;background:var(--card);border:1px solid var(--line2);border-radius:11px;box-shadow:0 18px 44px -18px rgba(0,0,0,.28);padding:6px;display:none;z-index:70;max-height:360px;overflow:auto}
+  .results.open{display:block}
+  .res{display:block;width:100%;text-align:left;padding:9px 11px;border-radius:8px;border:none;background:none;cursor:pointer;font-family:var(--sans)}
+  .res:hover,.res.sel{background:var(--bg2)}
+  .res .rt{font-size:.88rem;color:var(--ink);font-weight:600}
+  .res .rg{font-family:var(--mono);font-size:.64rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  .res-empty{padding:14px 12px;color:var(--ink3);font-size:.86rem}
+
+  .layout{max-width:1380px;margin:0 auto;display:grid;grid-template-columns:266px minmax(0,1fr) 224px;align-items:start}
+  .sidebar{position:sticky;top:60px;height:calc(100vh - 60px);overflow:auto;border-right:1px solid var(--line);padding:24px 16px 64px}
+  .navg{margin-bottom:22px}
+  .navg-l{font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3);padding:0 10px;margin-bottom:8px}
+  .nav-item{display:block;width:100%;text-align:left;font-family:var(--sans);font-size:.9rem;color:var(--ink2);padding:7px 11px;border-radius:8px;border:none;background:none;cursor:pointer;border-left:2px solid transparent;transition:color .12s,background .12s}
+  .nav-item:hover{color:var(--ink);background:var(--bg2)}
+  .nav-item.active{color:var(--ac-d);background:var(--ac-soft);border-left-color:var(--ac);font-weight:600}
+
+  .content{padding:38px clamp(20px,4vw,60px) 110px;min-width:0}
+  .article{display:none;max-width:768px;animation:fade .25s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+  .crumb{font-family:var(--mono);font-size:.72rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:16px}
+  .crumb b{color:var(--ac-d);font-weight:500}
+  .article h1{font-family:var(--disp);font-weight:800;font-size:clamp(2rem,4.4vw,2.75rem);letter-spacing:-.035em;line-height:1.04;margin:0 0 14px;color:var(--ink);text-wrap:balance}
+  .article .lede{font-size:1.14rem;color:var(--ink2);line-height:1.55;margin:0 0 34px;text-wrap:pretty}
+  .article h2{font-family:var(--disp);font-weight:700;font-size:1.42rem;letter-spacing:-.02em;margin:42px 0 12px;color:var(--ink);scroll-margin-top:80px}
+  .article h3{font-family:var(--disp);font-weight:700;font-size:1.08rem;margin:26px 0 8px;color:var(--ink)}
+  .article p{font-size:1rem;line-height:1.72;color:var(--ink2);margin:0 0 16px;text-wrap:pretty}
+  .article strong{color:var(--ink);font-weight:600}
+  .article a.ln{color:var(--ac-d);font-weight:600;border-bottom:1px solid var(--ac-soft)}
+  .article a.ln:hover{border-bottom-color:var(--ac)}
+  code{font-family:var(--mono);font-size:.84em;background:var(--bg2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--ink)}
+  .article ul{margin:0 0 18px;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
+  .article ul li{position:relative;padding-left:22px;font-size:1rem;line-height:1.6;color:var(--ink2)}
+  .article ul li::before{content:"";position:absolute;left:3px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--ac)}
+  .article ul li code{font-size:.82rem}
+
+  .callout{display:flex;gap:12px;padding:14px 16px;border-radius:11px;margin:0 0 18px;border:1px solid var(--line)}
+  .callout .ci{font-family:var(--mono);font-size:.66rem;font-weight:500;flex:none;padding-top:3px;text-transform:uppercase;letter-spacing:.04em}
+  .callout p{margin:0;font-size:.94rem;line-height:1.55;color:var(--ink)}
+  .callout.note{background:var(--ac-soft);border-color:var(--ac)} .callout.note .ci{color:var(--ac-d)}
+  .callout.warn{background:var(--ambersoft);border-color:rgba(169,120,31,.4)} .callout.warn .ci{color:var(--amber)}
+  .callout.danger{background:var(--redsoft);border-color:var(--red)} .callout.danger .ci{color:var(--red)}
+
+  .codewin{border:1px solid var(--line2);border-radius:12px;overflow:hidden;margin:0 0 20px;background:var(--code-bg)}
+  .codewin .bar{display:flex;align-items:center;gap:7px;padding:9px 14px;border-bottom:1px solid #2b2c27}
+  .codewin .bar i{width:10px;height:10px;border-radius:50%;background:#3a3b33;display:block}
+  .codewin .bar .t{font-family:var(--mono);font-size:.7rem;color:#7e7b70;margin-left:6px}
+  .codewin pre{margin:0;padding:16px 18px;overflow:auto;font-family:var(--mono);font-size:.82rem;line-height:1.85;color:var(--code-ink)}
+  .c{color:#7f8b6f;font-style:italic}.k{color:#8fc99b}.s{color:#d9c27a}.f{color:#9db8e6}
+
+  .tbl{width:100%;border-collapse:collapse;margin:0 0 20px;font-size:.9rem}
+  .tbl th{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);text-align:left;padding:9px 12px;border-bottom:1px solid var(--line2)}
+  .tbl td{padding:10px 12px;border-bottom:1px solid var(--line);color:var(--ink2);vertical-align:top}
+  .tbl td b{color:var(--ink);font-family:var(--mono);font-weight:500;font-size:.86rem}
+
+  .tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.64rem;border-radius:999px;padding:2px 9px;border:1px solid var(--line2);color:var(--ink2);white-space:nowrap}
+  .tag.arch{color:var(--ac-d);border-color:var(--ac);background:var(--ac-soft)}
+  .tag.supp{color:var(--amber);border-color:rgba(169,120,31,.4);background:var(--ambersoft)}
+  .tag.det{color:var(--red);border-color:var(--red);background:var(--redsoft)}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 20px}
+  .chip{font-family:var(--mono);font-size:.74rem;color:var(--ink2);background:var(--bg2);border:1px solid var(--line);border-radius:6px;padding:4px 9px}
+
+  .fw{display:flex;flex-direction:column;gap:8px;margin:6px 0 20px}
+  .fw .row{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line);border-left:3px solid var(--ac);border-radius:10px;background:var(--card)}
+  .fw .row.supp{border-left-color:var(--amber)}
+  .fw .n{font-family:var(--mono);font-size:.74rem;color:var(--ink3);width:18px;flex:none;padding-top:3px}
+  .fw .bd{flex:1;min-width:0}
+  .fw .ttl{font-family:var(--disp);font-weight:700;font-size:.96rem;color:var(--ink);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .fw .ds{font-size:.86rem;color:var(--ink2);line-height:1.45;margin-top:2px}
+
+  .cardgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,224px),1fr));gap:12px;margin:6px 0 24px}
+  .ncard{display:block;text-align:left;border:1px solid var(--line);border-radius:12px;padding:18px;background:var(--card);cursor:pointer;transition:border-color .15s,transform .15s,box-shadow .15s}
+  .ncard:hover{border-color:var(--ac);transform:translateY(-2px);box-shadow:0 10px 26px -14px rgba(0,0,0,.25)}
+  .ncard .h{font-family:var(--disp);font-weight:700;font-size:1rem;color:var(--ink);margin-bottom:5px;display:flex;align-items:center;justify-content:space-between}
+  .ncard .d{font-size:.86rem;color:var(--ink2);line-height:1.45}
+  .ncard .ar{color:var(--ac)}
+
+  .chart{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(8px,2vw,16px);height:230px;align-items:end;border-bottom:1px solid var(--line2);margin:6px 0 0}
+  .chart .col{display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+  .chart .v{font-family:var(--disp);font-weight:800;margin-bottom:6px;font-size:clamp(.95rem,2vw,1.2rem)}
+  .chart .bar{width:100%;border-radius:6px 6px 0 0;border:1px solid var(--line2);background:var(--bg2)}
+  .chartl{display:grid;grid-template-columns:repeat(4,1fr);gap:clamp(8px,2vw,16px);margin-top:11px}
+  .chartl div{font-family:var(--mono);font-size:.66rem;color:var(--ink3);text-align:center;line-height:1.4}
+
+  .chain{display:flex;flex-direction:column;max-width:700px;margin:4px 0 8px}
+  .chain .node{position:relative;display:flex;gap:16px;align-items:stretch}
+  .chain .sp{flex:none;width:18px;display:flex;flex-direction:column;align-items:center}
+  .chain .dot{width:13px;height:13px;border-radius:50%;background:var(--card);border:2px solid var(--ac);margin-top:18px;flex:none}
+  .chain .line{width:2px;flex:1;background:repeating-linear-gradient(var(--ac),var(--ac) 4px,transparent 4px,transparent 9px)}
+  .chain .nc{flex:1;min-width:0;margin-bottom:14px;border:1px solid var(--line);border-radius:11px;background:var(--card);padding:14px 16px}
+  .chain .nh{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:5px}
+  .chain .nh b{font-family:var(--disp);font-weight:700;font-size:.96rem;color:var(--ink)}
+  .chain .nh span{font-family:var(--mono);font-size:.72rem;color:var(--ac-d)}
+  .chain .nd{font-size:.86rem;color:var(--ink2);line-height:1.5;word-break:break-word}
+
+  .pagefoot{display:flex;gap:12px;margin-top:50px;padding-top:24px;border-top:1px solid var(--line);flex-wrap:wrap}
+  .pfbtn{flex:1 1 200px;border:1px solid var(--line);border-radius:12px;padding:14px 16px;cursor:pointer;background:var(--card);transition:border-color .15s,box-shadow .15s}
+  .pfbtn:hover{border-color:var(--ac);box-shadow:0 8px 22px -14px rgba(0,0,0,.22)}
+  .pfbtn.next{text-align:right}
+  .pfbtn .lab{font-family:var(--mono);font-size:.64rem;color:var(--ink3);text-transform:uppercase;letter-spacing:.05em}
+  .pfbtn .t{font-family:var(--disp);font-weight:700;font-size:.98rem;color:var(--ink);margin-top:3px}
+
+  .toc{position:sticky;top:60px;height:calc(100vh - 60px);overflow:auto;padding:40px 18px}
+  .toc-l{font-family:var(--mono);font-size:.66rem;text-transform:uppercase;letter-spacing:.1em;color:var(--ink3);margin-bottom:12px}
+  .toc a{display:block;font-size:.82rem;color:var(--ink3);padding:5px 0 5px 13px;line-height:1.4;border-left:2px solid var(--line);transition:color .12s,border-color .12s}
+  .toc a:hover,.toc a.on{color:var(--ac-d);border-left-color:var(--ac)}
+
+  .scrim{display:none;position:fixed;inset:60px 0 0;background:rgba(20,20,18,.32);z-index:45}
+  .scrim.open{display:block}
+
+  @media(max-width:1180px){.layout{grid-template-columns:266px minmax(0,1fr)}.toc{display:none}}
+  @media(max-width:860px){
+    .layout{grid-template-columns:1fr}
+    .sidebar{position:fixed;top:60px;left:0;bottom:0;width:284px;background:var(--bg);z-index:50;transform:translateX(-101%);transition:transform .22s ease;border-right:1px solid var(--line2);box-shadow:0 20px 50px -10px rgba(0,0,0,.18)}
+    .sidebar.open{transform:none}
+    .hamburger{display:inline-flex}
+    .content{padding:26px 20px 90px}
+    .gh{display:none}
+  }
+</style>
+</helmet>
+
+<div style="min-height:100vh;">
+
+  <!-- ============ TOPBAR ============ -->
+  <div class="topbar">
+    <button class="hamburger" id="sw-burger" aria-label="Menu">☰</button>
+    <a class="brand" href="#introduction">
+      <span class="mk"><i></i></span>
+      <b>SilentWitness</b><span class="tg">docs</span>
+    </a>
+    <div class="search-wrap">
+      <span class="search-ic">⌕</span>
+      <input class="search" id="sw-search" type="text" placeholder="Search the docs…" autocomplete="off" spellcheck="false">
+      <span class="kbd">⌘K</span>
+      <div class="results" id="sw-results"></div>
+    </div>
+    <a class="gh" href="https://github.com/Blockchain-Oracle/silentwitness">GitHub ↗</a>
+  </div>
+
+  <div class="scrim" id="sw-scrim"></div>
+
+  <div class="layout">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside class="sidebar" id="sw-sidebar">
+      <div class="navg">
+        <div class="navg-l">Getting started</div>
+        <button class="nav-item active" data-page="introduction" data-group="Getting started">Introduction</button>
+        <button class="nav-item" data-page="quickstart" data-group="Getting started">Quickstart</button>
+        <button class="nav-item" data-page="installation" data-group="Getting started">Installation</button>
+      </div>
+      <div class="navg">
+        <div class="navg-l">Core concepts</div>
+        <button class="nav-item" data-page="how-it-works" data-group="Core concepts">How it works</button>
+        <button class="nav-item" data-page="architecture" data-group="Core concepts">Architecture</button>
+        <button class="nav-item" data-page="evidence-index" data-group="Core concepts">The evidence index</button>
+      </div>
+      <div class="navg">
+        <div class="navg-l">Guardrails</div>
+        <button class="nav-item" data-page="firewall" data-group="Guardrails">The hallucination firewall</button>
+        <button class="nav-item" data-page="gates" data-group="Guardrails">Gates &amp; coverage</button>
+      </div>
+      <div class="navg">
+        <div class="navg-l">Reference</div>
+        <button class="nav-item" data-page="mcp-tools" data-group="Reference">MCP tool catalog</button>
+        <button class="nav-item" data-page="cli" data-group="Reference">CLI commands</button>
+      </div>
+      <div class="navg">
+        <div class="navg-l">Results</div>
+        <button class="nav-item" data-page="accuracy" data-group="Results">Accuracy &amp; honesty</button>
+        <button class="nav-item" data-page="provenance" data-group="Results">Chain-of-custody</button>
+      </div>
+    </aside>
+
+    <!-- ============ CONTENT ============ -->
+    <main class="content" id="sw-content">
+
+      <!-- INTRODUCTION -->
+      <article class="article" data-page="introduction" style="display:block">
+        <div class="crumb">Getting started / <b>Introduction</b></div>
+        <h1>SilentWitness</h1>
+        <p class="lede">A hypothesis-first AI incident-response investigator for the SANS SIFT Workstation. Point it at a Windows disk or memory image; it forms forensic hypotheses, pulls evidence from a parsed index, and produces a cited, defensible report — with architectural guardrails that structurally prevent it from hallucinating or modifying evidence.</p>
+        <div class="callout note"><span class="ci">New here</span><p>Go from a blank SIFT VM to a finished report in five commands — start with the <a class="ln" data-page="quickstart">Quickstart</a>.</p></div>
+        <h2 id="wedge">The wedge</h2>
+        <p>Most AI-DFIR tools let the model free-read raw evidence and trust its output. SilentWitness inverts that. The agent's <strong>only</strong> interface is a typed search over pre-parsed evidence, every claim must quote a real record (verified server-side), and a framework-level gate refuses to let it conclude until all five investigative questions are answered. The guardrails are <strong>architectural, not prompt-based</strong> — enforced at the server and filesystem boundary, so they hold even when the model ignores its instructions.</p>
+        <h2 id="facts">Facts you can quote</h2>
+        <ul>
+          <li>A custom <strong>MCP server</strong> exposing <strong>27 typed tools</strong>; model-agnostic across OpenAI, Anthropic, Google, and Ollama.</li>
+          <li>Evidence index built from <strong>9 targeted parsers</strong> plus a Sigma detection engine (pySigma).</li>
+          <li><strong>100% recall (10/10)</strong> on the real SANS ROCBA case in the headline run — with the full, honest distribution published.</li>
+          <li>Every finding is traceable to the exact tool execution that produced it. MIT licensed; runs on SIFT 2026.</li>
+        </ul>
+        <h2 id="next">Where to go next</h2>
+        <div class="cardgrid">
+          <button class="ncard" data-page="how-it-works"><div class="h">How it works <span class="ar">→</span></div><div class="d">Parse once, query forever — the loop in one page.</div></button>
+          <button class="ncard" data-page="firewall"><div class="h">The firewall <span class="ar">→</span></div><div class="d">The ten layers a hallucination has to survive.</div></button>
+          <button class="ncard" data-page="mcp-tools"><div class="h">Tool catalog <span class="ar">→</span></div><div class="d">All 27 typed MCP tools, by family.</div></button>
+          <button class="ncard" data-page="accuracy"><div class="h">Accuracy <span class="ar">→</span></div><div class="d">The honest recall progression and what we caught.</div></button>
+        </div>
+        <div class="pagefoot"><button class="pfbtn next" data-page="quickstart"><div class="lab">Next</div><div class="t">Quickstart →</div></button></div>
+      </article>
+
+      <!-- QUICKSTART -->
+      <article class="article" data-page="quickstart">
+        <div class="crumb">Getting started / <b>Quickstart</b></div>
+        <h1>Quickstart</h1>
+        <p class="lede">On a SANS SIFT 2026 workstation with your own LLM API key, five commands take you from raw image to scored report.</p>
+        <div class="codewin"><div class="bar"><i></i><i></i><i></i><span class="t">sift@workstation: ~</span></div><pre><span class="c"># 1 · install (bootstraps uv + every forensic dependency)</span>
+curl -fsSL https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
+
+<span class="c"># 2 · pick a model — anthropic / openai / google / ollama</span>
+<span class="k">export</span> SILENTWITNESS_MODEL=<span class="s">openai:gpt-5.5</span>
+<span class="k">export</span> OPENAI_API_KEY=...
+
+<span class="c"># 3 · register → prepare → index → investigate</span>
+silentwitness <span class="f">register-evidence</span> rocba ~/evidence/rocba.E01
+silentwitness <span class="f">prepare</span> rocba
+silentwitness <span class="f">index</span> rocba
+silentwitness <span class="f">investigate</span> rocba
+
+<span class="c"># 4 · read the report + score against ground truth</span>
+<span class="f">cat</span> cases/rocba/report.md
+python -m harness.score_case --case cases/rocba --dataset rocba</pre></div>
+        <div class="callout note"><span class="ci">Tip</span><p>You don't need to install Python or forensic tools by hand — <code>install.sh</code> does all of it. See <a class="ln" data-page="installation">Installation</a> for requirements and model setup.</p></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="introduction"><div class="lab">Previous</div><div class="t">← Introduction</div></button><button class="pfbtn next" data-page="installation"><div class="lab">Next</div><div class="t">Installation →</div></button></div>
+      </article>
+
+      <!-- INSTALLATION -->
+      <article class="article" data-page="installation">
+        <div class="crumb">Getting started / <b>Installation</b></div>
+        <h1>Installation</h1>
+        <p class="lede">What you need, the one-line install, and how to point the agent at a model.</p>
+        <h2 id="reqs">Requirements</h2>
+        <table class="tbl"><thead><tr><th>Requirement</th><th>Why</th></tr></thead><tbody>
+          <tr><td><b>SANS SIFT 2026</b></td><td>The forensic OS this runs on — free OVA, imported into VirtualBox/VMware.</td></tr>
+          <tr><td><b>An LLM API key</b></td><td>The model brain. <code>OPENAI_API_KEY</code> or <code>ANTHROPIC_API_KEY</code> — you use your own.</td></tr>
+          <tr><td><b>A forensic image</b></td><td>Any Windows E01/raw disk (and/or a memory capture).</td></tr>
+          <tr><td><b>~100 GB free</b></td><td>Extracted artifacts plus the per-case index.</td></tr>
+        </tbody></table>
+        <h2 id="install">Install</h2>
+        <div class="codewin"><div class="bar"><i></i><i></i><i></i><span class="t">bash</span></div><pre>curl -fsSL https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
+silentwitness --help   <span class="c"># confirms the command is on your PATH</span></pre></div>
+        <h2 id="model">Choose a model</h2>
+        <p>SilentWitness is model-agnostic — set one provider key and the model string. The default is <code>anthropic:claude-opus-4-7</code>.</p>
+        <div class="codewin"><div class="bar"><i></i><i></i><i></i><span class="t">~/.bashrc</span></div><pre><span class="k">export</span> ANTHROPIC_API_KEY=<span class="s">"&lt;your-key&gt;"</span>
+<span class="k">export</span> SILENTWITNESS_MODEL=<span class="s">anthropic:claude-opus-4-7</span>
+<span class="c"># or — openai:gpt-5.5 · google-gla:gemini-2.5-pro · ollama:llama-3.3-70b</span></pre></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="quickstart"><div class="lab">Previous</div><div class="t">← Quickstart</div></button><button class="pfbtn next" data-page="how-it-works"><div class="lab">Next</div><div class="t">How it works →</div></button></div>
+      </article>
+
+      <!-- HOW IT WORKS -->
+      <article class="article" data-page="how-it-works">
+        <div class="crumb">Core concepts / <b>How it works</b></div>
+        <h1>How it works</h1>
+        <p class="lede">Evidence is parsed once into a searchable index. The agent only ever queries that index — it never free-reads raw evidence — and everything it records passes through verification gates before it can become a finding.</p>
+        <h2 id="parse">Parse once, query forever</h2>
+        <p>A disk image holds millions of records; reading it top-to-bottom is hopeless. So the heavy work happens once, offline: <code>prepare</code> extracts artifacts read-only, nine targeted parsers plus a Sigma engine turn them into a per-case FTS5 index, and <strong>every indexed row carries a sha256 and an audit_id</strong>. At investigation time the agent runs only fast, bounded queries. See <a class="ln" data-page="evidence-index">The evidence index</a>.</p>
+        <h2 id="loop">The investigation loop</h2>
+        <p>The agent works like a senior analyst: it starts from the staged Sigma detections, forms one hypothesis at a time, delegates to a memory / disk / network / log specialist, and records each finding as an <strong>observation</strong> (the cited bytes) plus an <strong>interpretation</strong> (what it means, a confidence, and what would change it). Full detail in <a class="ln" data-page="gates">Gates &amp; coverage</a>.</p>
+        <h2 id="honest">Two ways it stays honest</h2>
+        <ul>
+          <li><strong>It can't fabricate.</strong> The citation and entity gates reject any claim that isn't grounded in cited evidence — see <a class="ln" data-page="firewall">the firewall</a>.</li>
+          <li><strong>It can't stop early.</strong> A coverage gate blocks finalization until all five Key Questions are answered, and a live critic challenges weak findings mid-run.</li>
+        </ul>
+        <div class="pagefoot"><button class="pfbtn" data-page="installation"><div class="lab">Previous</div><div class="t">← Installation</div></button><button class="pfbtn next" data-page="architecture"><div class="lab">Next</div><div class="t">Architecture →</div></button></div>
+      </article>
+
+      <!-- ARCHITECTURE -->
+      <article class="article" data-page="architecture">
+        <div class="crumb">Core concepts / <b>Architecture</b></div>
+        <h1>Architecture</h1>
+        <p class="lede">Four parts and two externals. Eight trust boundaries separate the model from the evidence; six of them are enforced in code, not in prompts.</p>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;margin:0 0 24px"><span class="tag arch">architectural · enforced in code</span><span class="tag supp">supplementary · prompt-based</span></div>
+        <h2 id="cli">Examiner — the CLI <span class="tag arch">arch</span></h2>
+        <p>The <code>silentwitness</code> command drives the case: <code>register-evidence → prepare → index → investigate → review → export</code>.</p>
+        <h2 id="evidence">Evidence volume — read-only <span class="tag arch">arch</span></h2>
+        <p><code>/evidence</code> is mounted <code>ro,noexec,nosuid</code> and validated fail-closed. It is a <strong>trust boundary</strong> the agent never crosses — the agent process never opens raw evidence at all.</p>
+        <h2 id="mcp">silentwitness-mcp — the MCP server <span class="tag arch">arch</span></h2>
+        <p>The product. It holds the agent's only discovery surface (the index query tools), the adversarial sanitizer, the citation and entity gates, the hash-chained audit logger, and the HMAC-signed approval ledger. See the <a class="ln" data-page="mcp-tools">tool catalog</a>.</p>
+        <h2 id="agent">silentwitness-agent — the reference agent <span class="tag arch">arch</span></h2>
+        <p>A Pydantic AI investigator: the hypothesis loop, the coverage-gate <code>output_validator</code>, the live critic with model-free contradiction detectors, and the Markdown report.</p>
+        <h2 id="external">External <span class="tag supp">supp</span></h2>
+        <p>The optional claude-code config (<code>CLAUDE.md</code> + <code>settings.json</code>) and the model-agnostic LLM provider. These are prompt-based and supplementary — removing them degrades quality but unlocks no hallucinations, because enforcement lives at the server boundary.</p>
+        <div class="pagefoot"><button class="pfbtn" data-page="how-it-works"><div class="lab">Previous</div><div class="t">← How it works</div></button><button class="pfbtn next" data-page="evidence-index"><div class="lab">Next</div><div class="t">The evidence index →</div></button></div>
+      </article>
+
+      <!-- EVIDENCE INDEX -->
+      <article class="article" data-page="evidence-index">
+        <div class="crumb">Core concepts / <b>The evidence index</b></div>
+        <h1>The evidence index</h1>
+        <p class="lede">The one-time, offline spine that turns raw artifacts into a fast, tamper-evident, searchable index — the only thing the agent ever reads.</p>
+        <h2 id="extract">Extract, read-only</h2>
+        <p><code>prepare</code> uses dfVFS to open the image read-only and copy out the high-value Windows artifacts: <code>$MFT</code>, <code>$UsnJrnl</code>, EVTX, registry hives, SRUM, Amcache, Prefetch, LNK, jumplists, and PowerShell transcripts.</p>
+        <h2 id="feeders">Nine targeted parsers</h2>
+        <p>Each artifact type has a dedicated feeder; together they normalize everything into citable index rows.</p>
+        <div class="chips"><span class="chip">evtx</span><span class="chip">mft</span><span class="chip">registry</span><span class="chip">srum</span><span class="chip">usnjrnl</span><span class="chip">lnk</span><span class="chip">jumplist</span><span class="chip">prefetch</span><span class="chip">pstranscript</span></div>
+        <h2 id="sigma">Sigma detections</h2>
+        <p>A pySigma engine evaluates DFIR rules over the parsed events and stages <code>sigma:&lt;level&gt;</code> alerts the agent starts from — failed-logon 4625, explicit-credential logon 4648, RDP interactive logon 4624, RDP outbound mstsc, suspicious PowerShell scriptblock 4104, and cloud-exfil tool execution.</p>
+        <h2 id="fts">FTS5 index, provenance per row</h2>
+        <p>Everything lands in a per-case FTS5 <code>index.db</code> (~2.67M records on ROCBA). <strong>Every row carries a sha256 of its source artifact and the audit_id of the extraction that produced it</strong> — which is what makes any later citation verifiable.</p>
+        <div class="pagefoot"><button class="pfbtn" data-page="architecture"><div class="lab">Previous</div><div class="t">← Architecture</div></button><button class="pfbtn next" data-page="firewall"><div class="lab">Next</div><div class="t">The hallucination firewall →</div></button></div>
+      </article>
+
+      <!-- FIREWALL -->
+      <article class="article" data-page="firewall">
+        <div class="crumb">Guardrails / <b>The hallucination firewall</b></div>
+        <h1>The hallucination firewall</h1>
+        <p class="lede">AI hallucinates — we made that structurally hard. Ten places a claim has to survive: a raw, unverified claim enters at the top; only a grounded, cited finding leaves at the bottom.</p>
+        <div class="fw">
+          <div class="row"><div class="n">01</div><div class="bd"><div class="ttl">No raw-evidence surface <span class="tag arch">arch</span></div><div class="ds">The agent's only discovery interface is the index query tools — no registered tool writes to <code>/evidence</code>.</div></div></div>
+          <div class="row"><div class="n">02</div><div class="bd"><div class="ttl">Typed tool vocabulary <span class="tag arch">arch</span></div><div class="ds">27 Pydantic-typed tools, no <code>execute_shell()</code>; the registry refuses unregistered evidence paths.</div></div></div>
+          <div class="row supp"><div class="n">03</div><div class="bd"><div class="ttl">Adversarial sanitizer <span class="tag supp">supp</span></div><div class="ds">Strips XML-role and chat-format tokens, injection regex, and Trojan-Source Unicode from evidence text.</div></div></div>
+          <div class="row"><div class="n">04</div><div class="bd"><div class="ttl">Citation gate <span class="tag arch">arch</span> <span class="tag det">SPAN_NOT_IN_RECORD</span></div><div class="ds">The quoted <code>span_text</code> must be a verbatim substring of the cited record.</div></div></div>
+          <div class="row"><div class="n">05</div><div class="bd"><div class="ttl">Entity gate <span class="tag arch">arch</span> <span class="tag det">HALLUCINATED_ENTITIES</span></div><div class="ds">spaCy NER + DFIR regex — every named IOC, person, or org must appear in the cited bytes.</div></div></div>
+          <div class="row supp"><div class="n">06</div><div class="bd"><div class="ttl">Grounding score <span class="tag supp">supp</span></div><div class="ds">A provenance tier is attached to each finding.</div></div></div>
+          <div class="row supp"><div class="n">07</div><div class="bd"><div class="ttl">≥2-source corroboration <span class="tag supp">supp</span></div><div class="ds">Two independent sources promote a finding to a CONFIRMED label.</div></div></div>
+          <div class="row"><div class="n">08</div><div class="bd"><div class="ttl">Contradiction detectors <span class="tag arch">arch</span></div><div class="ds">Model-free checks: execution-overclaim, ghost-process, timestamp-paradox.</div></div></div>
+          <div class="row"><div class="n">09</div><div class="bd"><div class="ttl">Live closed-loop critic <span class="tag arch">arch</span></div><div class="ds">A separate agent with fresh context: CHALLENGE → revise.</div></div></div>
+          <div class="row"><div class="n">10</div><div class="bd"><div class="ttl">Enforced coverage gate <span class="tag arch">arch</span></div><div class="ds">Blocks finalization until all five Key Questions are cited; DRAFT → APPROVED is HMAC-signed.</div></div></div>
+        </div>
+        <div class="callout danger"><span class="ci">Note</span><p>A rejected attempt is written to the audit trail just like an accepted one — rejected claims are evidence too.</p></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="evidence-index"><div class="lab">Previous</div><div class="t">← The evidence index</div></button><button class="pfbtn next" data-page="gates"><div class="lab">Next</div><div class="t">Gates &amp; coverage →</div></button></div>
+      </article>
+
+      <!-- GATES -->
+      <article class="article" data-page="gates">
+        <div class="crumb">Guardrails / <b>Gates &amp; coverage</b></div>
+        <h1>Gates &amp; coverage</h1>
+        <p class="lede">The three architectural gates that make a fabricated or incomplete finding impossible to record — and the self-correction loop that runs on top of them.</p>
+        <h2 id="citation">Citation gate</h2>
+        <p>Inside <code>record_observation</code>, before anything is persisted: load the cited record, normalize it, and verify the quoted <code>span_text</code> is a verbatim substring. A mismatch is rejected with <code>SPAN_NOT_IN_RECORD</code> (or <code>RECORD_NOT_FOUND</code>). A fabricated quote cannot pass.</p>
+        <h2 id="entity">Entity gate</h2>
+        <p>Then a spaCy <code>en_core_web_lg</code> NER pass plus DFIR regex (IPs, hashes, registry keys, Windows paths, accounts) extracts every named entity. Each must appear in a cited span, or the observation is rejected with <code>HALLUCINATED_ENTITIES</code> — and the response tells the agent exactly how to fix it.</p>
+        <h2 id="coverage">The coverage gate</h2>
+        <p>The agent's <code>output_validator</code> maps recorded observations to five Key Questions. Try to finalize with one unanswered and it raises <code>ModelRetry</code>, naming the gap and the artifacts that bear on it. The signals are generic DFIR concepts, so it generalizes across Windows data-theft cases — not just the image it was tuned on.</p>
+        <table class="tbl"><thead><tr><th>Question</th><th>On the ROCBA case</th></tr></thead><tbody>
+          <tr><td><b>Q1</b> accounts / projects accessed</td><td>SRL-Projects: Airwolf · Gunstar · Blue Thunder</td></tr>
+          <tr><td><b>Q2</b> what data was taken</td><td>Stark Research Labs R&amp;D files + Key Data folder</td></tr>
+          <tr><td><b>Q3</b> where it was transferred</td><td>G:\My Drive…Exported-PST (Google Drive) · OneDrive · Dropbox</td></tr>
+          <tr><td><b>Q4</b> how access was obtained</td><td>RDP LogonType 10 · BACKUPADMIN brute force · SDelete</td></tr>
+          <tr><td><b>Q5</b> when it occurred</td><td>established intrusion window (timeline)</td></tr>
+        </tbody></table>
+        <h2 id="selfcorrect">Self-correction</h2>
+        <p>A live critic (separate agent, fresh context) challenges weak findings; beneath it, three <strong>model-free</strong> detectors run on every fire as a deterministic floor — <code>execution-overclaim</code> (presence ≠ execution), <code>ghost-process</code> (a live-process claim with no memory artifact), and <code>timestamp-paradox</code> (a time absent from the cited bytes). In the headline run the critic challenged 3 of 7 findings and the agent revised them.</p>
+        <div class="pagefoot"><button class="pfbtn" data-page="firewall"><div class="lab">Previous</div><div class="t">← The hallucination firewall</div></button><button class="pfbtn next" data-page="mcp-tools"><div class="lab">Next</div><div class="t">MCP tool catalog →</div></button></div>
+      </article>
+
+      <!-- MCP TOOLS -->
+      <article class="article" data-page="mcp-tools">
+        <div class="crumb">Reference / <b>MCP tool catalog</b></div>
+        <h1>MCP tool catalog</h1>
+        <p class="lede">A FastMCP server exposes 27 typed tools across six families. Each wraps exactly one CLI invocation with a Pydantic input/output model — there is no generic shell.</p>
+        <table class="tbl"><thead><tr><th>Family</th><th>Backed by</th><th>Tools</th></tr></thead><tbody>
+          <tr><td><b>memory</b></td><td>Volatility 3</td><td>vol_pslist · vol_pstree · vol_psscan · vol_malfind · vol_netscan · vol_cmdline · vol_dlllist · vol_handles · vol_lsadump</td></tr>
+          <tr><td><b>disk</b></td><td>EZ Tools</td><td>parse_mft · parse_amcache · parse_shimcache · parse_prefetch · parse_shellbags</td></tr>
+          <tr><td><b>log</b></td><td>EvtxECmd · Hayabusa · Chainsaw</td><td>parse_evtx · hayabusa_csv_timeline · chainsaw_hunt</td></tr>
+          <tr><td><b>network</b></td><td>Zeek · Suricata</td><td>zeek_run · suricata_run</td></tr>
+          <tr><td><b>registry</b></td><td>RegRipper</td><td>regripper_run</td></tr>
+          <tr><td><b>findings</b></td><td>gated writes</td><td>record_observation · record_interpretation · record_pivot · record_narrative · approve_finding</td></tr>
+        </tbody></table>
+        <div class="callout note"><span class="ci">Discovery surface</span><p>The agent discovers evidence only through <code>search_evidence</code>, <code>timeline</code>, <code>get_record</code>, and <code>list_detections</code>. Plus two evidence tools (<code>register_evidence</code>, <code>verify_evidence_hash</code>), the catalog totals 27 — and every call emits an <code>audit_id</code>.</p></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="gates"><div class="lab">Previous</div><div class="t">← Gates &amp; coverage</div></button><button class="pfbtn next" data-page="cli"><div class="lab">Next</div><div class="t">CLI commands →</div></button></div>
+      </article>
+
+      <!-- CLI -->
+      <article class="article" data-page="cli">
+        <div class="crumb">Reference / <b>CLI commands</b></div>
+        <h1>CLI commands</h1>
+        <p class="lede">The full case lifecycle, one command per stage.</p>
+        <table class="tbl"><thead><tr><th>Command</th><th>What it does</th></tr></thead><tbody>
+          <tr><td><b>register-evidence</b></td><td>Records an image read-only and stores its SHA-256 in the case manifest.</td></tr>
+          <tr><td><b>prepare</b></td><td>dfVFS extracts the high-value artifacts from the image (read-only).</td></tr>
+          <tr><td><b>index</b></td><td>Runs the 9 feeders + Sigma engine and builds the FTS5 index.</td></tr>
+          <tr><td><b>investigate</b></td><td>The agent works the case until all five Key Questions are answered.</td></tr>
+          <tr><td><b>review</b></td><td>Shows the staged findings for examiner review.</td></tr>
+          <tr><td><b>export</b></td><td>Renders the final report (Markdown / PDF).</td></tr>
+          <tr><td><b>baseline-comparison</b></td><td>Reruns the measured Δ vs the vanilla Protocol SIFT baseline.</td></tr>
+        </tbody></table>
+        <div class="callout warn"><span class="ci">Stuck</span><p>If <code>investigate</code> stops with <code>request_limit</code>, re-run with <code>--max-iterations 120</code>. If you skipped <code>prepare</code>/<code>index</code>, you'll see <code>no evidence index for this case</code>.</p></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="mcp-tools"><div class="lab">Previous</div><div class="t">← MCP tool catalog</div></button><button class="pfbtn next" data-page="accuracy"><div class="lab">Next</div><div class="t">Accuracy &amp; honesty →</div></button></div>
+      </article>
+
+      <!-- ACCURACY -->
+      <article class="article" data-page="accuracy">
+        <div class="crumb">Results / <b>Accuracy &amp; honesty</b></div>
+        <h1>Accuracy &amp; honesty</h1>
+        <p class="lede">Recall is not a single number — it depends on the architecture, the breadth-enforcement gate, and the model. This progression is the real story, caveats included.</p>
+        <h2 id="recall">The recall progression</h2>
+        <div class="chart">
+          <div class="col"><div class="v" style="color:var(--ink)">40%</div><div class="bar" style="height:40%"></div></div>
+          <div class="col"><div class="v" style="color:var(--ink)">20%</div><div class="bar" style="height:20%"></div></div>
+          <div class="col"><div class="v" style="color:var(--ink)">30–50%</div><div class="bar" style="height:50%;background:repeating-linear-gradient(135deg,var(--bg2),var(--bg2) 5px,#e6e5de 5px,#e6e5de 10px)"></div></div>
+          <div class="col"><div class="v" style="color:var(--ac-d)">100%</div><div class="bar" style="height:100%;background:var(--ac);border-color:var(--ac)"></div></div>
+        </div>
+        <div class="chartl"><div>baseline<br>old arch</div><div>gate OFF<br>premature</div><div>gate · gpt-5.2<br>variance</div><div style="color:var(--ac-d);font-weight:500">gate · gpt-5.5<br>10/10</div></div>
+        <p style="margin-top:24px">Without the coverage gate even a capable model collapsed onto the single loudest signal (~540k brute-force detections) and scored <em>below</em> baseline. The gate restored breadth; a capable model then recalled all ten. <strong>Single run; recall varies by model and run-to-run</strong> — with gpt-5.2 + the gate, two runs scored 50% and 30%, yet both covered all five questions.</p>
+        <h2 id="known">Known issues we are not hiding</h2>
+        <ul>
+          <li><strong>Untrusted-marker leakage</strong> — the model copied <code>[UNTRUSTED EVIDENCE]</code> display markers into some prose. Does not affect recall or citations.</li>
+          <li><strong>Single-run 100% ≠ stability</strong> — we report the distribution, not the peak.</li>
+          <li><strong>Memory not yet in the recall path</strong> — current recall is disk-derived; disk⊕memory corroboration is planned.</li>
+          <li><strong>Plaso contributes 0 events</strong> — libevtx crashes on the ROCBA EVTX; we route around it with targeted parsers and say so.</li>
+        </ul>
+        <div class="pagefoot"><button class="pfbtn" data-page="cli"><div class="lab">Previous</div><div class="t">← CLI commands</div></button><button class="pfbtn next" data-page="provenance"><div class="lab">Next</div><div class="t">Chain-of-custody →</div></button></div>
+      </article>
+
+      <!-- PROVENANCE -->
+      <article class="article" data-page="provenance">
+        <div class="crumb">Results / <b>Chain-of-custody</b></div>
+        <h1>Chain-of-custody</h1>
+        <p class="lede">Any finding traces back to the tool execution that produced it. Here is one real finding from the headline run, walked end to end through the committed logs.</p>
+        <div class="chain">
+          <div class="node"><div class="sp"><div class="dot"></div><div class="line"></div></div><div class="nc"><div class="nh"><b>Finding O-003</b><span>Q2 — what was taken</span></div><div class="nd">“Stark Research Labs project files were accessed / collected.” Confidence: HIGH.</div></div></div>
+          <div class="node"><div class="sp"><div class="dot"></div><div class="line"></div></div><div class="nc"><div class="nh"><b>Cited record</b><span>record_id 2514417</span></div><div class="nd">span_text = "LNK target=C:\Users\fredr\Stark Research Labs\SRL-Projects - Airwolf" — verified a verbatim substring of the record.</div></div></div>
+          <div class="node"><div class="sp"><div class="dot"></div><div class="line"></div></div><div class="nc"><div class="nh"><b>Tool execution</b><span>search_evidence</span></div><div class="nd">audit_id sift-analyst-20260615-209 · query "SRL-Projects" · 20 hits — the call that surfaced the record.</div></div></div>
+          <div class="node"><div class="sp"><div class="dot"></div></div><div class="nc"><div class="nh"><b>Source artifact</b><span>read-only ROCBA image</span></div><div class="nd">A Recent-folder LNK row, produced by the LNK feeder during offline ingest. sha256 recorded on the index row.</div></div></div>
+        </div>
+        <div class="callout note"><span class="ci">Critic verdict</span><p>The live critic returned <strong>AGREE</strong> on O-003 — the LNK targets directly name the SRL project folders.</p></div>
+        <div class="pagefoot"><button class="pfbtn" data-page="accuracy"><div class="lab">Previous</div><div class="t">← Accuracy &amp; honesty</div></button><button class="pfbtn next" data-page="introduction"><div class="lab">Back to</div><div class="t">Introduction →</div></button></div>
+      </article>
+
+    </main>
+
+    <!-- ============ TOC ============ -->
+    <nav class="toc" id="sw-toc"></nav>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() {
+    const qa = (s) => Array.from(document.querySelectorAll(s));
+    const q = (s) => document.querySelector(s);
+
+    const articles = qa('.article');
+    const navItems = qa('.nav-item');
+    const jumps = qa('[data-page]');
+    const sidebar = q('#sw-sidebar');
+    const scrim = q('#sw-scrim');
+    const burger = q('#sw-burger');
+    const search = q('#sw-search');
+    const results = q('#sw-results');
+    const tocEl = q('#sw-toc');
+    const crumbOf = {};
+    navItems.forEach(n => { crumbOf[n.dataset.page] = { title: n.textContent.trim(), group: n.dataset.group }; });
+
+    const closeDrawer = () => { sidebar && sidebar.classList.remove('open'); scrim && scrim.classList.remove('open'); };
+    const scrollToEl = (el) => { const y = el.getBoundingClientRect().top + window.scrollY - 78; window.scrollTo({ top: y, behavior: 'smooth' }); };
+
+    const buildToc = (id) => {
+      if (!tocEl) return;
+      const art = articles.find(a => a.dataset.page === id);
+      const heads = art ? Array.from(art.querySelectorAll('h2[id]')) : [];
+      tocEl.innerHTML = '';
+      if (heads.length < 2) { tocEl.style.visibility = 'hidden'; return; }
+      tocEl.style.visibility = 'visible';
+      const lbl = document.createElement('div'); lbl.className = 'toc-l'; lbl.textContent = 'On this page'; tocEl.appendChild(lbl);
+      heads.forEach(hh => {
+        const a = document.createElement('a'); a.href = '#' + hh.id;
+        a.textContent = hh.textContent.replace(/\s+(arch|supp)\s*$/i, '').trim();
+        a.addEventListener('click', (e) => { e.preventDefault(); scrollToEl(hh); });
+        tocEl.appendChild(a);
+      });
+    };
+
+    const showPage = (id, push) => {
+      if (!articles.some(a => a.dataset.page === id)) id = 'introduction';
+      articles.forEach(a => { a.style.display = a.dataset.page === id ? 'block' : 'none'; });
+      navItems.forEach(n => n.classList.toggle('active', n.dataset.page === id));
+      buildToc(id);
+      try { localStorage.setItem('sw_doc_page', id); } catch (e) {}
+      if (push !== false) { try { history.replaceState(null, '', '#' + id); } catch (e) {} }
+      window.scrollTo(0, 0);
+      closeDrawer();
+    };
+
+    jumps.forEach(el => el.addEventListener('click', (e) => {
+      const id = el.dataset.page;
+      if (el.tagName === 'A') e.preventDefault();
+      showPage(id);
+    }));
+
+    if (burger) burger.addEventListener('click', () => {
+      const open = sidebar.classList.toggle('open');
+      scrim.classList.toggle('open', open);
+    });
+    if (scrim) scrim.addEventListener('click', closeDrawer);
+
+    // ---- search ----
+    const index = navItems.map(n => ({ id: n.dataset.page, title: n.dataset.page === 'introduction' ? 'Introduction · SilentWitness' : crumbOf[n.dataset.page].title, group: n.dataset.group }));
+    const kw = {
+      'gates': 'citation entity coverage validator hallucinated span key questions',
+      'firewall': 'hallucination layers sanitizer critic detectors',
+      'mcp-tools': 'volatility eztools zeek suricata regripper tools fastmcp',
+      'evidence-index': 'feeders sigma fts5 parsers sha256 audit',
+      'accuracy': 'recall results honest known issues variance',
+      'provenance': 'trace chain custody record audit lnk',
+      'quickstart': 'install commands setup start',
+      'installation': 'requirements model api key setup',
+      'architecture': 'components trust boundary mcp agent',
+      'how-it-works': 'index loop hypothesis',
+      'cli': 'commands register prepare index investigate review export',
+    };
+    const renderResults = (vRaw) => {
+      const v = vRaw.trim().toLowerCase();
+      if (!v) { results.classList.remove('open'); results.innerHTML = ''; return; }
+      const hits = index.filter(it => it.title.toLowerCase().includes(v) || it.group.toLowerCase().includes(v) || (kw[it.id] || '').includes(v));
+      results.innerHTML = '';
+      if (!hits.length) { results.innerHTML = '<div class="res-empty">No matches for “' + v.replace(/</g, '') + '”.</div>'; results.classList.add('open'); return; }
+      hits.forEach(it => {
+        const b = document.createElement('button'); b.className = 'res';
+        b.innerHTML = '<div class="rt">' + it.title + '</div><div class="rg">' + it.group + '</div>';
+        b.addEventListener('mousedown', (e) => { e.preventDefault(); showPage(it.id); search.value = ''; results.classList.remove('open'); search.blur(); });
+        results.appendChild(b);
+      });
+      results.classList.add('open');
+    };
+    if (search) {
+      search.addEventListener('input', () => renderResults(search.value));
+      search.addEventListener('focus', () => { if (search.value.trim()) renderResults(search.value); });
+      search.addEventListener('blur', () => setTimeout(() => results.classList.remove('open'), 120));
+      search.addEventListener('keydown', (e) => { if (e.key === 'Escape') { search.value = ''; results.classList.remove('open'); search.blur(); } });
+    }
+    document.addEventListener('keydown', (e) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); search && search.focus(); }
+    });
+
+    // ---- init ----
+    let start = 'introduction';
+    try { const h = (location.hash || '').replace('#', ''); if (h) start = h; else { const s = localStorage.getItem('sw_doc_page'); if (s) start = s; } } catch (e) {}
+    showPage(start, false);
+  }
+}
+</script>
+</body>
+</html>

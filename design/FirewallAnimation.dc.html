@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@600;700;800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box}
+  .fwroot{
+    --paper:#fbfbf9;--paper2:#f3f3ee;--ink:#1b1b18;--ink2:#5d5d56;--ink3:#8c8c82;
+    --line:#e6e5df;--line2:#d8d7cf;--ac:#2e7d5b;--ac-d:#236a49;--ac-soft:rgba(46,125,91,.10);
+    --red:#b3402e;--redsoft:rgba(179,64,46,.10);--amber:#a9781f;--ambersoft:rgba(169,120,31,.10);
+    --disp:'Schibsted Grotesk',system-ui,sans-serif;--sans:'Hanken Grotesk',system-ui,sans-serif;--mono:'JetBrains Mono',ui-monospace,monospace;
+    font-family:var(--sans);color:var(--ink);background:var(--paper);min-height:100vh;
+    display:flex;align-items:center;justify-content:center;padding:32px;
+  }
+  .stage{width:100%;max-width:760px}
+  .stagehead{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+  .ttl{font-family:var(--disp);font-weight:800;letter-spacing:-.03em;font-size:clamp(1.4rem,3.4vw,2rem);line-height:1.05;color:var(--ink)}
+  .sub{font-family:var(--mono);font-size:12px;color:var(--ink3);margin-top:4px}
+  .ctrls{display:flex;gap:8px}
+  .btn{font-family:var(--mono);font-size:12px;color:var(--ink2);border:1px solid var(--line2);background:var(--paper);border-radius:8px;padding:7px 12px;cursor:pointer}
+  .btn:hover{border-color:var(--ink3);color:var(--ink)}
+
+  .panel{position:relative;border:1px solid var(--line);border-radius:16px;background:var(--paper2);padding:16px;overflow:hidden}
+  .cap{font-family:var(--mono);font-size:11px;text-align:center;border-radius:8px;padding:8px}
+  .cap.top{color:var(--red);border:1px dashed var(--red);background:var(--redsoft);margin-bottom:8px}
+  .cap.bot{color:var(--ac-d);border:1px solid var(--ac);background:var(--ac-soft);margin-top:8px}
+  .stack{position:relative;display:flex;flex-direction:column;gap:6px}
+  .lyr{display:flex;align-items:center;gap:10px;border-radius:9px;background:var(--paper);border:1px solid var(--line2);border-left:3px solid var(--ac);padding:9px 12px;transition:box-shadow .18s,border-color .18s,background .18s;will-change:box-shadow}
+  .lyr.supp{border:1px dashed var(--amber);border-left:3px solid var(--amber)}
+  .lyr .n{font-family:var(--mono);font-size:10.5px;color:var(--ink3);width:16px;flex:none}
+  .lyr .t{font-family:var(--disp);font-weight:700;font-size:13px;color:var(--ink);flex:1}
+  .lyr .b{font-family:var(--mono);font-size:8.5px;border-radius:4px;padding:1px 5px;color:var(--ac-d);border:1px solid var(--ac)}
+  .lyr.supp .b{color:var(--amber);border-color:var(--amber)}
+  .lyr.scan{box-shadow:0 0 0 2px var(--ac-soft),0 6px 18px -8px rgba(46,125,91,.45);border-left-color:var(--ac);background:#fff}
+  .lyr.scan.rej{box-shadow:0 0 0 2px var(--redsoft),0 6px 18px -8px rgba(179,64,46,.5)}
+
+  .claim{position:absolute;left:50%;top:0;transform:translate(-50%,0);z-index:5;display:flex;align-items:center;gap:7px;
+    font-family:var(--mono);font-size:11px;white-space:nowrap;padding:6px 12px;border-radius:999px;
+    background:var(--ink);color:var(--paper);box-shadow:0 10px 24px -8px rgba(0,0,0,.4);transition:background .2s,color .2s}
+  .claim .st{width:7px;height:7px;border-radius:50%;background:var(--amber)}
+  .claim.ok{background:var(--ac);color:#fff}.claim.ok .st{background:#dff3e8}
+  .claim.bad{background:var(--red);color:#fff}.claim.bad .st{background:#f6dcd6}
+  .claim.shake{animation:shk .4s ease}
+  @keyframes shk{0%,100%{margin-left:0}20%{margin-left:-7px}40%{margin-left:7px}60%{margin-left:-5px}80%{margin-left:5px}}
+  .mk{display:inline-block;width:20px;height:20px;flex:none;background:center/contain no-repeat url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none'><mask id='c'><rect width='24' height='24' fill='white'/><rect x='8.5' y='8.6' width='5' height='6.8' rx='2.5' fill='black'/></mask><rect x='2.6' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%231b1b18' stroke-width='2.3' mask='url(%23c)'/><rect x='9.8' y='6.6' width='11.6' height='10.8' rx='4.3' stroke='%232e7d5b' stroke-width='2.3'/></svg>")}
+  .brand{display:flex;align-items:center;gap:8px}
+  .brand b{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:-.02em;color:var(--ink2)}
+</style>
+</helmet>
+
+<div class="fwroot" id="fwroot">
+  <div class="stage">
+    <div class="stagehead">
+      <div>
+        <div class="brand"><span class="mk"></span><b>SilentWitness</b></div>
+        <div class="ttl" style="margin-top:8px">The hallucination firewall</div>
+        <div class="sub" id="fw-status">grounded claim · entering…</div>
+      </div>
+      <div class="ctrls">
+        <button class="btn" id="fw-toggle">pause</button>
+        <button class="btn" id="fw-replay">replay</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="cap top">▼ a model claim enters — grounded or fabricated</div>
+      <div class="stack" id="fw-stack">
+        <div class="lyr" data-arch="1"><span class="n">01</span><span class="t">No raw-evidence surface</span><span class="b">ARCH</span></div>
+        <div class="lyr" data-arch="1"><span class="n">02</span><span class="t">Typed tool vocabulary</span><span class="b">ARCH</span></div>
+        <div class="lyr supp" data-arch="0"><span class="n">03</span><span class="t">Adversarial sanitizer</span><span class="b">SUPP</span></div>
+        <div class="lyr" data-arch="1" data-gate="cite"><span class="n">04</span><span class="t">Citation gate</span><span class="b">ARCH</span></div>
+        <div class="lyr" data-arch="1" data-gate="entity"><span class="n">05</span><span class="t">Entity gate</span><span class="b">ARCH</span></div>
+        <div class="lyr supp" data-arch="0"><span class="n">06</span><span class="t">Grounding score</span><span class="b">SUPP</span></div>
+        <div class="lyr supp" data-arch="0"><span class="n">07</span><span class="t">≥2-source corroboration</span><span class="b">SUPP</span></div>
+        <div class="lyr" data-arch="1"><span class="n">08</span><span class="t">Contradiction detectors</span><span class="b">ARCH</span></div>
+        <div class="lyr" data-arch="1"><span class="n">09</span><span class="t">Live closed-loop critic</span><span class="b">ARCH</span></div>
+        <div class="lyr" data-arch="1"><span class="n">10</span><span class="t">Enforced coverage gate</span><span class="b">ARCH</span></div>
+        <div class="claim" id="fw-claim"><span class="st"></span><span id="fw-claim-t">claim</span></div>
+      </div>
+      <div class="cap bot" id="fw-out">▼ only a grounded, cited finding exits</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+
+  componentDidMount() {
+    const claim = document.getElementById('fw-claim');
+    const claimT = document.getElementById('fw-claim-t');
+    const stack = document.getElementById('fw-stack');
+    const status = document.getElementById('fw-status');
+    const out = document.getElementById('fw-out');
+    const toggle = document.getElementById('fw-toggle');
+    const replay = document.getElementById('fw-replay');
+    if (!claim || !stack) return;
+    const rows = Array.from(stack.querySelectorAll('.lyr'));
+    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let raf = null, t0 = null, paused = false, cycle = 0;
+    const DUR = 7200; // ms per pass
+
+    const reset = () => {
+      rows.forEach(r => r.classList.remove('scan', 'rej'));
+      claim.classList.remove('ok', 'bad', 'shake');
+      out.style.opacity = '0.45';
+    };
+
+    const setClaim = (txt) => { claimT.textContent = txt; };
+
+    const runCycle = () => {
+      reset();
+      const fabricated = (cycle % 2 === 1); // alternate: pass, then a rejected fabrication
+      cycle++;
+      const top = rows[0].offsetTop - 30;
+      const bottom = rows[rows.length - 1].offsetTop + rows[rows.length - 1].offsetHeight + 8;
+      const citeRow = rows[3];
+      const stopAt = fabricated ? (citeRow.offsetTop + citeRow.offsetHeight / 2) : bottom;
+      setClaim(fabricated ? 'claim: "Lazarus Group ran mal.exe"' : 'claim: "SRL-Projects accessed"');
+      claim.classList.remove('ok', 'bad');
+      status.textContent = fabricated ? 'fabricated claim · entering…' : 'grounded claim · entering…';
+
+      t0 = performance.now();
+      const span = stopAt - top;
+      const step = (now) => {
+        if (paused) { raf = requestAnimationFrame(step); return; }
+        const p = Math.min(1, (now - t0) / (fabricated ? DUR * 0.42 : DUR));
+        const y = top + span * p;
+        claim.style.top = y + 'px';
+        // highlight the row the claim is over
+        rows.forEach(r => {
+          const c = r.offsetTop + r.offsetHeight / 2;
+          const near = Math.abs(c - y) < r.offsetHeight * 0.75;
+          r.classList.toggle('scan', near);
+          r.classList.toggle('rej', near && fabricated && r.dataset.gate === 'cite' && p > 0.9);
+        });
+        // gate stamps
+        if (!fabricated) {
+          if (p > 0.30 && p < 0.46) { setClaim('citation gate · span ⊆ record ✓'); }
+          else if (p > 0.46 && p < 0.60) { setClaim('entity gate · IOC in evidence ✓'); }
+          else if (p >= 0.60) { setClaim('claim: "SRL-Projects accessed"'); }
+        }
+        if (p >= 1) {
+          if (fabricated) {
+            claim.classList.add('bad', 'shake');
+            setClaim('REJECTED · SPAN_NOT_IN_RECORD');
+            citeRow.classList.add('scan', 'rej');
+            status.textContent = 'fabricated quote not in the cited record → rejected at the citation gate';
+            out.style.opacity = '0.4';
+            setTimeout(() => { if (!paused) { claim.style.opacity = '0'; setTimeout(() => { claim.style.opacity = '1'; runCycle(); }, 500); } else { window.__fwResume = runCycle; } }, 1400);
+          } else {
+            claim.classList.add('ok');
+            setClaim('✓ cited finding');
+            status.textContent = 'grounded, cited finding — survives all ten layers';
+            out.style.opacity = '1';
+            setTimeout(() => { if (!paused) runCycle(); else window.__fwResume = runCycle; }, 1400);
+          }
+          return;
+        }
+        raf = requestAnimationFrame(step);
+      };
+      raf = requestAnimationFrame(step);
+    };
+
+    if (reduce) {
+      // static end-state for reduced motion
+      const bottom = rows[rows.length - 1].offsetTop + rows[rows.length - 1].offsetHeight + 8;
+      claim.style.top = bottom + 'px';
+      claim.classList.add('ok'); setClaim('✓ cited finding'); out.style.opacity = '1';
+      rows.forEach(r => r.classList.add('scan'));
+      status.textContent = 'grounded, cited finding — survives all ten layers';
+      toggle.style.display = 'none';
+    } else {
+      runCycle();
+    }
+
+    toggle.addEventListener('click', () => {
+      paused = !paused;
+      toggle.textContent = paused ? 'play' : 'pause';
+      if (!paused && window.__fwResume) { const r = window.__fwResume; window.__fwResume = null; r(); }
+    });
+    replay.addEventListener('click', () => { cycle = 0; paused = false; toggle.textContent = 'pause'; window.__fwResume = null; if (raf) cancelAnimationFrame(raf); claim.style.opacity = '1'; runCycle(); });
+  }
+}
+</script>
+</body>
+</html>
