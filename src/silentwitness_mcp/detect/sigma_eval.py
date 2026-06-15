@@ -203,7 +203,8 @@ class SigmaRuleset:
         from sigma.collection import SigmaCollection
         from sigma.exceptions import SigmaError
 
-        paths = sorted(rules_dir.glob("*.yml")) + sorted(rules_dir.glob("*.yaml"))
+        # Recursive: a real community pack (SigmaHQ) is a nested tree of category dirs.
+        paths = sorted(rules_dir.rglob("*.yml")) + sorted(rules_dir.rglob("*.yaml"))
         if not paths:
             _LOG.error("sigma: no rule files in %s — detection is OFF for this run", rules_dir)
             return
