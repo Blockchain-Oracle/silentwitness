@@ -2,10 +2,12 @@
 
 An ``*.automaticDestinations-ms`` file is an OLE compound document whose numbered streams
 are each a serialised LNK structure (the recent items an app pinned/opened); the jumplist
-filename is the app's AppID hash, so a jumplist ties *a specific application* to the files
-it touched — "which program opened the stolen file." We unpack the container with
-``olefile`` (BSD) and decode each LNK stream with the shared LNK mapper, so a jumplist row
-carries the same target/network-share/timestamp fields as a Recent ``.lnk``.
+filename is the app's AppID hash — an opaque identifier we carry verbatim in
+``artifact_path`` but do NOT resolve to a program name (no AppID lookup table here), so a
+jumplist row ties *one application's recent-file list* to the files it touched. We unpack
+the container with ``olefile`` (BSD) and decode each LNK stream with the shared LNK mapper,
+so a jumplist row carries the same target/network-share/timestamp fields as a Recent
+``.lnk``.
 
 CustomDestinations (``*.customDestinations-ms``) use a different, non-OLE concatenated-LNK
 layout and are intentionally out of scope here (tracked as a follow-up) rather than parsed

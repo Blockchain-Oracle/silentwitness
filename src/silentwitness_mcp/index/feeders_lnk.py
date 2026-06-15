@@ -6,9 +6,10 @@ NetBIOS name and (for files opened over the network) the UNC share — the singl
 on-disk answer to "what file did the user open, and where did it live." Parsed with
 ``LnkParse3`` (pure-Python, MIT).
 
-The header timestamps in a LNK are the *target* file's MACB times at the moment the
-shortcut was written; we surface the modified time (falling back to accessed/creation) as
-the row ``ts`` so a timeline query lands the access near when it happened.
+The header carries the *target* file's creation/access/modification (write) times at the
+moment the shortcut was written (three FILETIMEs — not an MFT change time); we surface the
+modified time (falling back to accessed/creation) as the row ``ts`` so a timeline query
+lands the access near when it happened.
 
 ``_lnk_to_record`` is a pure mapper (also reused by the jumplist feeder for the LNK
 streams embedded in an AutomaticDestinations jumplist); ``lnk_records`` drives LnkParse3

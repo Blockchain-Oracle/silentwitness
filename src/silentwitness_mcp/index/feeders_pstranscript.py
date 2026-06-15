@@ -88,12 +88,24 @@ def pstranscript_records(
     source_path: str | None = None,
     stats: FeederStats | None = None,
 ) -> Iterator[IndexRecord]:
-    """Stream one :class:`IndexRecord` for a PowerShell transcript file."""
+    """Stream one :class:`IndexRecord` for a PowerShell transcript file.
+
+    A file that is empty or has no parseable header carries no investigative signal and is
+    skipped (counted), rather than indexed as a clean but content-free row. A header present
+    but missing/garbled ``Start time`` still yields a row (the command body is the payload)
+    but the dropped timeline timestamp is counted so it isn't a silent loss."""
     cite = source_path if source_path is not None else str(path)
     sha = sha256_file(path)
     text = _decode(path.read_bytes())
+    header = _parse_header(text)
+    if not header and not text.strip():
+        if stats is not None:
+            stats.skip("pstranscript_empty")
+        return
+    if stats is not None and not _start_iso(header.get("Start time", "")):
+        stats.skip("pstranscript_unparsed_starttime")
     yield _transcript_to_record(
-        header=_parse_header(text),
+        header=header,
         body=text,
         ps_path=cite,
         audit_id=audit_id,

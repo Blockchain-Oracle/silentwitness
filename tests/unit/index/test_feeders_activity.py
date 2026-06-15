@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from pathlib import Path
 
-from silentwitness_mcp.index._feeder_util import MAX_TEXT
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, FeederStats
 from silentwitness_mcp.index.feeders_lnk import (
     _best_target,
     _iso,
@@ -78,6 +78,20 @@ def test_lnk_to_record_builds_searchable_row() -> None:
     assert record.artifact_path == "lnk/ip.lnk"
 
 
+def test_best_target_prefers_local_base_over_relative_path() -> None:
+    data = {"relative_path": "..\\rel.txt"}
+    link_info = {"local_base_path": "C:\\abs.txt"}
+    assert _best_target(data, link_info) == "C:\\abs.txt"  # local base wins
+
+
+def test_lnk_to_record_share_only_no_target() -> None:
+    parsed = {"link_info": {"common_network_relative_link": {"net_name": "\\\\NAS\\eng"}}}
+    record = _lnk_to_record(parsed, artifact_path="j#1", audit_id="a", host="", sha256="s")
+    assert record is not None
+    assert record.text.startswith("LNK network_share=\\\\NAS\\eng")
+    assert "target=" not in record.text
+
+
 def test_lnk_to_record_returns_none_without_target_or_share() -> None:
     assert _lnk_to_record({}, artifact_path="x", audit_id="a", host="", sha256="s") is None
 
@@ -113,14 +127,22 @@ class _FakeScca:
 
 
 def test_last_run_times_drops_filetime_epoch_sentinels() -> None:
-    real = datetime(2020, 11, 14, 4, 49, tzinfo=UTC)
+    real = datetime(2020, 11, 14, 4, 49)  # libscca returns naive
     scca = _FakeScca([real, _FILETIME_EPOCH, _FILETIME_EPOCH])
     assert _last_run_times(scca) == [real]
 
 
+def test_last_run_times_normalises_tz_aware_to_naive() -> None:
+    # A binding that returns tz-aware values must not break the sentinel match or max().
+    aware = datetime(2020, 11, 14, 4, 49, tzinfo=UTC)
+    aware_epoch = _FILETIME_EPOCH.replace(tzinfo=UTC)
+    result = _last_run_times(_FakeScca([aware, aware_epoch]))
+    assert result == [datetime(2020, 11, 14, 4, 49)]
+
+
 def test_last_run_times_stops_at_first_refused_slot() -> None:
-    a = datetime(2020, 11, 14, 4, tzinfo=UTC)
-    b = datetime(2020, 11, 14, 3, tzinfo=UTC)
+    a = datetime(2020, 11, 14, 4)
+    b = datetime(2020, 11, 14, 3)
     assert _last_run_times(_FakeScca([a, b])) == [a, b]
 
 
@@ -214,3 +236,21 @@ def test_pstranscript_records_drives_a_real_file(tmp_path: Path) -> None:
     assert "dropbox.com/upload" in records[0].text
     assert records[0].sha256  # hashed the real bytes
     assert records[0].ts == "2020-11-13T09:30:00"
+
+
+def test_pstranscript_records_skips_empty_file(tmp_path: Path) -> None:
+    path = tmp_path / "PowerShell_transcript.empty.txt"
+    path.write_bytes(b"")
+    stats = FeederStats()
+    assert list(pstranscript_records(path, audit_id="a", stats=stats)) == []
+    assert stats.skipped == {"pstranscript_empty": 1}
+
+
+def test_pstranscript_records_counts_unparsed_starttime(tmp_path: Path) -> None:
+    path = tmp_path / "PowerShell_transcript.noheader.txt"
+    path.write_text("PS C:\\> whoami\nSRL\\fredr\n", encoding="utf-8")  # body, no header
+    stats = FeederStats()
+    records = list(pstranscript_records(path, audit_id="a", stats=stats))
+    assert len(records) == 1  # body is still indexed
+    assert records[0].ts == ""
+    assert stats.skipped == {"pstranscript_unparsed_starttime": 1}

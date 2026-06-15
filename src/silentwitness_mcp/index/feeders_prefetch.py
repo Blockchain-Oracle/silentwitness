@@ -26,7 +26,9 @@ from silentwitness_mcp.index.store import IndexRecord
 _MAX_FILES = 60
 # Prefetch carries a fixed array of last-run timestamps (8 on Win8+, 1 on Win7); libscca
 # exposes them by index with no count property, so we read the fixed maximum and stop at
-# the first index it refuses. Unused slots are returned as the FILETIME zero epoch.
+# the first index it refuses. Unused slots come back as the FILETIME zero epoch. libscca
+# returns naive datetimes; we compare/store naive (stripping any tzinfo) so the sentinel
+# match and the later max() are total regardless of the binding's tz behaviour.
 _MAX_LAST_RUN_TIMES = 8
 _FILETIME_EPOCH = datetime(1601, 1, 1)
 
@@ -70,39 +72,51 @@ def _last_run_times(scca: Any) -> list[datetime]:
 
     libscca exposes no count for the run-time array, so we read the fixed maximum and stop
     at the first index it refuses (older single-slot formats). Unused slots come back as the
-    FILETIME zero epoch and are dropped — including them would back-date the row's ``ts``."""
+    FILETIME zero epoch and are dropped — including them would back-date the row's ``ts``.
+    A refused index is ambiguous (format-version slot exhaustion vs a corrupt field) and is
+    NOT counted as a skip; the referenced-files list (counted in :func:`_filenames`) is the
+    investigative payload the silent-loss guard protects, not these convenience timestamps."""
     times: list[datetime] = []
     for index in range(_MAX_LAST_RUN_TIMES):
         try:
             value = scca.get_last_run_time(index)
         except (OSError, ValueError):
             break
-        if isinstance(value, datetime) and value != _FILETIME_EPOCH:
-            times.append(value)
+        if isinstance(value, datetime):
+            naive = value.replace(tzinfo=None)
+            if naive != _FILETIME_EPOCH:
+                times.append(naive)
     return times
 
 
-def _volume_paths(scca: Any) -> list[str]:
-    """Device paths of the volumes this prefetch references, best-effort per volume."""
+def _volume_paths(scca: Any, stats: FeederStats | None) -> list[str]:
+    """Device paths of the volumes this prefetch references; per-volume skips are counted."""
     paths: list[str] = []
     for index in range(getattr(scca, "number_of_volumes", 0)):
         try:
             volume = scca.get_volume_information(index)
             device = volume.get_device_path()
         except (OSError, ValueError):
+            if stats is not None:
+                stats.skip("prefetch_volume_unreadable")
             continue
         if device:
             paths.append(str(device))
     return paths
 
 
-def _filenames(scca: Any) -> list[str]:
-    """The files/DLLs the process referenced at startup, best-effort per entry."""
+def _filenames(scca: Any, stats: FeederStats | None) -> list[str]:
+    """The files/DLLs the process referenced at startup; per-entry skips are counted.
+
+    This list is the core investigative payload of a prefetch row ("what did this binary
+    touch"), so a record libscca refuses must be surfaced, not silently dropped."""
     names: list[str] = []
     for index in range(getattr(scca, "number_of_filenames", 0)):
         try:
             name = scca.get_filename(index)
         except (OSError, ValueError):
+            if stats is not None:
+                stats.skip("prefetch_filename_unreadable")
             continue
         if name:
             names.append(str(name))
@@ -131,8 +145,8 @@ def prefetch_records(
             executable=executable,
             run_count=run_count,
             last_run_iso=_latest_run_iso(_last_run_times(scca)),
-            volumes=_volume_paths(scca),
-            filenames=_filenames(scca),
+            volumes=_volume_paths(scca, stats),
+            filenames=_filenames(scca, stats),
             pf_path=cite,
             audit_id=audit_id,
             host=host,
