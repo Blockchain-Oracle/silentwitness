@@ -151,8 +151,9 @@ def build_investigator(
     """Build and return an ``_AgentConfig`` wrapping the configured Investigator Agent.
 
     Reads ``SILENTWITNESS_MODEL`` (default ``anthropic:claude-opus-4-7``) and
-    ``SILENTWITNESS_MAX_ITERS`` (default 50) at call time.  Constructor args
-    override env values.
+    ``SILENTWITNESS_MAX_ITERS`` (default: unlimited — set to a positive int to
+    opt in to a request-cap safety belt) at call time. Constructor args override
+    env values.
 
     ``case_dir`` / ``examiner`` are passed to the spawned MCP server via
     ``build_server_env`` so the server binds to this case (see
@@ -297,7 +298,7 @@ async def investigate(
 
     except UsageLimitExceeded as exc:
         _LOG.warning(
-            "investigate: UsageLimitExceeded after %d iterations for examiner=%s: %s",
+            "investigate: UsageLimitExceeded after %s iterations for examiner=%s: %s",
             cfg.max_iters,
             examiner,
             exc,
