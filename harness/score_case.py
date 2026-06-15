@@ -25,7 +25,7 @@ from typing import Any
 
 def _resolve_paths(case_dir: Path, record_ids: list[int]) -> list[str]:
     """Map index record_ids -> artifact_path strings via the case index (best-effort)."""
-    from silentwitness_mcp.index.store import EvidenceIndex  # type: ignore[import-untyped]
+    from silentwitness_mcp.index.store import EvidenceIndex
 
     index_path = case_dir / "index.db"
     paths: list[str] = []
@@ -44,7 +44,12 @@ def build_findings(case_dir: Path) -> list[dict[str, Any]]:
     interpretation justifications + the verbatim cited span texts (where the GT substrings —
     OneDrive, Dropbox, RDP, … — actually appear), and whose ``cited_artifact_paths`` are the
     resolved index paths (which carry e.g. the OneDrive/Dropbox path in the filename)."""
-    raw: Any = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    try:
+        raw: Any = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, list):
+        return []
     findings: list[dict[str, Any]] = []
     for item in raw:
         if not isinstance(item, dict):

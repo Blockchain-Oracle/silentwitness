@@ -21,8 +21,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-# An ISO-ish date anywhere in an observation satisfies the "when" question.
+# Q5 ("when") wants a *window*, not an incidental timestamp — almost every event/MFT/
+# prefetch row carries a date, so a single date must NOT mark "when" answered. We require
+# either a temporal keyword or ≥2 DISTINCT dates (an established timeline span).
 _DATE_RE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_MIN_DISTINCT_DATES_FOR_WINDOW = 2
 
 
 @dataclass(frozen=True)
@@ -45,13 +48,10 @@ KEY_QUESTIONS: tuple[KeyQuestion, ...] = (
             "account",
             "username",
             "mailbox",
-            "profile",
             "4624",
             "4672",
             "sign-in",
-            "session",
             "userassist",
-            "user ",
         ),
         "Security 4624/4672 logons, registry UserAssist/NTUSER, mailbox identity",
     ),
@@ -60,11 +60,7 @@ KEY_QUESTIONS: tuple[KeyQuestion, ...] = (
         "what data was taken",
         (
             "document",
-            "project",
-            "research",
             "source code",
-            "recent",
-            "opened",
             ".docx",
             ".xlsx",
             ".pdf",
@@ -73,6 +69,7 @@ KEY_QUESTIONS: tuple[KeyQuestion, ...] = (
             ".pptx",
             "jumplist",
             "shortcut",
+            "shellbag",
         ),
         "LNK / jumplist (Recent files), $MFT, shellbags — the files the user opened",
     ),
@@ -120,7 +117,6 @@ KEY_QUESTIONS: tuple[KeyQuestion, ...] = (
             "lateral",
             "brute",
             "4625",
-            "credential",
         ),
         "Security 4624 LogonType 10 (RDP) / 4625, Default.rdp, Sigma detections",
     ),
@@ -181,19 +177,18 @@ def _observation_blobs(case_dir: Path) -> list[str]:
     return blobs
 
 
-def _question_covered(question: KeyQuestion, blobs: list[str]) -> bool:
-    for blob in blobs:
-        if any(kw in blob for kw in question.keywords):
-            return True
-        if question.qid == "Q5" and _DATE_RE.search(blob):
-            return True
-    return False
+def _question_covered(question: KeyQuestion, blobs: list[str], distinct_dates: int) -> bool:
+    if any(kw in blob for blob in blobs for kw in question.keywords):
+        return True
+    # "when" is also satisfied by an established window — ≥2 distinct cited dates.
+    return question.qid == "Q5" and distinct_dates >= _MIN_DISTINCT_DATES_FOR_WINDOW
 
 
 def analyze_coverage(case_dir: Path) -> CoverageReport:
     """Determine which Key Questions the recorded observations already support."""
     blobs = _observation_blobs(case_dir)
-    covered = {q.qid for q in KEY_QUESTIONS if _question_covered(q, blobs)}
+    distinct_dates = len({d for blob in blobs for d in _DATE_RE.findall(blob)})
+    covered = {q.qid for q in KEY_QUESTIONS if _question_covered(q, blobs, distinct_dates)}
     uncovered = tuple(q for q in KEY_QUESTIONS if q.qid not in covered)
     return CoverageReport(covered=frozenset(covered), uncovered=uncovered)
 
