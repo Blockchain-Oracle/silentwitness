@@ -46,6 +46,14 @@ def test_system_prompt_contains_pivot_phrase() -> None:
     assert "form_hypothesis" in _SYSTEM_PROMPT
 
 
+def test_system_prompt_requires_observation_interpretation_chain() -> None:
+    """The live ROCBA run staged observations but never called
+    record_interpretation, so nothing materialised into findings and the critic
+    never fired. The prompt must mandate the observation->interpretation chain."""
+    assert "record_observation → record_interpretation" in _SYSTEM_PROMPT
+    assert "Every observation needs an interpretation" in _SYSTEM_PROMPT
+
+
 @pytest.mark.parametrize(
     "forbidden",
     [
