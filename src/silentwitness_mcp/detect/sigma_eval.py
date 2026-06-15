@@ -56,14 +56,23 @@ _FIELD_ALIASES: dict[str, str] = {
 }
 
 
-def _resolve_rules_dir() -> Path:
+def _resolve_rules_dirs() -> list[Path]:
+    """The rule directories to load: always the bundled seed, plus an optional pack.
+
+    The seed rules are taxonomy-aware for the log sources a typical Windows host actually
+    records (Security audit, PowerShell), so they must ALWAYS load — a full community pack
+    is *added* breadth, never a replacement (most SigmaHQ rules assume Sysmon, which many
+    hosts don't run)."""
+    dirs = [_SEED_RULES_DIR]
     override = os.environ.get(_RULES_DIR_ENV)
     if override:
         path = Path(override)
         if path.is_dir():
-            return path
-        _LOG.error("sigma: %s=%s is not a directory — using bundled seed", _RULES_DIR_ENV, override)
-    return _SEED_RULES_DIR
+            if path.resolve() != _SEED_RULES_DIR.resolve():
+                dirs.append(path)
+        else:
+            _LOG.error("sigma: %s=%s is not a directory — seed only", _RULES_DIR_ENV, override)
+    return dirs
 
 
 # Process-creation events: Sysmon EID 1 and Security EID 4688. Rules whose logsource is
@@ -213,7 +222,11 @@ class SigmaRuleset:
     def __init__(self, rules_dir: Path | None = None) -> None:
         self._rules: list[tuple[Detection, _Predicate]] = []
         self._skipped: list[tuple[str, str]] = []  # (rule title/id, reason)
-        self._load(rules_dir if rules_dir is not None else _resolve_rules_dir())
+        self._seen_ids: set[str] = set()
+        dirs = [rules_dir] if rules_dir is not None else _resolve_rules_dirs()
+        for one_dir in dirs:
+            self._load(one_dir)
+        _LOG.info("sigma: %d rule(s) compiled, %d skipped", len(self._rules), len(self._skipped))
 
     def _load(self, rules_dir: Path) -> None:
         from sigma.collection import SigmaCollection
@@ -222,7 +235,7 @@ class SigmaRuleset:
         # Recursive: a real community pack (SigmaHQ) is a nested tree of category dirs.
         paths = sorted(rules_dir.rglob("*.yml")) + sorted(rules_dir.rglob("*.yaml"))
         if not paths:
-            _LOG.error("sigma: no rule files in %s — detection is OFF for this run", rules_dir)
+            _LOG.error("sigma: no rule files in %s", rules_dir)
             return
         # Load one file at a time so a single malformed rule in a large community pack is
         # skipped (counted) rather than aborting the whole ruleset — and so a parse failure
@@ -235,7 +248,10 @@ class SigmaRuleset:
                 self._skipped.append((path.name, str(exc)))
                 continue
             for rule in rules:
-                label = rule.title or str(rule.id)
+                rid = str(rule.id or "")
+                if rid and rid in self._seen_ids:  # dedup across seed + community pack
+                    continue
+                label = rule.title or rid
                 try:
                     predicate = _compile_rule(rule)
                 except (UnsupportedRuleError, SigmaError) as exc:
@@ -245,13 +261,9 @@ class SigmaRuleset:
                     _LOG.debug("sigma: skipped rule %r: %s", label, exc)
                     self._skipped.append((label, str(exc)))
                     continue
+                if rid:
+                    self._seen_ids.add(rid)
                 self._rules.append((_detection_of(rule), predicate))
-        _LOG.info(
-            "sigma: %d rule(s) compiled, %d skipped from %s",
-            len(self._rules),
-            len(self._skipped),
-            rules_dir,
-        )
 
     @property
     def rule_count(self) -> int:
