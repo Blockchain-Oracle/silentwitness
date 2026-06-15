@@ -66,3 +66,4 @@ yarn.lock
 /tmp/
 .claude/*.lock
 *,cover
+docs/EVIDENCE_INVENTORY.md
