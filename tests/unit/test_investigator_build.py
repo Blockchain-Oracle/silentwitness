@@ -106,25 +106,8 @@ def test_factory_honours_max_iters_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert cfg.max_iters == 25
 
 
-def test_factory_default_max_iters_is_unlimited() -> None:
-    # No iteration cap by default — a stock run for judges should NOT be killed
-    # mid-flight by an arbitrary ceiling. The investigation self-terminates via
-    # coverage gate + critic + agent decision. Set --max-iterations or
-    # SILENTWITNESS_MAX_ITERS to opt in to a cap.
-    assert _DEFAULT_MAX_ITERS is None
-
-
-def test_factory_default_unlimited_propagates_to_config(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Without env or param override, ``build_investigator`` yields
-    ``cfg.max_iters is None`` — Pydantic-AI's ``UsageLimits(request_limit=None)``
-    means unlimited model calls. Uses the ``test`` provider to skip the real
-    Anthropic client construction."""
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "test")
-    monkeypatch.delenv("SILENTWITNESS_MAX_ITERS", raising=False)
-    cfg = build_investigator(Path("sw-test-case"), "tester")
-    assert cfg.max_iters is None
+def test_factory_default_max_iters() -> None:
+    assert _DEFAULT_MAX_ITERS == 50
 
 
 def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -137,13 +120,13 @@ def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPa
 def test_factory_invalid_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "not_a_number")
     with pytest.raises(ValueError, match="SILENTWITNESS_MAX_ITERS"):
-        _parse_max_iters_env(None)
+        _parse_max_iters_env(50)
 
 
 def test_factory_zero_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "0")
     with pytest.raises(ValueError, match="must be >= 1"):
-        _parse_max_iters_env(None)
+        _parse_max_iters_env(50)
 
 
 # ---------------------------------------------------------------------------

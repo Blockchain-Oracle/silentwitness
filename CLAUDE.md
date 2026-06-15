@@ -42,7 +42,7 @@ Use: "defensible audit trail", "senior-analyst sequencing", "hypothesis pivot", 
 ## Critical SDK gotchas (audit-verified vs Pydantic AI 1.105 source)
 - `Agent(capabilities=[hooks])` — NOT `hooks=[...]`
 - `@hooks.on.after_model_request` / `@hooks.on.after_run` — NOT `on_step` / `on_finish`
-- `agent.run(..., usage_limits=UsageLimits(request_limit=N))` — NOT `Agent(max_iterations=N)`
+- `agent.run(..., usage_limits=UsageLimits(request_limit=N))` — NOT `Agent(max_iterations=N)`. `request_limit=None` disables the cap (this repo's default since PR #236 — Pydantic-AI's own default is 50, which silently killed real runs at iteration 50).
 - `MCPServerStdio(...).filtered(lambda ctx, td: td.name in ALLOWLIST)` — NOT `tool_filter=`
 - `Agent(toolsets=[server])` — `mcp_servers=` is DEPRECATED
 - `MCPServerStreamableHTTP` — NOT `MCPServerHTTP` (doesn't exist)
