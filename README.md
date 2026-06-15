@@ -20,24 +20,70 @@ any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_
 
 ![Markdown report with inline `[verify:audit_id]` links resolving to JSONL audit entries](./docs/assets/report-verify-links.png)
 
-## Quick start
+## Prerequisites
 
-### (a) SIFT 2026 native — 3 commands
+| Requirement | Why | How |
+|---|---|---|
+| **Python 3.12 or 3.13** | `silentwitness` is a Python CLI. | SIFT 2026 has 3.12 pre-installed. Other OS: [python.org](https://www.python.org) or your package manager. |
+| **LLM API key** | The investigator drives an LLM (Anthropic / OpenAI / Gemini / Ollama). Recommended: `gpt-5.2` or `claude-opus-4-7`. | Export `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` before `silentwitness investigate`. |
+| **`uv` (or `pipx`)** | Installs `silentwitness` as a global command in an isolated env. | `install.sh` installs `uv` automatically. Alt: [astral.sh/uv](https://astral.sh/uv) / [pipx](https://pipx.pypa.io). |
+| **Subprocess forensic tools** *(SIFT only)* | Hayabusa, Chainsaw, Sigma rules, Zeek, Suricata, dfVFS. | `install.sh` provisions them all — version-pinned + SHA256-verified. |
+
+## Install
+
+After any path below, **`silentwitness` is a global command** — `which silentwitness` resolves and `silentwitness --help` works from any directory.
+
+### Option A — SIFT 2026 OVA (recommended for judges, one command)
 
 ```bash
-# 1. install
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
-# 2. register a case + its evidence (one step, two sub-actions on a single line)
-silentwitness init mr-evil-001 --examiner $USER && silentwitness register-evidence mr-evil-001 /evidence/hacking-case
-# 3. investigate
-silentwitness investigate mr-evil-001
+git clone https://github.com/Blockchain-Oracle/silentwitness && cd silentwitness && ./install.sh
+silentwitness --help    # global command, ready
 ```
 
-### (b) Docker Compose — 2 commands
+`install.sh` is idempotent. It installs `uv`, runs `uv tool install` to put the CLI on `~/.local/bin`, then provisions Hayabusa / Chainsaw / Sigma rules / Zeek / Suricata / dfVFS apt deps / spaCy NER model. Every download is SHA256-verified.
+
+### Option B — Generic (any OS, no SIFT subprocess tools)
+
+```bash
+# Recommended (uv tool):
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# Alternative (pipx):
+pipx install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# Alternative (npm — discoverability alias; delegates to uvx):
+npm install -g silentwitness
+```
+
+### Option C — Docker Compose
 
 ```bash
 docker compose up -d
 docker compose exec silentwitness silentwitness investigate mr-evil-001
+```
+
+## Configuration
+
+| Env var | Default | What |
+|---|---|---|
+| `SILENTWITNESS_MODEL` | `openai:gpt-5.2` | Investigator model. Format: `provider:model`. |
+| `CRITIC_MODEL` | (inherits) | Live critic model — usually a faster/cheaper sibling of the investigator. |
+| `MAX_ITERS` | unlimited | Hard cap on agent iterations. Unlimited by default (PR #236); three self-termination signals — structured output, token budget, coverage-gate retry exhaustion — still stop the run. |
+| `CASES_DIR` | `./cases` | Where investigations are written. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
+
+## Quick start
+
+After install + at least one LLM API key exported:
+
+```bash
+silentwitness init mr-evil-001 --examiner "$USER"
+silentwitness register-evidence mr-evil-001 /evidence/hacking-case
+silentwitness investigate mr-evil-001
+silentwitness review mr-evil-001                    # materialise findings
+silentwitness verify --audit-chain mr-evil-001      # tamper-evident audit trail
+silentwitness export mr-evil-001 --format markdown
 ```
 
 ## Architecture
@@ -101,6 +147,22 @@ Real audit JSONL output from past runs: see [`docs/EXAMPLE_EXECUTION_LOGS/`](./d
 ## Architecture deep-dive
 
 Component architecture, the 27-tool MCP catalog, and 10 ADRs: see [`docs/architecture.md`](./docs/architecture.md).
+
+## Test coverage
+
+**88.39% line coverage** across 7,500+ executable lines, **1,838 tests** passing (unit + integration + property-based via [Hypothesis](https://hypothesis.readthedocs.io)). 46 modules at 100% coverage — including the hash-chained audit primitives, every verification gate, the corroboration tier engine, and the entity-gate sanitizer.
+
+![Coverage report header showing 88.39% total coverage, file-by-file breakdown](./assets/coverage-summary.png)
+
+Reproduce locally:
+
+```bash
+uv run coverage run -m pytest
+uv run coverage html
+open htmlcov/index.html
+```
+
+Tests run on every push: see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). The coverage gate is enforced per-package: `verification/` 95%, `audit/` + `findings/` 90%, everywhere else 85% (per [CICD_SPEC](./docs/internal/CICD_SPEC.md) §8 — the floors that catch silent failures before merge).
 
 ## License
 

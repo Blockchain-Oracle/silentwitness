@@ -265,6 +265,91 @@ install_mermaid_cli() {
 }
 
 # ---------------------------------------------------------------------------
+# silentwitness Python CLI — uv + global tool install.
+#
+# Closes the gap between "subprocess tools installed" and "`silentwitness`
+# command available." Without this step the README's quickstart broke at
+# step 2: judges had no `silentwitness` on PATH. With it, `silentwitness
+# --help` works in the same shell session.
+#
+# uv is the bootstrapper (single static binary; no Python needed to install
+# it). Once present, `uv tool install` puts the CLI shim at
+# ``~/.local/bin/silentwitness`` (already on PATH per the uv installer's
+# shell hook).
+#
+# Repo root resolution: prefer the caller's CWD if it looks like a
+# silentwitness checkout; otherwise clone fresh to ``/opt/silentwitness/repo``
+# so the curl-pipe-bash flow works.
+#
+# Forensics extra (dfvfs / pytsk3 / libyal) is included on Linux — pyproject
+# explicitly marks it macOS-incompatible (those wheels don't build on
+# Darwin), so we omit on non-Linux.
+# ---------------------------------------------------------------------------
+install_silentwitness_cli() {
+    log "installing uv + silentwitness CLI globally"
+
+    if ! command -v uv >/dev/null 2>&1; then
+        log "uv not found — installing via astral.sh installer (no root needed)"
+        curl -LsSf https://astral.sh/uv/install.sh | sh \
+            || fail "uv install failed (https://astral.sh/uv/install.sh)"
+        # uv installer drops the binary in ~/.local/bin and patches the user's
+        # shell rc to add it to PATH on next login. For this script we need it
+        # NOW, so export the path explicitly.
+        export PATH="$HOME/.local/bin:$PATH"
+    fi
+
+    command -v uv >/dev/null 2>&1 || fail "uv still not on PATH after install"
+
+    # CLAUDE.md pins uv==0.11.18 (0.5.x has breaking semantics for `uv lock`
+    # and `uv tool`). Warn rather than fail so newer pins can be tested
+    # explicitly without breaking install.sh for everyone.
+    local uv_ver
+    uv_ver="$(uv --version | awk '{print $2}')"
+    if [[ "$uv_ver" != "0.11.18" ]]; then
+        log "WARNING: uv $uv_ver detected; CLAUDE.md pins 0.11.18 — please verify behaviour"
+    fi
+
+    # Resolve the silentwitness repo.
+    local repo_root="${SILENTWITNESS_REPO_ROOT:-$PWD}"
+    if [[ ! -f "$repo_root/pyproject.toml" ]] || ! grep -q '^name = "silentwitness"' "$repo_root/pyproject.toml" 2>/dev/null; then
+        repo_root="/opt/silentwitness/repo"
+        if [[ ! -d "$repo_root/.git" ]]; then
+            log "cloning silentwitness into $repo_root (no checkout in CWD)"
+            sudo mkdir -p /opt/silentwitness
+            sudo chown -R "$USER:$USER" /opt/silentwitness 2>/dev/null \
+                || sudo chown -R "$USER" /opt/silentwitness
+            git clone --depth 1 https://github.com/Blockchain-Oracle/silentwitness.git "$repo_root" \
+                || fail "git clone of silentwitness repo failed"
+        else
+            log "using existing checkout at $repo_root"
+            (cd "$repo_root" && git pull --ff-only) \
+                || log "WARNING: git pull failed in $repo_root — using current HEAD"
+        fi
+    else
+        log "using silentwitness repo at $repo_root (already on disk)"
+    fi
+
+    # Pick install target: include the forensics extra on Linux (dfVFS + plaso
+    # + libyal bindings have native deps we just installed in
+    # install_evidence_access); omit on macOS so the Darwin smoke path also
+    # finishes — the forensics extra explicitly does not build there.
+    local install_target="$repo_root"
+    if [[ "$(uname -s)" == "Linux" ]]; then
+        # `silentwitness[forensics] @ file://...` is PEP 508; uv understands it.
+        install_target="silentwitness[forensics] @ file://$repo_root"
+    fi
+
+    uv tool install --reinstall "$install_target" \
+        || fail "uv tool install $install_target failed"
+
+    command -v silentwitness >/dev/null 2>&1 \
+        || fail "silentwitness not on PATH after uv tool install (check ~/.local/bin)"
+    silentwitness --help >/dev/null 2>&1 \
+        || fail "silentwitness --help smoke check failed"
+    log "silentwitness installed at $(command -v silentwitness)"
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 DIAGRAMS=0
@@ -275,6 +360,10 @@ for arg in "$@"; do
     esac
 done
 
+# The CLI install runs first so a fail-fast at the very first step short-
+# circuits before we spend time pulling Hayabusa / Chainsaw / Zeek etc. —
+# the subprocess tools are useless without `silentwitness` to drive them.
+install_silentwitness_cli
 install_hayabusa
 install_hayabusa_rules
 install_chainsaw
@@ -286,3 +375,4 @@ install_spacy_model
 [ "$DIAGRAMS" = "1" ] && install_mermaid_cli
 
 log "all tools provisioned successfully"
+log "next: run \`silentwitness --help\` (it's a global command now)"

@@ -1,0 +1,39 @@
+{
+  "name": "silentwitness",
+  "version": "1.0.0-hackathon-2026",
+  "description": "Hypothesis-first DFIR investigator (MCP server + Pydantic AI agent) for the SANS Find Evil! 2026 hackathon. This npm package is a discoverability wrapper that delegates to the Python CLI installed via uv/pipx.",
+  "keywords": [
+    "dfir",
+    "incident-response",
+    "forensics",
+    "mcp",
+    "claude",
+    "anthropic",
+    "find-evil",
+    "sans",
+    "hackathon",
+    "audit-trail",
+    "hash-chain"
+  ],
+  "homepage": "https://github.com/Blockchain-Oracle/silentwitness#readme",
+  "bugs": {
+    "url": "https://github.com/Blockchain-Oracle/silentwitness/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Blockchain-Oracle/silentwitness.git"
+  },
+  "license": "MIT",
+  "author": "Blockchain-Oracle <ajweb3dev@gmail.com>",
+  "bin": {
+    "silentwitness": "./bin/silentwitness.js"
+  },
+  "files": [
+    "bin/silentwitness.js",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "preferGlobal": true
+}
