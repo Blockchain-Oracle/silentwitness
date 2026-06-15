@@ -30,7 +30,7 @@ from typing import Any, Final
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.types import AuditEntry, Confidence, ToolResponse
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._interpretation_store import (
     FindingsStoreError,
@@ -174,6 +174,8 @@ def record_interpretation(
             reason=InterpretationRejectReason.FINDINGS_STORE_UNWRITABLE,
             context={"stage": "findings_write", "error_type": type(exc).__name__},
         )
+    except ChainSeedError:
+        raise  # PR #237 round-2 N2: corruption never downgrades to envelope.
     except Exception as exc:
         result = InterpretationResult(
             success=False,
@@ -198,6 +200,8 @@ def record_interpretation(
                 start=start,
                 model_used=model_used,
             )
+        except ChainSeedError:
+            raise  # Audit chain corruption — never downgrade to envelope.
         except Exception as audit_exc:
             # Preserve the original rejection so the agent's self-
             # correction loop still sees the real verdict (e.g.

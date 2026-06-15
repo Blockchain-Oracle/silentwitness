@@ -20,7 +20,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.types import AuditEntry, CitedSpan, ToolResponse
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._id_gen import allocate_observation_id
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
@@ -208,6 +208,8 @@ def record_observation(
             reason=ObservationRejectReason.FINDINGS_STORE_UNWRITABLE,
             context={"stage": "findings_write", "error_type": type(exc).__name__},
         )
+    except ChainSeedError:
+        raise  # PR #237 round-2 N2: corruption never downgrades to envelope.
     except Exception as exc:
         # Round-2 silent-failure C3: broad catch so TypeError/ImportError/
         # RuntimeError don't leak past the envelope. BaseException
@@ -240,6 +242,8 @@ def record_observation(
                 start=start,
                 model_used=model_used,
             )
+        except ChainSeedError:
+            raise  # Audit chain corruption — never downgrade to envelope.
         except Exception as audit_exc:
             # Audit write failed (disk full, permission, schema validation,
             # etc.). Surface the gap inside data.context so the agent and
@@ -333,11 +337,9 @@ def _write_audit_row(
     artefact_path = (
         case_dir / "findings.json" if result.success else case_dir / "audit" / "findings.jsonl"
     )
-    # Scrub line-terminator chars from observation text BEFORE building
-    # params dict — round-2 silent-failure C2: attacker-controlled
-    # U+2028/U+2029 in payload.text would otherwise trip the underlying
-    # atomic_io.append_jsonl_line validator that append_chained_jsonl_line
-    # calls — raising inside this function and erasing the row.
+    # Scrub line-terminator chars BEFORE building params (round-2 C2):
+    # U+2028/U+2029 in payload.text would trip the atomic_io.append_jsonl_line
+    # validator that append_chained_jsonl_line calls and erase the row.
     scrubbed_params: dict[str, object] = {
         "text": scrub_line_terminators(payload.text),
         "cited_spans": [s.model_dump(mode="json") for s in payload.cited_spans],

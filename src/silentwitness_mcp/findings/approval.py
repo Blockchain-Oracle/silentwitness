@@ -1,10 +1,8 @@
 """``approve_finding`` — password-gated HMAC ledger transition (architecture
 §4.2 + §4.9). Pipeline under :func:`findings_lock`: read F-NNN → DRAFT check →
 CASE.yaml salt → HMACLedger bind → PBKDF2-SHA256 → HMAC → append → flip status →
-atomic rename → zero key → audit row. Audit row writes on EVERY path. Zeroing is
-honest but partial: ``SecretStr.get_secret_value()`` and ``HMACLedger.derive_key``
-both return immutable copies we cannot wipe; only the bytearray buffer fed to
-``ledger.append`` is zeroed. Password / derived key NEVER reach the audit row."""
+atomic rename → zero key → audit row. Zeroing is partial: only the bytearray fed
+to ``ledger.append`` is wiped. Password / derived key NEVER touch the audit row."""
 
 from __future__ import annotations
 
@@ -25,7 +23,7 @@ from silentwitness_common.types import (
     LedgerItemType,
     ToolResponse,
 )
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 from silentwitness_mcp.audit.ledger import (
     HMACLedger,
     InterpretationParts,
@@ -182,6 +180,8 @@ def approve_finding(
             reason=ApproveRejectReason.FINDINGS_STORE_UNWRITABLE,
             context={"stage": "findings_write", "error_type": type(exc).__name__},
         )
+    except ChainSeedError:
+        raise  # PR #237 round-2 N2: corruption never downgrades to envelope.
     except Exception as exc:
         result = ApproveResult(
             success=False,
@@ -208,6 +208,8 @@ def approve_finding(
                 start=start,
                 model_used=model_used,
             )
+        except ChainSeedError:
+            raise  # Audit chain corruption — never downgrade to envelope.
         except Exception as audit_exc:
             preserved = {
                 "stage": "audit_write",

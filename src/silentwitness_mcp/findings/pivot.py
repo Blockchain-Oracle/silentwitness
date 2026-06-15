@@ -38,7 +38,7 @@ from typing import Any, Final, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.types import AuditEntry, ToolResponse
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._pivot_store import (
     HypothesisStoreError,
@@ -186,6 +186,8 @@ def record_pivot(
             reason=PivotRejectReason.AUDIT_STORE_UNWRITABLE,
             context={"stage": "hypothesis_write", "error_type": type(exc).__name__},
         )
+    except ChainSeedError:
+        raise  # PR #237 round-2 N2: corruption never downgrades to envelope.
     except Exception as exc:
         result = PivotResult(
             success=False,
@@ -210,6 +212,8 @@ def record_pivot(
                 start=start,
                 model_used=model_used,
             )
+        except ChainSeedError:
+            raise  # Audit chain corruption — never downgrade to envelope.
         except Exception as audit_exc:
             preserved = {
                 "stage": "audit_write",

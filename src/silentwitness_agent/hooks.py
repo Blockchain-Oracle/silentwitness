@@ -37,7 +37,7 @@ from pydantic_ai.tools import ToolDefinition
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
 from silentwitness_agent.investigator import InvestigatorDeps
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 
 _LOG = logging.getLogger(__name__)
 
@@ -126,13 +126,22 @@ def build_investigator_hooks(
         return (time.monotonic_ns() - start_ns) / 1e6
 
     def _safe_append(payload: dict[str, Any], event_label: str) -> None:
-        """Append payload to agent.jsonl; log (but never raise) on failure.
+        """Append payload to agent.jsonl; log on transient failure, re-raise on
+        chain-corruption.
 
-        Hooks must not abort the agent run on audit-emission failure.
-        Failures are counted and surfaced in the finish line.
+        Hooks must not abort the agent run on transient audit-emission failure
+        (disk full, fsync failure, etc.). Those get counted in
+        ``_append_failures`` and surfaced in the finish line. **But chain
+        corruption is different**: silently swallowing
+        :class:`ChainSeedError` would mask the very class of bug PR #237
+        exists to fix. The verifier runs on demand, so the corruption could
+        accumulate days of evidence before anyone looks. Re-raise.
         """
         try:
             _append_agent_jsonl(case_dir, payload)
+        except ChainSeedError:
+            # PR #237 round-2 N4: chain corruption aborts the run.
+            raise
         except Exception:
             _append_failures[0] += 1
             _LOG.exception(

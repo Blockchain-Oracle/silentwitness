@@ -253,3 +253,62 @@ def test_reset_chain_cache_is_not_in_public_api() -> None:
 
     assert "_reset_chain_cache" not in chain_module.__all__
     assert "reset_chain_cache" not in chain_module.__all__
+
+
+# ---------------------------------------------------------------------------
+# Cross-process cache invalidation (round-2 N3) — cached prev_hash must be
+# refreshed if another process appended to the file between our writes.
+# ---------------------------------------------------------------------------
+
+
+def test_chained_append_refreshes_cache_after_external_write(tmp_path: Path) -> None:
+    """Simulates a second process appending between our writes. Without the
+    file-size cache invalidation the second write would reuse the stale
+    cached prev_hash and produce a chain fork at verify time. With the size
+    check the cache is dropped and we re-read disk."""
+    from silentwitness_mcp.audit import chain as chain_module
+
+    _reset_chain_cache()
+    path = tmp_path / "agent.jsonl"
+    append_chained_jsonl_line(path, json.dumps({"step": 1}))
+    # Snapshot our process's view (size_after_h1, h1).
+    our_view = dict(chain_module._LAST_HASH_CACHE)
+
+    # Simulate a foreign process appending h2: drop the cache, write, restore
+    # our stale view (this is the bug condition the size-check defends).
+    _reset_chain_cache()
+    h2 = append_chained_jsonl_line(path, json.dumps({"step": 2}))
+    chain_module._LAST_HASH_CACHE.clear()
+    chain_module._LAST_HASH_CACHE.update(our_view)
+
+    # h3 from "our" process. Cached size is now smaller than current file size
+    # → size mismatch → re-seed → chain to h2 (correct), not h1 (stale).
+    h3 = append_chained_jsonl_line(path, json.dumps({"step": 3}))
+
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 3
+    third = json.loads(lines[2])
+    assert third["prev_record_hash"] == h2
+    assert third["record_hash"] == h3
+    assert verify_chain_lines(lines).ok is True
+
+
+# ---------------------------------------------------------------------------
+# Sidecar lockfile location (round-2: sidecar moved to audit/.locks/)
+# ---------------------------------------------------------------------------
+
+
+def test_chained_append_creates_sidecar_in_locks_subdir(tmp_path: Path) -> None:
+    """The flock sidecar lives under ``audit/.locks/<file>.lock`` so it stays
+    hidden from ``ls audit/``, default tarballers, and the verifier's
+    ``*.jsonl`` glob. A regression that puts the lockfile back at the audit
+    root would pollute every operator's directory listing."""
+    _reset_chain_cache()
+    audit_dir = tmp_path / "audit"
+    audit_dir.mkdir()
+    path = audit_dir / "agent.jsonl"
+    append_chained_jsonl_line(path, json.dumps({"step": 1}))
+
+    assert (audit_dir / ".locks" / "agent.jsonl.lock").exists()
+    # Lockfile is NOT at the audit root.
+    assert not list(audit_dir.glob(".agent.jsonl*"))

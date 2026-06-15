@@ -1,15 +1,10 @@
 """``record_narrative`` tool body (architecture §4.2 + §5.3 + §5.4).
 
-Refines the architecture's ``(section, text)`` input with four
-structurally required fields: ``initial_hypothesis`` (the WHY),
-``attack_chain`` (dispatched observations), ``pivots`` (P-NNN refs),
-and ``gaps`` (epistemic-honesty floor when the chain is deep).
-
-The conditional gaps rule (>3 chain steps → ≥1 non-empty gap) defends
-against fluent-but-unanchored prose. Section gating: RECOMMENDATIONS
-and APPENDIX_AUDIT reject as SECTION_NOT_AGENT_WRITABLE — reserved
-for the examiner / renderer.
-"""
+Refines ``(section, text)`` with: ``initial_hypothesis``, ``attack_chain``,
+``pivots`` (P-NNN refs), and ``gaps`` (epistemic-honesty floor on deep chains).
+Conditional gaps rule (>3 chain steps → ≥1 non-empty gap) defends against
+fluent-but-unanchored prose. Section gating: RECOMMENDATIONS and APPENDIX_AUDIT
+reject as SECTION_NOT_AGENT_WRITABLE — reserved for examiner / renderer."""
 
 from __future__ import annotations
 
@@ -25,7 +20,7 @@ from typing import Any, Final
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from silentwitness_common.types import AuditEntry, ReportSection, ToolResponse
-from silentwitness_mcp.audit.chain import append_chained_jsonl_line
+from silentwitness_mcp.audit.chain import ChainSeedError, append_chained_jsonl_line
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._narrative_store import (
     NarrativeStoreError,
@@ -176,6 +171,8 @@ def record_narrative(
             reason=NarrativeRejectReason.AUDIT_STORE_UNWRITABLE,
             context={"stage": "findings_write", "error_type": type(exc).__name__},
         )
+    except ChainSeedError:
+        raise  # PR #237 round-2 N2: corruption never downgrades to envelope.
     except Exception as exc:
         result = NarrativeResult(
             success=False,
@@ -200,6 +197,8 @@ def record_narrative(
                 start=start,
                 model_used=model_used,
             )
+        except ChainSeedError:
+            raise  # Audit chain corruption — never downgrade to envelope.
         except Exception as audit_exc:
             # Preserve narrative_id on success path: findings.json was
             # written, so silently losing N-NNN would let the agent
@@ -336,11 +335,10 @@ def _write_audit_row(
     start: float,
     model_used: str,
 ) -> None:
-    """Canonical :class:`AuditEntry` (§4.4). U+2028 / U+2029 are scrubbed
-    from agent-controlled text so a line-terminator attack can't trip the
-    underlying ``atomic_io.append_jsonl_line`` validator that
-    :func:`append_chained_jsonl_line` calls — which would otherwise raise
-    inside this function."""
+    """Canonical :class:`AuditEntry` (§4.4). U+2028 / U+2029 scrubbed from
+    agent text so a line-terminator attack can't trip the underlying
+    ``atomic_io.append_jsonl_line`` validator that
+    :func:`append_chained_jsonl_line` calls."""
     elapsed_ms = (time.monotonic() - start) * 1000.0
     summary_json = result.model_dump_json()
     artefact_path = (
