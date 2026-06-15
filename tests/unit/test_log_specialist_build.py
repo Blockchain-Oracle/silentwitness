@@ -23,7 +23,7 @@ from silentwitness_agent.specialists.log import (
 
 # Firewall #1 (Phase 2/3): the specialist is an INDEX querier — it has the index query
 # tools, not the raw evtx/chainsaw/hayabusa tools (those are demoted to ingest feeders).
-_EXPECTED_INDEX_TOOLS = {"search_evidence", "timeline", "get_record"}
+_EXPECTED_INDEX_TOOLS = {"search_evidence", "timeline", "get_record", "list_detections"}
 _EXPECTED_RECORD_TOOLS = {
     "record_observation",
     "record_interpretation",
@@ -53,8 +53,8 @@ _BANNED_TOOLS = {
 # ---------------------------------------------------------------------------
 
 
-def test_allowlist_has_8_tools() -> None:
-    assert len(LOG_TOOL_ALLOWLIST) == 8
+def test_allowlist_has_9_tools() -> None:
+    assert len(LOG_TOOL_ALLOWLIST) == 9
 
 
 # ---------------------------------------------------------------------------

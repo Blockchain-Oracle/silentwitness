@@ -56,6 +56,7 @@ EXPECTED_TOOL_NAMES = frozenset(
         "search_evidence",
         "get_record",
         "timeline",
+        "list_detections",
     }
 )
 

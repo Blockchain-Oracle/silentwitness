@@ -4,7 +4,7 @@ After EVTX ingest, every event is matched against a curated pack of Sigma rules 
 agent can *start* from concrete detection hits (RDP, suspicious PowerShell, brute-force
 logon, cloud-exfil tooling) instead of blind keyword search — the single biggest recall
 lever from the competitive analysis. Detection hits are written into the same FTS index
-as ``sigma:<level>`` rows, so ``search_evidence`` (and a future ``list_detections``)
+as ``sigma:<level>`` rows, so ``search_evidence`` / ``list_detections``
 surfaces them with full provenance.
 
 Why a small in-process matcher rather than Hayabusa/Chainsaw/Zircolite: those are GPL-3.0

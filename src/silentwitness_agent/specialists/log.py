@@ -33,6 +33,7 @@ LOG_TOOL_ALLOWLIST: frozenset[str] = frozenset(
         "search_evidence",
         "timeline",
         "get_record",
+        "list_detections",
         "record_observation",
         "record_interpretation",
         "read_tool_output",

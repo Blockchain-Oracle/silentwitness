@@ -72,6 +72,7 @@ WIRED_TOOLS: frozenset[str] = frozenset(
         "search_evidence",
         "get_record",
         "timeline",
+        "list_detections",
     }
 )
 
