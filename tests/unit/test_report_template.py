@@ -164,7 +164,7 @@ def test_dump_frontmatter_non_utc_datetime_normalised_to_utc() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_render_skeleton_contains_all_9_sections_in_order() -> None:
+def test_render_skeleton_contains_all_sections_in_order() -> None:
     fm = _make_fm()
     out = ReportTemplate.render_skeleton(fm)
     positions = [out.index(f"## {SECTION_HEADINGS[s]}") for s in SECTION_ORDER]
@@ -206,5 +206,5 @@ def test_compute_content_hash_empty_string_is_stable_canary() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_section_order_has_9_elements() -> None:
-    assert len(SECTION_ORDER) == 9
+def test_section_order_has_10_elements() -> None:
+    assert len(SECTION_ORDER) == 10

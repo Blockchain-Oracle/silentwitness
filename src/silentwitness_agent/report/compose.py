@@ -306,6 +306,50 @@ def compose_gaps(case_dir: Path) -> str:
     return "\n".join(f"- {item}" for item in items) + "\n"
 
 
+# Sigma detections embed their ATT&CK mapping in the cited evidence text as
+# "tags=<tactic>,<techniqueid>" (e.g. "tags=credential_access,t1110"). We derive the
+# report's ATT&CK overlay deterministically from those cited tags — no model claim involved.
+_ATTACK_TAG_RE = re.compile(r"([a-z_]+),(t\d{4}(?:\.\d{3})?)")
+
+
+def compose_attack_techniques(case_dir: Path) -> str:
+    """Aggregate MITRE ATT&CK techniques from the ATT&CK tags in cited Sigma detections.
+
+    Deterministic: scans each recorded observation's cited ``span_text`` for
+    ``<tactic>,<techniqueid>`` tags and renders a technique -> tactic -> evidencing-observation
+    table. This is provenance-grounded (it only reports techniques the cited evidence carries),
+    not a model assertion."""
+    findings_path = case_dir / "findings.json"
+    try:
+        raw: Any = json.loads(findings_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "_No MITRE ATT&CK techniques derived from cited detections._\n"
+    if not isinstance(raw, list):
+        return "_No MITRE ATT&CK techniques derived from cited detections._\n"
+
+    techniques: dict[str, tuple[str, set[str]]] = {}
+    for obs in raw:
+        if not isinstance(obs, dict):
+            continue
+        oid = str(obs.get("observation_id") or obs.get("finding_id") or "?")
+        spans = obs.get("cited_spans") or obs.get("cited_span") or []
+        for span in spans:
+            if not isinstance(span, dict):
+                continue
+            for tactic, tech in _ATTACK_TAG_RE.findall(str(span.get("span_text", "")).lower()):
+                tid = tech.upper()
+                techniques.setdefault(tid, (tactic, set()))[1].add(oid)
+
+    if not techniques:
+        return "_No MITRE ATT&CK techniques derived from cited detections._\n"
+    rows = [
+        f"| {tid} | {techniques[tid][0].replace('_', ' ')} | "
+        f"{', '.join(sorted(techniques[tid][1]))} |"
+        for tid in sorted(techniques)
+    ]
+    return "| Technique | Tactic | Evidenced by |\n|---|---|---|\n" + "\n".join(rows) + "\n"
+
+
 def compose_appendix_audit(case_dir: Path) -> str:
     """Lists each audit/*.jsonl with its SHA-256 digest."""
     audit_dir = case_dir / "audit"
@@ -331,6 +375,7 @@ def compose_appendix_audit(case_dir: Path) -> str:
 
 __all__ = [
     "compose_appendix_audit",
+    "compose_attack_techniques",
     "compose_engagement_overview",
     "compose_executive_summary",
     "compose_findings",
