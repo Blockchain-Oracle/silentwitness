@@ -39,10 +39,13 @@ class ArtifactTarget:
       whose name matches ``name_pattern`` (case-insensitive) is copied.
     * ``kind="per_user"`` — ``location`` is relative to each ``/Users/<name>/``
       directory; copied for every user profile present.
+    * ``kind="per_user_glob"`` — ``location`` is a directory relative to each
+      ``/Users/<name>/``; every immediate child whose *basename* matches
+      ``name_pattern`` is copied (e.g. Recent ``*.lnk``, PowerShell transcripts).
     """
 
     label: str
-    kind: Literal["file", "dir_glob", "per_user"]
+    kind: Literal["file", "dir_glob", "per_user", "per_user_glob"]
     location: str
     name_pattern: str = ""
     # Named NTFS alternate data stream to copy instead of the default ($DATA) stream;
@@ -66,6 +69,20 @@ ROCBA_ARTIFACT_TARGETS: tuple[ArtifactTarget, ...] = (
     ArtifactTarget("prefetch", "dir_glob", "/Windows/Prefetch", r"\.pf$"),
     ArtifactTarget("ntuser", "per_user", "NTUSER.DAT"),
     ArtifactTarget("usrclass", "per_user", "AppData/Local/Microsoft/Windows/UsrClass.dat"),
+    # Per-user activity artifacts — "what was opened / where it was sent."
+    ArtifactTarget("lnk", "per_user_glob", "AppData/Roaming/Microsoft/Windows/Recent", r"\.lnk$"),
+    ArtifactTarget(
+        "jumplist_auto",
+        "per_user_glob",
+        "AppData/Roaming/Microsoft/Windows/Recent/AutomaticDestinations",
+        r"\.automaticDestinations-ms$",
+    ),
+    ArtifactTarget(
+        "ps_transcript",
+        "per_user_glob",
+        "Documents",
+        r"^PowerShell_transcript\..*\.txt$",
+    ),
 )
 
 
@@ -213,14 +230,21 @@ def extract_artifacts(
             for location, sub in _iter_dir(opened, target.location):
                 if sub.IsFile() and pattern.search(location):
                     _append_if_extracted(results, target.label, location, sub, workdir)
-        else:  # per_user
+        else:  # per_user / per_user_glob
             for user_location, user_entry in _iter_dir(opened, _USERS_DIR):
                 if not user_entry.IsDirectory():
                     continue
-                child = f"{user_location.rstrip('/')}/{target.location}"
-                entry = _open_location(opened, child)
-                if entry is not None and entry.IsFile():
-                    _append_if_extracted(results, target.label, child, entry, workdir)
+                base = f"{user_location.rstrip('/')}/{target.location}"
+                if target.kind == "per_user":
+                    entry = _open_location(opened, base)
+                    if entry is not None and entry.IsFile():
+                        _append_if_extracted(results, target.label, base, entry, workdir)
+                    continue
+                pattern = re.compile(target.name_pattern, re.IGNORECASE)
+                for location, sub in _iter_dir(opened, base):
+                    name = location.rsplit("/", 1)[-1]
+                    if sub.IsFile() and pattern.search(name):
+                        _append_if_extracted(results, target.label, location, sub, workdir)
     return results
 
 

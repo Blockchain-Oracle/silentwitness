@@ -2532,6 +2532,18 @@ wheels = [
 ]
 
 [[package]]
+name = "lnkparse3"
+version = "1.6.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyyaml" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/47/08/0ab4666bcc6ce5aa43642cc6c75e1718417911952c0667d6c19eec0fbcd5/lnkparse3-1.6.0.tar.gz", hash = "sha256:519e6af6193b3d1802e1ec118a531ee3ca5a39d31137b507c0f19a0d437bd8ba", size = 35605, upload-time = "2026-02-27T09:54:17.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/7f/3998a1902e88b556679118cdc052fd87ee180b8782c925585e77a176371a/lnkparse3-1.6.0-py3-none-any.whl", hash = "sha256:7b3b1289e99992a4d3901d80ac9ab87fa8de854b2bffe5c4011453b093038b50", size = 52640, upload-time = "2026-02-27T09:54:15.81Z" },
+]
+
+[[package]]
 name = "logfire"
 version = "4.35.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3008,6 +3020,15 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/8a/90/0ac3bc947217e66dec77e7cbc6a1979d1af70b6461b82f620d3bccd5e4c8/numpy-2.4.6-cp313-cp313t-win32.whl", hash = "sha256:29a287e0cf63ff528da061de6b9f64a4618da591ca1046aafc54062e40ca7eab", size = 6084971, upload-time = "2026-05-18T23:35:29.387Z" },
     { url = "https://files.pythonhosted.org/packages/77/71/5673e351671a1d2bd6063b91b44f70c0affea7d1516fa7a6572941ba4aa1/numpy-2.4.6-cp313-cp313t-win_amd64.whl", hash = "sha256:25c692919ac5a01f170a3bfcd62d745b24fd095c353d50812637d6fcab442e75", size = 12458532, upload-time = "2026-05-18T23:35:32.175Z" },
     { url = "https://files.pythonhosted.org/packages/3f/88/19d3503c5046e688f049274b27a3ef3d771152fa80d3ba3d01a3dff61abe/numpy-2.4.6-cp313-cp313t-win_arm64.whl", hash = "sha256:1e978ec1e8bd0e0e4de6bb75de9d30cbb74db6b6a2bb727618613703ca0167dd", size = 10291881, upload-time = "2026-05-18T23:35:35.465Z" },
+]
+
+[[package]]
+name = "olefile"
+version = "0.47"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/69/1b/077b508e3e500e1629d366249c3ccb32f95e50258b231705c09e3c7a4366/olefile-0.47.zip", hash = "sha256:599383381a0bf3dfbd932ca0ca6515acd174ed48870cbf7fee123d698c192c1c", size = 112240, upload-time = "2023-12-01T16:22:53.025Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/17/d3/b64c356a907242d719fc668b71befd73324e47ab46c8ebbbede252c154b2/olefile-0.47-py2.py3-none-any.whl", hash = "sha256:543c7da2a7adadf21214938bb79c83ea12b473a4b6ee4ad4bf854e7715e13d1f", size = 114565, upload-time = "2023-12-01T16:22:51.518Z" },
 ]
 
 [[package]]
@@ -4466,7 +4487,10 @@ forensics = [
     { name = "dfvfs" },
     { name = "evtx" },
     { name = "libfwps-python" },
+    { name = "libscca-python" },
+    { name = "lnkparse3" },
     { name = "mft" },
+    { name = "olefile" },
     { name = "plaso" },
     { name = "python-evtx" },
     { name = "regipy" },
@@ -4496,10 +4520,13 @@ requires-dist = [
     { name = "evtx", marker = "extra == 'forensics'", specifier = ">=0.8" },
     { name = "httpx", specifier = ">=0.27" },
     { name = "libfwps-python", marker = "extra == 'forensics'", specifier = ">=20240101" },
+    { name = "libscca-python", marker = "extra == 'forensics'", specifier = ">=20240000" },
+    { name = "lnkparse3", marker = "extra == 'forensics'", specifier = ">=1.4" },
     { name = "matplotlib", specifier = ">=3.10,<3.11" },
     { name = "mcp", specifier = ">=1.23.0,<2.0" },
     { name = "mft", marker = "extra == 'forensics'", specifier = ">=0.6" },
     { name = "mistune", specifier = ">=3.2.1" },
+    { name = "olefile", marker = "extra == 'forensics'", specifier = ">=0.47" },
     { name = "plaso", marker = "extra == 'forensics'", specifier = ">=20240308" },
     { name = "pydantic", specifier = ">=2.9" },
     { name = "pydantic-ai", specifier = ">=1.105.0,<2.0.0" },

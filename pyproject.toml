@@ -72,6 +72,13 @@ forensics = [
     # libfwps (Windows property store) — regipy's shellbags plugins need it to decode
     # folder-access shell items; without it regipy silently skips those plugins.
     "libfwps-python>=20240101",
+    # Per-user activity parsers (Phase 1+). LnkParse3 = pure-Python LNK/jumplist (MIT);
+    # olefile = OLE compound reader for AutomaticDestinations jumplists (BSD-2-Clause);
+    # libscca = prefetch reader (libyal stack, same family as pyesedb/libfwps) that
+    # transparently decompresses the Win10 MAM/Xpress-Huffman container.
+    "LnkParse3>=1.4",
+    "olefile>=0.47",
+    "libscca-python>=20240000",
 ]
 
 [dependency-groups]
@@ -148,6 +155,9 @@ omit = [
     "src/silentwitness_mcp/index/feeders_srum.py",
     "src/silentwitness_mcp/index/feeders_mft.py",
     "src/silentwitness_mcp/index/feeders_usnjrnl.py",
+    "src/silentwitness_mcp/index/feeders_lnk.py",
+    "src/silentwitness_mcp/index/feeders_jumplist.py",
+    "src/silentwitness_mcp/index/feeders_prefetch.py",
     "src/silentwitness_mcp/index/ingest.py",
     "src/silentwitness_agent/cli_commands/index_case.py",
     "src/silentwitness_agent/cli_commands/prepare.py",
