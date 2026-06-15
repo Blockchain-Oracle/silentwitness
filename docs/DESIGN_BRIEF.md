@@ -4,6 +4,23 @@
 > to produce the visuals and a single-page docs/landing site is here. Nothing in this file is
 > secret; it's all describing the public project.
 
+## For the designer — you have full repo access
+
+The entire project is public on GitHub: **<https://github.com/Blockchain-Oracle/silentwitness>**.
+You can read any code, doc, or log to understand the system before designing. Useful references:
+
+- **The whole story, plain-English:** [`docs/SETUP_GUIDE.md`](SETUP_GUIDE.md) and this file.
+- **The current (unbranded) reference diagram you're improving:**
+  `docs/diagrams/architecture.png` (source: `docs/diagrams/architecture.mmd`).
+- **The honest results to visualize:** [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md).
+- **A real finding chain to draw:** [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md).
+- **What it found on the real case:** [`docs/DATASET.md`](DATASET.md).
+
+When this brief says "see Diagram A / B / …", those are the six images in [§2](#2-diagrams-to-produce)
+below. **Every image we want is listed there with its content spelled out** — you are the only
+one who designs; this brief just tells you exactly what each one must show. Each diagram should
+carry our **logo top-right** and follow the brand notes in [§1](#1-brand--visual-direction).
+
 ---
 
 ## 0. What SilentWitness is (read this first)
