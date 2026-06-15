@@ -203,6 +203,26 @@ install_evidence_access() {
 }
 
 # ---------------------------------------------------------------------------
+# spaCy NER model (RUNTIME, load-bearing). The entity gate (§4.7, hallucination
+# firewall) loads en_core_web_lg at the first record_observation. Without it
+# EVERY observation is rejected ENTITY_GATE_UNAVAILABLE and the agent stages
+# ZERO findings — the exact failure a fresh-OVA reproduction hits (surfaced by
+# the live ROCBA run). `uv run` supplies the installer the bare model wheel
+# needs (the project venv ships no pip). Idempotent: skip if already loadable.
+# ---------------------------------------------------------------------------
+install_spacy_model() {
+    log "installing spaCy en_core_web_lg (entity-gate NER model, ~560 MB)"
+    if uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
+        log "en_core_web_lg already present — skipping"
+        return
+    fi
+    uv run python -m spacy download en_core_web_lg \
+        || fail "spaCy en_core_web_lg install failed — entity gate would reject every observation"
+    uv run python -c "import spacy; spacy.load('en_core_web_lg')" \
+        || fail "en_core_web_lg installed but does not load"
+}
+
+# ---------------------------------------------------------------------------
 # Mermaid CLI (optional, --diagrams flag) — DOCS-TIME ONLY, NOT RUNTIME.
 #
 # Why this exists: SIFT 2026 ships dotnet 9 + Python but NOT Node.js
@@ -262,6 +282,7 @@ install_sigma_rules
 install_zeek
 install_suricata
 install_evidence_access
+install_spacy_model
 [ "$DIAGRAMS" = "1" ] && install_mermaid_cli
 
 log "all tools provisioned successfully"
