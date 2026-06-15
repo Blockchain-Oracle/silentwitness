@@ -116,7 +116,9 @@ def test_attack_chain_note_sanitization_emits_sanitizer_row(
     persisted = next(f for f in findings if "narrative_id" in f)
     note_value = persisted["attack_chain"][0]["note"]
     assert "<system>" not in note_value
-    assert "[UNTRUSTED EVIDENCE BEGIN]" in note_value
+    # Task #20: wrap markers stripped at storage seam — sanitize ran on wrapped form.
+    assert "[UNTRUSTED EVIDENCE BEGIN]" not in note_value
+    assert "[UNTRUSTED EVIDENCE END]" not in note_value
     sanitizer_log = case_dir / "audit" / "sanitizer.jsonl"
     assert sanitizer_log.exists()
     assert sanitizer_log.read_text(encoding="utf-8").strip() != ""

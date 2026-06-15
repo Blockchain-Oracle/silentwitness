@@ -37,9 +37,8 @@ from silentwitness_mcp.findings._interpretation_store import (
     allocate_interpretation_id,
 )
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
+from silentwitness_mcp.findings._wrap import content_after_wrap
 from silentwitness_mcp.verification.sanitizer import (
-    _MARKER_BEGIN,
-    _MARKER_END,
     StripEvent,
     StripEventWriter,
     sanitize,
@@ -65,12 +64,6 @@ _RESULT_CONFIG = ConfigDict(frozen=True, extra="forbid")
 _OBSERVATION_ID_PATTERN: Final = re.compile(r"^O-\d{3,}$")
 _HIGH_MIN_JUSTIFICATION: Final = 50
 _MEDIUM_MIN_JUSTIFICATION: Final = 30
-# Single source of truth: pull the sanitizer's wrap markers directly so
-# the post-sanitize unwrap stays in lockstep with the sanitizer's
-# envelope format (silent-failure HIGH from the retroactive review of
-# the round-1 reviewer pass).
-_WRAP_BEGIN: Final = f"{_MARKER_BEGIN}\n"
-_WRAP_END: Final = f"\n{_MARKER_END}"
 _FALSIFICATION_FIELD: Final = "what_would_change_this_confidence"
 
 
@@ -245,7 +238,7 @@ def _run_pipeline(
         (_FALSIFICATION_FIELD, payload.what_would_change_this_confidence, s_fals),
     )
     for field_name, raw, sanitized in fields:
-        if not _content_after_wrap(sanitized).strip():
+        if not content_after_wrap(sanitized).strip():
             return InterpretationResult(
                 success=False,
                 reason=InterpretationRejectReason.MISSING_REQUIRED_FIELD,
@@ -253,7 +246,7 @@ def _run_pipeline(
             )
 
     floor = _required_justification_length(payload.confidence)
-    j_content = _content_after_wrap(s_just).strip()
+    j_content = content_after_wrap(s_just).strip()
     if len(j_content) < floor:
         return InterpretationResult(
             success=False,
@@ -271,10 +264,10 @@ def _run_pipeline(
     # Entity-gate / length checks above run on the wrapped form (unchanged), so the
     # injection-defense surface is intact; only the on-disk form is unwrapped.
     interpretation_record = {
-        "text": _content_after_wrap(s_text),
+        "text": content_after_wrap(s_text),
         "confidence": payload.confidence.value,
-        "justification": _content_after_wrap(s_just),
-        _FALSIFICATION_FIELD: _content_after_wrap(s_fals),
+        "justification": content_after_wrap(s_just),
+        _FALSIFICATION_FIELD: content_after_wrap(s_fals),
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     iid = allocate_interpretation_id(case_dir, payload.observation_id, interpretation_record)
@@ -285,14 +278,6 @@ def _run_pipeline(
             context={"observation_id": payload.observation_id},
         )
     return InterpretationResult(success=True, interpretation_id=iid)
-
-
-def _content_after_wrap(sanitized: str) -> str:
-    """Strip the sanitizer's outer envelope so length / emptiness checks
-    operate on the content, not the wrap markers."""
-    if sanitized.startswith(_WRAP_BEGIN) and sanitized.endswith(_WRAP_END):
-        return sanitized[len(_WRAP_BEGIN) : -len(_WRAP_END)]
-    return sanitized
 
 
 def _write_audit_row(

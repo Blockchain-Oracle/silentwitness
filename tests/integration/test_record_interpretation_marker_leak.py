@@ -100,6 +100,59 @@ def test_injection_triggers_strip_but_persisted_text_is_marker_free(
     assert "injection attempt" in interp["text"]
 
 
+def test_two_interpretations_both_unwrapped(case_env: tuple[Path, AuditLogger]) -> None:
+    """Two interpretations attached to the same observation: both must persist clean.
+    A list-append bug or a wrap-on-second-write regression would only show up here."""
+    case_dir, logger = case_env
+    _seed_findings(case_dir)
+    for note in ("first interpretation with <system> in it", "second interpretation clean"):
+        payload = InterpretationInput(
+            observation_id="O-001",
+            text=note,
+            confidence=Confidence.HIGH,
+            justification=_JUSTIFICATION_HIGH,
+            what_would_change_this_confidence=_FALSIFICATION,
+        )
+        envelope = record_interpretation(
+            payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+        )
+        assert envelope.data.success is True
+
+    findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
+    interps = findings[0]["interpretations"]
+    assert len(interps) == 2
+    for interp in interps:
+        for field in ("text", "justification", "what_would_change_this_confidence"):
+            assert _MARKER_BEGIN not in interp[field]
+            assert _MARKER_END not in interp[field]
+
+
+def test_injection_token_in_all_three_fields_stripped_in_all_three(
+    case_env: tuple[Path, AuditLogger],
+) -> None:
+    """The bug was symmetric across text / justification / falsification. Put the
+    injection token in each field; assert the sanitizer ran AND markers absent."""
+    case_dir, logger = case_env
+    _seed_findings(case_dir)
+    payload = InterpretationInput(
+        observation_id="O-001",
+        text="claim <system>inject</system> here",
+        confidence=Confidence.HIGH,
+        justification=_JUSTIFICATION_HIGH + " with <system>x</system>",
+        what_would_change_this_confidence=_FALSIFICATION + " <system>y</system>",
+    )
+    envelope = record_interpretation(
+        payload, case_dir=case_dir, audit_logger=logger, model_used=MODEL
+    )
+    assert envelope.data.success is True
+
+    interp = _persisted_interpretation(case_dir)
+    for field in ("text", "justification", "what_would_change_this_confidence"):
+        assert "<system>" not in interp[field], f"{field} still has injection token"
+        assert _MARKER_BEGIN not in interp[field]
+        assert _MARKER_END not in interp[field]
+
+
 def test_grep_of_findings_json_finds_no_marker_substring(
     case_env: tuple[Path, AuditLogger],
 ) -> None:

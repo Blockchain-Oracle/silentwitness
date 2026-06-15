@@ -334,7 +334,10 @@ def test_sanitizer_strips_xml_role_token_from_text(
     findings = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
     persisted = next(f for f in findings if "narrative_id" in f)
     assert "<system>" not in persisted["text"]
-    assert "[UNTRUSTED EVIDENCE BEGIN]" in persisted["text"]
+    # Task #20: wrap markers stripped at storage seam — sanitize+gates ran on the
+    # wrapped form (proof: <system> stripped), persistence form is unwrapped.
+    assert "[UNTRUSTED EVIDENCE BEGIN]" not in persisted["text"]
+    assert "[UNTRUSTED EVIDENCE END]" not in persisted["text"]
     sanitizer_log = case_dir / "audit" / "sanitizer.jsonl"
     assert sanitizer_log.exists()
     assert sanitizer_log.read_text(encoding="utf-8").strip() != ""
