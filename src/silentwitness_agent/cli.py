@@ -278,18 +278,33 @@ def verify(
     case_id: str = typer.Argument(...),
     ledger: Path | None = typer.Option(None, "--ledger"),
     strict: bool = typer.Option(False, "--strict"),
+    audit_chain: bool = typer.Option(
+        False,
+        "--audit-chain",
+        help=(
+            "Walk every audit/<backend>.jsonl and verify the hash chain "
+            "(Phase 6b). Replaces the default HMAC-ledger reconciliation."
+        ),
+    ),
 ) -> None:
-    from silentwitness_agent.cli_commands.verify import (
-        _DEFAULT_LEDGER_DIR,
-        run as _run,
-    )
-
     cli_ctx: _CliCtx = ctx.obj
     err = Console(stderr=True, no_color=cli_ctx.no_color)
     case_dir = _resolve_case_dir(case_id)
     if not case_dir.exists():
         err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
         raise typer.Exit(code=1)
+
+    if audit_chain:
+        from silentwitness_agent.cli_commands.verify_audit_chain import run_audit_chain
+
+        code = run_audit_chain(case_dir, no_color=cli_ctx.no_color)
+        raise typer.Exit(code=code)
+
+    from silentwitness_agent.cli_commands.verify import (
+        _DEFAULT_LEDGER_DIR,
+        run as _run,
+    )
+
     examiner = _read_case_examiner(case_dir, fallback=os.environ.get("USER", "examiner"))
     code = _run(
         case_dir,
