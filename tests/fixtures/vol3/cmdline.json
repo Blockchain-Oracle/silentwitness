@@ -1,0 +1,32 @@
+[
+ {
+  "Args": null,
+  "PID": 4,
+  "Process": "System",
+  "__children": []
+ },
+ {
+  "Args": null,
+  "PID": 100,
+  "Process": "Registry",
+  "__children": []
+ },
+ {
+  "Args": "\\SystemRoot\\System32\\smss.exe",
+  "PID": 440,
+  "Process": "smss.exe",
+  "__children": []
+ },
+ {
+  "Args": "%SystemRoot%\\system32\\csrss.exe ObjectDirectory=\\Windows SharedSection=1024,20480,768 Windows=On SubSystemType=Windows ServerDll=basesrv,1 ServerDll=winsrv:UserServerDllInitialization,3 ServerDll=sxssrv,4 ProfileControl=Off MaxRequestThreads=16",
+  "PID": 664,
+  "Process": "csrss.exe",
+  "__children": []
+ },
+ {
+  "Args": "wininit.exe",
+  "PID": 752,
+  "Process": "wininit.exe",
+  "__children": []
+ }
+]

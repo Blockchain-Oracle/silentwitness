@@ -55,13 +55,19 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
 
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
     from silentwitness_mcp.index.ingest import IngestError, ingest_image_timeline
-    from silentwitness_mcp.index.ingest_artifacts import ingest_prepared_artifacts
+    from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
+    from silentwitness_mcp.index.ingest_memory import ingest_memory_image
 
     audit = AuditLogger(case_dir, examiner)
     t0 = time.monotonic()
     counts: dict[str, int] = {}
     plaso_rows = 0
+    memory_counts: dict[str, int] = {}
+    memory_total = 0
     advisories: list[str] = []
+    # Sentinel so the post-finally summary doesn't UnboundLocalError if the try block
+    # raised before `ingested` was assigned (e.g. EvidenceIndex open fails).
+    ingested = IngestResult()
     try:
         audit_id = audit.next_audit_id()
         out.print(
@@ -100,13 +106,37 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
                         "— targeted spine still indexed (see advisory)",
                         highlight=False,
                     )
+            memory_images = [r for r in artifacts if r.type == EvidenceType.MEMORY_DUMP]
+            for rec in memory_images:
+                out.print(
+                    f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name} "
+                    "(pslist/cmdline/netscan/malfind/psscan; can take 30+ min)",
+                    highlight=False,
+                )
+                mem = ingest_memory_image(
+                    rec.path,
+                    idx,
+                    audit_id=audit_id,
+                    artifact_path=str(rec.path.name),
+                    host=host,
+                )
+                for plugin, written in mem.counts.items():
+                    memory_counts[plugin] = memory_counts.get(plugin, 0) + written
+                for plugin, message in mem.failures:
+                    advisories.append(f"vol3 {plugin} failed on {rec.path.name}: {message}")
+                    err.print(
+                        f"[yellow]⚠[/yellow] vol3 {plugin} failed on {rec.path.name}: {message}",
+                        highlight=False,
+                    )
             out.print("[cyan]…[/cyan] building the full-text search index", highlight=False)
             idx.rebuild_fts()
-        total = sum(counts.values()) + plaso_rows
+        memory_total = sum(memory_counts.values())
+        total = sum(counts.values()) + plaso_rows + memory_total
         summary: dict[str, object] = {
             "rows": total,
             "targeted_counts": counts,
             "plaso_rows": plaso_rows,
+            "memory_counts": memory_counts,
             "failed_artifacts": len(ingested.failures),
             "skipped_records": sum(sum(s.values()) for _, _, s in ingested.diagnostics),
             "host": host,
@@ -125,7 +155,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
     finally:
         audit.close()
 
-    total = sum(counts.values()) + plaso_rows
+    total = sum(counts.values()) + plaso_rows + memory_total
     if total == 0:
         err.print(
             "[red]✗[/red] indexed 0 records — check that `prepare` extracted artifacts "
@@ -134,12 +164,14 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
         )
         return 1
     detail = ", ".join(f"{k}={v}" for k, v in sorted(counts.items())) or "none"
+    mem_detail = ", ".join(f"{k}={v}" for k, v in sorted(memory_counts.items())) or "none"
     failed = len(ingested.failures)
     mark = "[yellow]✓[/yellow]" if failed else "[green]✓[/green]"
     suffix = f" — [yellow]{failed} artifact(s) FAILED (see advisories)[/yellow]" if failed else ""
     out.print(
         f"{mark} indexed {total} records "
-        f"(targeted: {detail}; plaso: {plaso_rows}) into {case_dir / _INDEX_DB}{suffix}",
+        f"(targeted: {detail}; plaso: {plaso_rows}; memory: {mem_detail}) "
+        f"into {case_dir / _INDEX_DB}{suffix}",
         highlight=False,
     )
     return 0
