@@ -120,6 +120,27 @@ class CriticTrigger:
         time_threshold_hit = elapsed >= timedelta(minutes=self.interval_minutes)
         return findings_threshold_hit or time_threshold_hit
 
+    def advance_after_review(self, findings_json_path: Path) -> None:
+        """Advance the watermark past the leading CONTIGUOUS run of interpreted
+        records only — never past a record that is not yet interpreted.
+
+        record_observation and record_interpretation are separate calls, so an
+        observation can sit in findings.json before it has an interpretation. If
+        we advanced unconditionally to the total count, that observation would
+        fall below the watermark and never be reviewed once its interpretation
+        lands. Stopping at the first un-interpreted record keeps it eligible for
+        the next pass. (Records that become reviewable after an un-interpreted
+        gap may be re-reviewed — bounded token cost, never a silent skip.)
+        """
+        raw = self._read_findings_json(findings_json_path)
+        advance = self._state.last_critic_finding_count
+        for rec in raw[advance:]:
+            if isinstance(rec, dict) and rec.get("interpretations"):
+                advance += 1
+            else:
+                break
+        self.mark_fired(advance)
+
     def mark_fired(self, current_finding_count: int) -> None:
         """Persist the firing watermark atomically; thread-safe; monotonic-only.
 

@@ -91,6 +91,11 @@ def test_ghost_process_silent_with_memory_evidence() -> None:
     assert detect_ghost_process(f) is None
 
 
+def test_ghost_process_silent_without_live_process_claim() -> None:
+    f = _finding("svc.exe was written to disk.", ("MFT path=Windows/Temp/svc.exe",))
+    assert detect_ghost_process(f) is None
+
+
 # ---------------------------------------------------------------------------
 # TIMESTAMP_PARADOX
 # ---------------------------------------------------------------------------

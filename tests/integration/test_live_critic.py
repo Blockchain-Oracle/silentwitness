@@ -18,6 +18,7 @@ from silentwitness_agent.critic_trigger import CriticTrigger
 from silentwitness_agent.investigator import InvestigatorDeps
 from silentwitness_agent.live_critic import (
     build_critic_hooks,
+    build_live_critic_hooks,
     register_pending_critique_instruction,
     render_pending_critiques,
     route_live_verdicts,
@@ -199,22 +200,170 @@ async def test_critique_failure_does_not_abort_run(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# watermark discipline — the Critical fix
+# ---------------------------------------------------------------------------
+
+
+async def test_routing_failure_does_not_advance_watermark(tmp_path: Path) -> None:
+    """If routing fails, the window must NOT be marked reviewed — it re-fires."""
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    _write_findings(case_dir, 3)
+    deps = _make_deps(case_dir)
+
+    async def _stub(cdir, examiner, findings, *, model=None):  # type: ignore[no-untyped-def]
+        return CriticReport(
+            verdicts=[CriticVerdictRecord(finding_id="O-001", verdict="AGREE", reason="ok")],
+            tokens_spent=0,
+            time_elapsed_ms=0.0,
+        )
+
+    trigger = CriticTrigger(case_dir=case_dir, examiner="aj", interval_findings=2)
+    before = trigger._state.last_critic_finding_count
+    hooks = build_critic_hooks(case_dir, "aj", trigger, critique_fn=_stub)
+
+    class _Ctx:
+        def __init__(self, d: InvestigatorDeps) -> None:
+            self.deps = d
+
+    import silentwitness_agent.live_critic as lc
+
+    def _boom_route(*a: object, **k: object) -> int:
+        raise OSError("disk full")
+
+    original = lc.route_live_verdicts
+    lc.route_live_verdicts = _boom_route  # type: ignore[assignment]
+    try:
+        await hooks.after_model_request(_Ctx(deps), request_context=None, response="r")  # type: ignore[arg-type]
+    finally:
+        lc.route_live_verdicts = original  # type: ignore[assignment]
+    # Watermark untouched → the window will be re-reviewed, not silently lost.
+    assert trigger._state.last_critic_finding_count == before
+
+
+def test_advance_after_review_stops_at_uninterpreted_record(tmp_path: Path) -> None:
+    """The watermark advances past the leading interpreted run only — an
+    observation awaiting its interpretation stays eligible."""
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    findings = [
+        {"observation_id": "O-001", "text": "a", "interpretations": [{"text": "i"}]},
+        {"observation_id": "O-002", "text": "b", "interpretations": []},  # not yet interpreted
+        {"observation_id": "O-003", "text": "c", "interpretations": [{"text": "i"}]},
+    ]
+    (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
+    trigger = CriticTrigger(case_dir=case_dir, examiner="aj")
+    trigger.advance_after_review(case_dir / "findings.json")
+    # Advanced past O-001 only; stopped at the uninterpreted O-002.
+    assert trigger._state.last_critic_finding_count == 1
+
+
+# ---------------------------------------------------------------------------
+# deterministic detector floor reaches pending even when the LLM critic fails
+# ---------------------------------------------------------------------------
+
+
+async def test_detector_floor_routes_when_llm_fails(tmp_path: Path) -> None:
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
+    # A finding that trips EXECUTION_OVERCLAIM (execution claim + presence-only).
+    findings = [
+        {
+            "observation_id": "O-001",
+            "text": "nc.exe in Downloads",
+            "cited_spans": [{"record_id": 1, "span_text": "MFT path=Downloads/nc.exe"}],
+            "interpretations": [{"text": "the attacker executed nc.exe", "confidence": "HIGH"}],
+        },
+        {
+            "observation_id": "O-002",
+            "text": "second",
+            "cited_spans": [{"record_id": 2, "span_text": "MFT path=x"}],
+            "interpretations": [{"text": "benign", "confidence": "LOW"}],
+        },
+    ]
+    (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
+    deps = _make_deps(case_dir)
+
+    async def _boom(cdir, examiner, fs, *, model=None):  # type: ignore[no-untyped-def]
+        raise RuntimeError("no API key")
+
+    trigger = CriticTrigger(case_dir=case_dir, examiner="aj", interval_findings=2)
+    hooks = build_critic_hooks(case_dir, "aj", trigger, critique_fn=_boom)
+
+    class _Ctx:
+        def __init__(self, d: InvestigatorDeps) -> None:
+            self.deps = d
+
+    await hooks.after_model_request(_Ctx(deps), request_context=None, response="r")  # type: ignore[arg-type]
+    # The deterministic floor still produced a CHALLENGE for the overclaim.
+    assert any(v.finding_id == "O-001" for v in deps.pending_critiques)
+    # And a critic_error breadcrumb was written.
+    assert "critic_error" in (case_dir / "audit" / "critic.jsonl").read_text()
+
+
+def test_route_live_verdicts_dedupes_by_finding_id() -> None:
+    pending = [CriticVerdictRecord(finding_id="O-001", verdict="CHALLENGE", reason="first")]
+    verdicts = [
+        CriticVerdictRecord(finding_id="O-001", verdict="CHALLENGE", reason="again"),
+        CriticVerdictRecord(finding_id="O-002", verdict="CHALLENGE", reason="new"),
+    ]
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        n = route_live_verdicts(Path(d), "aj", verdicts, pending)
+    assert n == 1  # O-001 already pending → only O-002 added
+    assert [v.finding_id for v in pending] == ["O-001", "O-002"]
+
+
+# ---------------------------------------------------------------------------
 # the dynamic instruction registers and renders against live deps
 # ---------------------------------------------------------------------------
 
 
-async def test_instruction_registers_and_renders(tmp_path: Path) -> None:
-    from pydantic_ai import Agent
+async def test_instruction_renders_challenges_into_a_real_run(tmp_path: Path) -> None:
+    """End-to-end: a pre-seeded CHALLENGE is rendered into the model prompt by the
+    dynamic instruction during an actual agent run."""
+    from pydantic_ai import Agent, capture_run_messages
+    from pydantic_ai.messages import ModelRequest
     from pydantic_ai.models.test import TestModel
 
     from silentwitness_agent.investigator import InvestigatorResult
 
+    case_dir = tmp_path / "case"
+    case_dir.mkdir()
     agent: Agent[InvestigatorDeps, InvestigatorResult] = Agent(
         TestModel(),
         deps_type=InvestigatorDeps,
         output_type=InvestigatorResult,
     )
+    register_pending_critique_instruction(agent)
+    deps = _make_deps(case_dir)
+    deps.pending_critiques.append(
+        CriticVerdictRecord(
+            finding_id="O-007", verdict="CHALLENGE", reason="overstates the cloud exfil claim"
+        )
+    )
+    with capture_run_messages() as messages:
+        await agent.run("go", deps=deps)
+    instructions = "\n".join(m.instructions or "" for m in messages if isinstance(m, ModelRequest))
+    assert "O-007" in instructions
+    assert "overstates the cloud exfil claim" in instructions
+
+
+def test_build_live_critic_hooks_composes_onto_a_real_agent(tmp_path: Path) -> None:
+    """The composition seam: build_live_critic_hooks returns a usable Hooks and
+    register_pending_critique_instruction attaches to a real investigator agent."""
+    from pydantic_ai import Agent
+    from pydantic_ai.models.test import TestModel
+
+    from silentwitness_agent.investigator import InvestigatorResult
+
+    hooks = build_live_critic_hooks(tmp_path, "aj", model="test")
+    assert "after_model_request" in hooks._registry  # type: ignore[attr-defined]
+
+    agent: Agent[InvestigatorDeps, InvestigatorResult] = Agent(
+        TestModel(), deps_type=InvestigatorDeps, output_type=InvestigatorResult
+    )
     before = len(agent._instructions)  # type: ignore[attr-defined]
     register_pending_critique_instruction(agent)
-    # The decorator attached an instructions function — its presence is the wiring.
     assert len(agent._instructions) == before + 1  # type: ignore[attr-defined]

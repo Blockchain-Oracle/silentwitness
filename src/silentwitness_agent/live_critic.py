@@ -12,12 +12,13 @@ live self-correction loop, not a post-hoc review pass.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.capabilities import Hooks
@@ -25,7 +26,7 @@ from pydantic_ai.messages import ModelResponse
 from pydantic_ai.models import ModelRequestContext
 
 from silentwitness_agent.contradiction_detectors import run_contradiction_detectors
-from silentwitness_agent.critic import CriticReport, CriticVerdictRecord, critique
+from silentwitness_agent.critic import CriticReport, CriticVerdictRecord, StagedFinding, critique
 from silentwitness_agent.critic_trigger import CriticTrigger
 from silentwitness_agent.investigator import InvestigatorDeps
 from silentwitness_common.atomic_io import append_jsonl_line
@@ -35,9 +36,39 @@ _LOG = logging.getLogger(__name__)
 _FINDINGS_JSON = "findings.json"
 _CRITIC_JSONL = "audit/critic.jsonl"
 
-# Injected so tests drive the loop with a FunctionModel critic (no API key) and
-# the production path uses the real fresh-context critic agent.
-CritiqueFn = Callable[..., Awaitable[CriticReport]]
+
+class CritiqueFn(Protocol):
+    """The critic entry point — real ``critique`` in production, a FunctionModel
+    stub in tests (so the loop drives with no API key)."""
+
+    async def __call__(
+        self,
+        case_dir: Path,
+        examiner: str,
+        findings: list[StagedFinding],
+        *,
+        model: str | None = ...,
+    ) -> CriticReport: ...
+
+
+def _audit_critic_error(case_dir: Path, examiner: str) -> None:
+    """Leave a durable breadcrumb in critic.jsonl when the LLM critic fails, so the
+    audit trail shows the pass degraded to deterministic detectors (not silence)."""
+    log = case_dir / _CRITIC_JSONL
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with contextlib.suppress(Exception):
+        append_jsonl_line(
+            log,
+            json.dumps(
+                {
+                    "type": "critic_error",
+                    "reason": "LLM critique failed; deterministic detectors only",
+                    "examiner": examiner,
+                    "ts": datetime.now(UTC).isoformat(),
+                    "phase": "investigate",
+                }
+            ),
+        )
 
 
 def _finding_count(case_dir: Path) -> int:
@@ -71,7 +102,9 @@ def route_live_verdicts(
     critic_log = case_dir / _CRITIC_JSONL
     critic_log.parent.mkdir(parents=True, exist_ok=True)
     ts = datetime.now(UTC).isoformat()
-    challenges = 0
+    # Phase 1: durably record every verdict FIRST. If this raises (disk full), it
+    # raises before any pending_critiques mutation, so the in-memory list never
+    # disagrees with the audit log.
     for v in verdicts:
         append_jsonl_line(
             critic_log,
@@ -88,8 +121,14 @@ def route_live_verdicts(
                 }
             ),
         )
-        if v.verdict == "CHALLENGE":
+    # Phase 2: push CHALLENGEs the agent hasn't already been told about (dedupe by
+    # finding_id so a re-reviewed window doesn't stack duplicates).
+    already = {v.finding_id for v in pending_critiques}
+    challenges = 0
+    for v in verdicts:
+        if v.verdict == "CHALLENGE" and v.finding_id not in already:
             pending_critiques.append(v)
+            already.add(v.finding_id)
             challenges += 1
     return challenges
 
@@ -163,9 +202,11 @@ def build_critic_hooks(
         count = _finding_count(case_dir)
         if not trigger.should_fire(count):
             return response
-        staged = trigger.staged_findings_for_review(case_dir / _FINDINGS_JSON)
-        trigger.mark_fired(count)
+        findings_json = case_dir / _FINDINGS_JSON
+        staged = trigger.staged_findings_for_review(findings_json)
         if not staged:
+            # Nothing reviewable yet (observations awaiting interpretation). Do NOT
+            # advance the watermark — those records stay eligible next tick.
             return response
         # Deterministic detectors first — a model-free CHALLENGE floor that fires
         # even if the LLM critic is unavailable.
@@ -179,12 +220,19 @@ def build_critic_hooks(
                 case_dir.name,
                 exc_info=True,
             )
+            _audit_critic_error(case_dir, examiner)
         try:
             route_live_verdicts(case_dir, examiner, verdicts, ctx.deps.pending_critiques)
         except Exception:
+            # Routing failed — do NOT advance the watermark, so this window is
+            # re-reviewed next tick rather than silently lost.
             _LOG.error(
                 "live critic: verdict routing failed (case=%s)", case_dir.name, exc_info=True
             )
+            return response
+        # Advance only after a successful review+route, and only past records that
+        # were actually interpreted (see CriticTrigger.advance_after_review).
+        trigger.advance_after_review(findings_json)
         return response
 
     return hooks
