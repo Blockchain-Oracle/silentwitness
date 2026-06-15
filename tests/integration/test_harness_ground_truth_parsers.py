@@ -266,3 +266,38 @@ def test_ground_truth_finding_roundtrip() -> None:
         serialized = original.model_dump_json()
         restored = GroundTruthFinding.model_validate_json(serialized)
         assert restored == original, f"{original.id}: round-trip mismatch"
+
+
+# ---------------------------------------------------------------------------
+# 11. ROCBA hand-crafted ground truth (the judged demo case)
+# ---------------------------------------------------------------------------
+
+
+def test_rocba_parser_returns_findings() -> None:
+    from harness.ground_truth.rocba_parser import parse
+
+    findings = parse()
+    assert len(findings) >= 8, f"expected ≥8 ROCBA findings, got {len(findings)}"
+
+
+def test_rocba_dataset_id_and_handcrafted_source() -> None:
+    from harness.ground_truth.rocba_parser import parse
+
+    for f in parse():
+        assert f.dataset_id == "rocba", f"{f.id}: wrong dataset_id {f.dataset_id}"
+        # SANS ships no answer key — every finding is hand-crafted from the briefing.
+        assert f.source == "hand_crafted", f"{f.id}: wrong source {f.source}"
+        assert f.source_url is None, f"{f.id}: hand_crafted must not carry a source_url"
+
+
+def test_rocba_covers_all_five_key_questions() -> None:
+    from harness.ground_truth.rocba_parser import parse
+
+    questions = {f.supporting_question_id for f in parse()}
+    assert {"Q1", "Q2", "Q3", "Q4", "Q5"} <= questions, f"missing questions: {questions}"
+
+
+def test_rocba_registered_in_scorer() -> None:
+    from harness.scorer import _GT_MODULES
+
+    assert _GT_MODULES.get("rocba") == "harness.ground_truth.rocba_parser"
