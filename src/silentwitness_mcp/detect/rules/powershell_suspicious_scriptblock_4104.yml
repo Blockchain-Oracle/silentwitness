@@ -1,0 +1,32 @@
+title: Suspicious PowerShell ScriptBlock
+id: a1f0c001-0004-4a01-9001-000000000004
+status: experimental
+description: A PowerShell script-block log (4104) containing download cradles or in-memory execution primitives — used to pull tooling in or push data out.
+author: SilentWitness
+date: 2026-06-15
+references:
+    - https://attack.mitre.org/techniques/T1059/001/
+logsource:
+    product: windows
+    service: powershell
+    category: ps_script
+detection:
+    selection:
+        EventID: 4104
+    suspicious:
+        ScriptBlockText|contains:
+            - 'Net.WebClient'
+            - 'Invoke-WebRequest'
+            - 'Invoke-RestMethod'
+            - 'DownloadString'
+            - 'DownloadFile'
+            - 'Invoke-Expression'
+            - 'IEX '
+            - 'FromBase64String'
+    condition: selection and suspicious
+falsepositives:
+    - Administrative scripts that legitimately download modules
+level: high
+tags:
+    - attack.execution
+    - attack.t1059.001

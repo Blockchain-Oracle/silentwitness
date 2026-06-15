@@ -71,24 +71,27 @@ def _event_data_pairs(root: Element) -> list[tuple[str, str]]:
     return pairs
 
 
-def _event_xml_to_record(
-    xml: str, *, source_path: str, sha256: str, audit_id: str, host: str
-) -> IndexRecord | None:
-    """Map one rendered EVTX event to an :class:`IndexRecord`, or None if unusable.
+def _event_fields(system: dict[str, str], root: Element) -> dict[str, str]:
+    """The flat field dict a Sigma rule matches against: System fields + EventData pairs.
 
-    Drops events with no ``EventID`` (malformed render) or unparseable XML. The text
-    is a single compact, FTS-searchable line: the EventID, channel, provider, computer,
-    and every ``EventData`` value (usernames, IPs, paths) so a keyword query surfaces
-    the event. ``artifact_path`` carries the EventRecordID so a citation resolves to the
-    exact event."""
-    try:
-        root = fromstring(xml)
-    except ParseError:
-        return None
-    system = _find_system(root)
-    eid = system.get("EventID")
-    if not eid:
-        return None
+    EventData ``Name=value`` pairs win over System keys on a name clash (the event-specific
+    value is the one a detection rule means)."""
+    fields = dict(system)
+    fields.update(_event_data_pairs(root))
+    return fields
+
+
+def _record_from_root(
+    root: Element,
+    system: dict[str, str],
+    eid: str,
+    *,
+    path: str,
+    sha256: str,
+    audit_id: str,
+    host: str,
+) -> IndexRecord:
+    """Build the searchable event row from an already-parsed event (channel, fields, ts)."""
     channel = system.get("Channel", "")
     parts = [
         f"EventID={eid}",
@@ -98,8 +101,6 @@ def _event_xml_to_record(
     ]
     parts.extend(f"{name}={value}" for name, value in _event_data_pairs(root))
     text = " ".join(p for p in parts if p).strip()
-    record_id = system.get("EventRecordID", "")
-    path = f"{source_path}#{record_id}" if record_id else source_path
     return IndexRecord(
         text=text[:MAX_TEXT],
         source_tool=f"evtx:{channel}" if channel else "evtx",
@@ -108,6 +109,97 @@ def _event_xml_to_record(
         ts=system.get("TimeCreated", ""),
         audit_id=audit_id,
         sha256=sha256,
+    )
+
+
+def _detection_records(
+    fields: dict[str, str],
+    system: dict[str, str],
+    eid: str,
+    *,
+    path: str,
+    sha256: str,
+    audit_id: str,
+    host: str,
+) -> Iterator[IndexRecord]:
+    """Yield a ``sigma:<level>`` row per Sigma rule that fires on this event.
+
+    Detection hits seed the agent's opening context (it starts from named alerts, not blind
+    search); ``artifact_path`` is the same EventRecordID citation as the event row so a hit
+    is traceable back to its source event."""
+    from silentwitness_mcp.detect.sigma_eval import evaluate_event
+
+    channel = system.get("Channel", "")
+    ts = system.get("TimeCreated", "")
+    for det in evaluate_event(fields):
+        tags = ",".join(det.tags)
+        text = (
+            f"SIGMA DETECTION level={det.level} rule={det.title} "
+            f"tags={tags} event_id={eid} channel={channel}"
+        )
+        yield IndexRecord(
+            text=text[:MAX_TEXT],
+            source_tool=f"sigma:{det.level}",
+            artifact_path=path,
+            host=host,
+            ts=ts,
+            audit_id=audit_id,
+            sha256=sha256,
+        )
+
+
+def _records_from_xml(
+    xml: str, *, source_path: str, sha256: str, audit_id: str, host: str
+) -> Iterator[IndexRecord]:
+    """Parse one rendered EVTX event once and yield its event row + any Sigma detections.
+
+    Drops events with no ``EventID`` (malformed render) or unparseable XML. The event text
+    is a single compact, FTS-searchable line (EventID, channel, provider, computer, and
+    every ``EventData`` value); ``artifact_path`` carries the EventRecordID so a citation
+    resolves to the exact event."""
+    try:
+        root = fromstring(xml)
+    except ParseError:
+        return
+    system = _find_system(root)
+    eid = system.get("EventID")
+    if not eid:
+        return
+    record_id = system.get("EventRecordID", "")
+    path = f"{source_path}#{record_id}" if record_id else source_path
+    yield _record_from_root(
+        root, system, eid, path=path, sha256=sha256, audit_id=audit_id, host=host
+    )
+    yield from _detection_records(
+        _event_fields(system, root),
+        system,
+        eid,
+        path=path,
+        sha256=sha256,
+        audit_id=audit_id,
+        host=host,
+    )
+
+
+def _event_xml_to_record(
+    xml: str, *, source_path: str, sha256: str, audit_id: str, host: str
+) -> IndexRecord | None:
+    """Map one rendered EVTX event to its event :class:`IndexRecord`, or None if unusable.
+
+    Thin wrapper over :func:`_records_from_xml` returning just the event row (no detection
+    rows) — kept for the pure-mapper unit tests."""
+    try:
+        root = fromstring(xml)
+    except ParseError:
+        return None
+    system = _find_system(root)
+    eid = system.get("EventID")
+    if not eid:
+        return None
+    record_id = system.get("EventRecordID", "")
+    path = f"{source_path}#{record_id}" if record_id else source_path
+    return _record_from_root(
+        root, system, eid, path=path, sha256=sha256, audit_id=audit_id, host=host
     )
 
 
@@ -120,11 +212,9 @@ def _rust_evtx_records(
     for record in PyEvtxParser(str(path)).records():
         if record is None:  # the binding types records() as Optional; never None in practice
             continue
-        rec = _event_xml_to_record(
+        yield from _records_from_xml(
             record["data"], source_path=cite, sha256=sha, audit_id=audit_id, host=host
         )
-        if rec is not None:
-            yield rec
 
 
 def _python_evtx_records(
@@ -142,11 +232,9 @@ def _python_evtx_records(
                 if stats is not None:
                     stats.skip("evtx_unrenderable_record")
                 continue
-            rec = _event_xml_to_record(
+            yield from _records_from_xml(
                 xml, source_path=cite, sha256=sha, audit_id=audit_id, host=host
             )
-            if rec is not None:
-                yield rec
 
 
 def evtx_file_records(

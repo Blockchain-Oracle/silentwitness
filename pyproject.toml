@@ -42,6 +42,11 @@ dependencies = [
     "spacy>=3.8.10,<3.9",
     # Hardened XML parsing for evidence-derived EVTX renders (index feeder)
     "defusedxml>=0.7,<0.8",
+    # Sigma rule parsing for the auto-detection pre-staging pass (pure-Python,
+    # LGPL-2.1 — runtime-linked only, permitted per scripts/license_gate.py). We
+    # use it to PARSE curated SigmaHQ-format rules; a small in-process matcher
+    # (detect/sigma_eval.py) evaluates the parsed AST against EVTX event dicts.
+    "pysigma>=0.11,<2",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
     "volatility3==2.27.0",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)

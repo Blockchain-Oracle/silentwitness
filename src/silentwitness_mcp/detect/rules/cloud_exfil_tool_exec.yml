@@ -1,0 +1,29 @@
+title: Cloud Exfiltration Tooling Execution
+id: a1f0c001-0006-4a01-9001-000000000006
+status: experimental
+description: Execution of a known bulk cloud-sync / transfer utility (rclone, megacmd, mega sync) — a classic "where was it transferred" exfiltration-to-cloud signal. Matches both the Sysmon (Image) and Security-4688 (NewProcessName) field taxonomies.
+author: SilentWitness
+date: 2026-06-15
+references:
+    - https://attack.mitre.org/techniques/T1567/002/
+logsource:
+    product: windows
+    category: process_creation
+detection:
+    image:
+        Image|endswith:
+            - '\rclone.exe'
+            - '\megacmd.exe'
+            - '\megasync.exe'
+    newproc:
+        NewProcessName|endswith:
+            - '\rclone.exe'
+            - '\megacmd.exe'
+            - '\megasync.exe'
+    condition: image or newproc
+falsepositives:
+    - Sanctioned backup jobs using rclone
+level: high
+tags:
+    - attack.exfiltration
+    - attack.t1567.002

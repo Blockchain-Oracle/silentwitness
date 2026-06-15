@@ -1,0 +1,21 @@
+title: Failed Logon Attempt
+id: a1f0c001-0001-4a01-9001-000000000001
+status: experimental
+description: A failed account logon (4625) — a single brute-force / credential-stuffing data point; clusters of these around an account indicate password guessing.
+author: SilentWitness
+date: 2026-06-15
+references:
+    - https://attack.mitre.org/techniques/T1110/
+logsource:
+    product: windows
+    service: security
+detection:
+    selection:
+        EventID: 4625
+    condition: selection
+falsepositives:
+    - User mistyping a password
+level: medium
+tags:
+    - attack.credential_access
+    - attack.t1110
