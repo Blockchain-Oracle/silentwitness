@@ -45,7 +45,7 @@ dependencies = [
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
     "volatility3==2.27.0",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
-    "matplotlib>=3.10,<3.11",
+    "matplotlib>=3.10,<3.12",
 ]
 
 [project.optional-dependencies]
