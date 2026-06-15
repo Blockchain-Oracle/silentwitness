@@ -1,5 +1,0 @@
-{"hypothesis_id": "H-001", "text": "if memory tells the story, then pslist will show a child without a parent", "transition": "form", "ts": "2026-06-13T12:00:04Z"}
-{"hypothesis_id": "H-001", "specialist": "memory", "transition": "dispatch", "ts": "2026-06-13T12:00:04Z"}
-{"hypothesis_id": "H-001", "transition": "confirm", "ts": "2026-06-13T12:00:09Z", "via_audit_id": "sift-example-20260613-001"}
-{"hypothesis_id": "H-001", "reason": "vol3 symbol-table mismatch; rebuilt", "transition": "pivot", "ts": "2026-06-13T12:00:14Z"}
-{"hypothesis_id": "H-001", "transition": "confirm", "ts": "2026-06-13T12:00:20Z", "via_audit_id": "sift-example-20260613-001"}

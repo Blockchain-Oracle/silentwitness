@@ -1,1 +1,0 @@
-{"finding_id": "F-example-001", "hmac_sha256": "12408fb4061cf2fd4d7b224876dd774603d988e85eba63f3209d39b4c3359769", "ledger_id": "L-example-001", "notes": "HMAC key is the literal string EXAMPLE-not-a-real-secret-EXAMPLE; documented in docs/EXAMPLE_EXECUTION_LOGS/README.md.", "pbkdf2_iter": 600000, "signed_at": "2026-06-13T12:00:25Z", "ts": "2026-06-13T12:00:25Z"}

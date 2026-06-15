@@ -663,9 +663,11 @@ Command names only here; full ergonomics specified in `docs/ux-spec.md` (deferre
 
 ---
 
-## 6. Claude Code integration
+## 6. MCP client integration (optional convenience layer)
 
-The drop-in `.claude/` config is the zero-setup judge convenience. SIFT 2026 ships Claude Code v2.0.61 at `/usr/local/bin/claude` per `context/.raw-design-research/03`.
+The SilentWitness MCP server is client-agnostic: any MCP-compatible client (Claude Code, Claude Desktop, Cherry Studio, LibreChat, Continue.dev, or a custom Pydantic-AI agent) can drive it over stdio. The forensic discipline (citation gate, entity gate, audit chain, corroboration tier, coverage gate) is enforced at the MCP-server and findings-pipeline layer — switching clients does not relax any guardrail. See the README's *Supported MCP clients* table for the canonical list.
+
+The artifacts under §6.1–§6.3 below are an **optional drop-in config for Claude Code v2.0.61** (which ships pre-installed on SIFT 2026 at `/usr/local/bin/claude` per `context/.raw-design-research/03`). They exist as a zero-setup convenience for judges reproducing on the OVA; on any other client, point your MCP server registration at `python -m silentwitness_mcp` and the same discipline applies. The drop-in is not load-bearing for the architecture.
 
 ### 6.1 `claude-code-config/CLAUDE.md`
 

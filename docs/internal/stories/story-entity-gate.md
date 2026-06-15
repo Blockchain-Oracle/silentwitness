@@ -46,7 +46,7 @@ When  verify_entities is called
 Then  the hallucinated list contains "192.168.4.7"
 And   success is False
 
-Given observation_text containing the SHA256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" present in the cited span
+Given observation_text containing the SHA256 "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" present in the cited span  <!-- pragma: allowlist secret  -- well-known SHA-256 of the empty string, not a credential -->
 When  verify_entities is called
 Then  the SHA256 is in extracted entities
 And   success is True
