@@ -47,6 +47,7 @@ silentwitness --help    # global command, ready
 ```bash
 # Recommended (uv tool):
 curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 uv tool install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
 
 # Alternative (pipx):

@@ -226,9 +226,9 @@ install_spacy_model() {
 # --help` works in the same shell session.
 #
 # uv is the bootstrapper (single static binary; no Python needed to install
-# it). Once present, `uv tool install` puts the CLI shim at
-# ``~/.local/bin/silentwitness`` (already on PATH per the uv installer's
-# shell hook).
+# it). `uv tool install` puts the CLI shim at ``~/.local/bin/silentwitness``,
+# so this script exports that path before probing uv or installing
+# SilentWitness.
 #
 # Repo root resolution: prefer the caller's CWD if it looks like a
 # silentwitness checkout; otherwise clone fresh to ``/opt/silentwitness/repo``
@@ -240,6 +240,11 @@ install_spacy_model() {
 # ---------------------------------------------------------------------------
 install_silentwitness_cli() {
     log "installing uv + silentwitness CLI globally"
+
+    # Keep this script deterministic. uv's installer can patch a shell rc file,
+    # but non-interactive installs and fresh SSH sessions do not necessarily
+    # source it before the next command runs.
+    export PATH="$HOME/.local/bin:$PATH"
 
     if ! command -v uv >/dev/null 2>&1; then
         log "uv not found — installing via astral.sh installer (no root needed)"
@@ -258,10 +263,6 @@ install_silentwitness_cli() {
         grep -q -i 'astral\|uv' "$uv_installer" \
             || fail "uv installer body missing astral/uv marker — refusing to execute"
         sh "$uv_installer" || fail "uv installer execution failed"
-        # uv installer attempts to patch the shell rc; behaviour varies by
-        # shell/OS/interactive state, so hard-export PATH for this script's
-        # duration regardless.
-        export PATH="$HOME/.local/bin:$PATH"
     fi
 
     command -v uv >/dev/null 2>&1 || fail "uv still not on PATH after install"
