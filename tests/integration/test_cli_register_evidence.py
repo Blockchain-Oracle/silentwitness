@@ -168,6 +168,7 @@ def test_recursive_registers_all_files(tmp_path: Path, monkeypatch: pytest.Monke
     evidence_dir = tmp_path / "batch"
     evidence_dir.mkdir()
     (evidence_dir / "disk.E01").write_bytes(b"image")
+    (evidence_dir / "disk.E01.sha256").write_text("0" * 64 + "  disk.E01\n")
     (evidence_dir / "ram.mem").write_bytes(b"memdump")
     (evidence_dir / "events.evtx").write_bytes(b"evtx")
     result = runner.invoke(
@@ -180,6 +181,32 @@ def test_recursive_registers_all_files(tmp_path: Path, monkeypatch: pytest.Monke
     assert len(data["records"]) == 3
     types = {r["type"] for r in data["records"]}
     assert types == {"disk_image", "memory_dump", "evtx"}
+
+
+def test_directory_registers_top_level_files_without_recursive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_dir = _init_case(tmp_path, "c008b", monkeypatch)
+    evidence_dir = tmp_path / "rocba"
+    evidence_dir.mkdir()
+    (evidence_dir / "rocba-cdrive.e01").write_bytes(b"image")
+    (evidence_dir / "rocba-cdrive.e01.sha256").write_text("0" * 64 + "  rocba-cdrive.e01\n")
+    (evidence_dir / "Rocba-Memory.zip").write_bytes(b"zip")
+    nested_dir = evidence_dir / "nested"
+    nested_dir.mkdir()
+    (nested_dir / "events.evtx").write_bytes(b"evtx")
+
+    result = runner.invoke(
+        app,
+        ["register-evidence", "c008b", str(evidence_dir)],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    data = json.loads((case_dir / "evidence.json").read_text())
+    paths = {Path(record["path"]).name for record in data["records"]}
+    assert paths == {"Rocba-Memory.zip", "rocba-cdrive.e01"}
+    assert "events.evtx" not in paths
 
 
 # ---------------------------------------------------------------------------

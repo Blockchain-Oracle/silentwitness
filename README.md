@@ -94,7 +94,7 @@ silentwitness export mr-evil-001 --md
 | Command | What it does |
 |---|---|
 | `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
-| `register-evidence` | Records the evidence path, classifies the artifact type, computes hashes, and refuses unsafe writable evidence mounts. |
+| `register-evidence` | Records an evidence file or starter-case folder, classifies artifact types, computes hashes, and refuses unsafe writable evidence mounts. |
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
 | `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. |
 | `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |

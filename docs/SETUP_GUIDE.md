@@ -76,8 +76,8 @@ export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"
 
 ## 5. Run an investigation - the workflow
 
-Each command is one line. We'll use a case named `rocba` and an image at `~/evidence/rocba.E01`
-(change the path to your image).
+Each command is one line. We'll use a case named `rocba` and an evidence file or starter-case
+folder at `~/evidence/rocba` (change the path to your evidence).
 
 ### Step 1 - Create the case workspace
 
@@ -91,11 +91,12 @@ case metadata, and per-case verification salt. This is the project folder for on
 ### Step 2 - Register the evidence
 
 ```bash
-silentwitness register-evidence rocba ~/evidence/rocba.E01
+silentwitness register-evidence rocba ~/evidence/rocba
 ```
 
-*What it does:* records what you are investigating, classifies the artifact type, computes hashes,
-and refuses unsafe writable evidence mounts. The original evidence is not modified.
+*What it does:* records what you are investigating, classifies artifact types, computes hashes,
+and refuses unsafe writable evidence mounts. If you pass a folder, direct evidence files are
+registered and downloaded `.sha256` sidecars are skipped. The original evidence is not modified.
 
 *What you'll see:* a confirmation with the image's SHA-256 hash.
 

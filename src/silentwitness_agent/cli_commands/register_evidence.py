@@ -24,6 +24,25 @@ from silentwitness_mcp.evidence.registry import (
 )
 
 
+def _collect_files(path: Path, *, recursive: bool) -> list[Path]:
+    """Collect evidence files from a file or directory path.
+
+    Directory registration scans direct children by default. `--recursive` adds
+    nested children. SHA256 sidecars written by the starter-case downloader are
+    integrity metadata, not evidence artifacts.
+    """
+    if path.is_file():
+        return [path]
+    if not path.is_dir():
+        return []
+
+    candidates = path.rglob("*") if recursive else path.iterdir()
+    return sorted(
+        (p for p in candidates if p.is_file() and p.suffix.lower() != ".sha256"),
+        key=lambda p: str(p),
+    )
+
+
 def run(
     case_dir: Path,
     case_id: str,
@@ -44,8 +63,7 @@ def run(
         return 1
 
     try:
-        candidates = path.rglob("*") if recursive and path.is_dir() else [path]
-        files = [p for p in candidates if p.is_file()]
+        files = _collect_files(path, recursive=recursive)
     except PermissionError as exc:
         err.print(f"[red]✗[/red] permission denied traversing '{path}': {exc}", highlight=False)
         return 1
