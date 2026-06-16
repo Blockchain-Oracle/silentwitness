@@ -113,15 +113,15 @@ SilentWitness is the first hypothesis-first DFIR agent to ship the *architectura
 
 ## Try it out
 
-Per-dataset walkthroughs (Nitroba, NIST Hacking Case, NIST Data Leakage): see [`docs/TRY_IT_OUT.md`](./docs/TRY_IT_OUT.md).
+Per-case walkthroughs (Nitroba, NIST Hacking Case, NIST Data Leakage): see [`docs/TRY_IT_OUT.md`](./docs/TRY_IT_OUT.md).
 
 ## Accuracy report
 
 Measured Δ vs vanilla Protocol SIFT 2026 baseline: see [`docs/ACCURACY_REPORT.md`](./docs/ACCURACY_REPORT.md).
 
-## Datasets
+## Starter Cases
 
-Provenance + memorization-risk disclosure per case: see [`docs/DATASETS.md`](./docs/DATASETS.md).
+Provenance + memorization-risk disclosure per case: see [`docs/STARTER_CASES.md`](./docs/STARTER_CASES.md).
 
 ## Example execution logs
 
@@ -154,4 +154,4 @@ Tests run on every push: see [`.github/workflows/ci.yml`](./.github/workflows/ci
 
 ## Acknowledgments
 
-Built against the **AppliedIR / Valhuntir** bar SANS cites as the IR-agent target; baseline comparison against **teamdfir / protocol-sift** for the vanilla SIFT 2026 reference path. Datasets sourced from Nitroba (Wireshark University) and NIST (DFR / CFReDS).
+Built against the **AppliedIR / Valhuntir** bar SANS cites as the IR-agent target; baseline comparison against **teamdfir / protocol-sift** for the vanilla SIFT 2026 reference path. Evidence corpora are sourced from Nitroba (Wireshark University) and NIST (DFR / CFReDS).

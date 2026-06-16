@@ -149,7 +149,7 @@ silentwitness/
 │   ├── ACCURACY_REPORT.md
 │   ├── SETUP_GUIDE.md
 │   ├── TRY_IT_OUT.md
-│   ├── DATASETS.md
+│   ├── STARTER_CASES.md
 │   ├── THREE_CLAIM_TRACE.md
 │   ├── EXAMPLE_EXECUTION_LOGS/            # synthetic demo case
 │   └── diagrams/                          # tracked SVG diagrams for README + judge docs
@@ -577,8 +577,8 @@ Command names only here; full ergonomics live in `silentwitness --help`.
 - `silentwitness verify <case_id>` — re-checks the ledger.
 - `silentwitness report <case_id> [--profile full|executive|timeline|ioc] [--pdf <path>]` — renders.
 - `silentwitness verify-claim <finding_id>/<audit_id>` — opens the cited audit entry.
-- `silentwitness baseline-run <dataset>` — runs vanilla Protocol SIFT for delta comparison.
-- `silentwitness score <case_id>` — emits precision/recall/hallucination vs ground truth for the harness datasets.
+- `silentwitness baseline-run <case-id>` — runs vanilla Protocol SIFT for delta comparison.
+- `silentwitness score <case_id>` — emits precision/recall/hallucination vs ground truth for the harness cases.
 
 ---
 
@@ -904,7 +904,7 @@ Implementing agents must not weaken any of these gates without an ADR.
 - **README shape:** project name + pitch + demo video + 3-command run + architecture diagram + MIT badge — in that order, above the fold.
 - **CLI structure:** all commands listed in §5.6 must be implemented by submission.
 - **CI green on main.** Final main commit prior to submission must have all CI jobs green including the property-test slow profile.
-- **8 mandatory deliverables** produced and linked from README: repo, video, architecture diagram, write-up, dataset doc, accuracy report, setup instructions, agent execution logs (sample case shipped at `docs/EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/`).
+- **8 mandatory deliverables** produced and linked from README: repo, video, architecture diagram, write-up, starter-case doc, accuracy report, setup instructions, agent execution logs (sample case shipped at `docs/EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/`).
 
 ---
 

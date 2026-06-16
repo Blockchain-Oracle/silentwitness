@@ -1,23 +1,23 @@
-# Datasets — SilentWitness evidence corpus
+# Starter cases — SilentWitness evidence corpus
 
-This catalog documents every evidence dataset SilentWitness is tested against (accuracy harness + memorization-risk disclosure). For each dataset: source URL, canonical SHA256 (lifted verbatim from `harness/datasets/<id>.manifest.json`), what we tested, what we found, what we missed, the memorization-risk band, and a reproducibility recipe judges can follow step by step.
+This catalog documents the official starter cases and benchmark evidence corpora SilentWitness is tested against. For each case: source URL, canonical SHA256 (lifted verbatim from `harness/datasets/<id>.manifest.json`), what we tested, what we found, what we missed, the memorization-risk band, and a reproducibility recipe judges can follow step by step.
 
 ## At a glance
 
-| Dataset | Size | Role | Memorization-risk band | Status |
+| Case | Size | Role | Memorization-risk band | Status |
 |---|---|---|---|---|
 | Nitroba University Harassment | ~56 MB pcap | Active — primary IR benchmark | Medium (community writeups exist; no official solution PDF) | active |
 | NIST CFReDS Data Leakage Case | ~20 GB E01 + media | Active — broad-coverage Windows IR | Medium per-artifact / High scenario-summary | active |
 | NIST CFReDS Hacking Case (Mr. Evil) | ~6 GB E01 | Active — verify entity-gate behavior under high-memorization pressure | **High** (canonical answers in hundreds of writeups) | active |
 | case-trapdoor (synthetic adversary pair) | n/a | Optional / Epic 15 | None (synthetic, no public answers) | optional (skipped until Epic 15 ships) |
 
-## Official SANS Find Evil! 2026 datasets (Egnyte share)
+## Official SANS Find Evil! 2026 starter cases (Egnyte share)
 
-The hackathon's official cases live behind a public Egnyte share — no account and no API key required. Use the packaged `silentwitness datasets` command; it speaks the Egnyte share-link API directly (the same one their web UI uses), paginates folder listings, and streams files in 1 MiB chunks with on-the-fly SHA256.
+The hackathon's official starter cases live behind a public Egnyte share — no account and no API key required. Use the packaged `silentwitness starter-cases` command; it speaks the Egnyte share-link API directly (the same one their web UI uses), paginates folder listings, and streams files in 1 MiB chunks with on-the-fly SHA256.
 
 ```bash
 # Enumerate every case at the share root (counts + sizes)
-silentwitness datasets catalog
+silentwitness starter-cases catalog
 
 # Output (as of 2026-06-15):
 #   Compromised APT Attack Scenarios: 33 files, 177.44 GiB
@@ -25,16 +25,16 @@ silentwitness datasets catalog
 #   Standard Forensics Case 2:         2 files,  40.73 GiB
 
 # Drill into one case
-silentwitness datasets catalog "Standard Forensic Case"
+silentwitness starter-cases catalog "Standard Forensic Case"
 #       38.3 MiB  /HACKATHON-2026/Standard Forensic Case/ROCBA-BACKGROUND.pptx
 #      22.05 GiB  /HACKATHON-2026/Standard Forensic Case/rocba-cdrive.e01
 #       5.29 GiB  /HACKATHON-2026/Standard Forensic Case/Rocba-Memory.zip
 
 # Dry-run a download (no GETs, just prints what it would do)
-silentwitness datasets download "Standard Forensic Case" /evidence/rocba --dry-run
+silentwitness starter-cases download "Standard Forensic Case" /evidence/rocba --dry-run
 
 # Real download — idempotent, resumable (skips files already at expected size)
-silentwitness datasets download "Standard Forensic Case" /evidence/rocba
+silentwitness starter-cases download "Standard Forensic Case" /evidence/rocba
 ```
 
 Verified locally on 2026-06-15: `ROCBA-BACKGROUND.pptx` (38.3 MiB) downloads cleanly with SHA256 `44a12c54d1324339…`. The large E01 + memory archives weren't downloaded during scaffolding; their size matches the Egnyte UI to the byte.
@@ -45,38 +45,38 @@ Verified locally on 2026-06-15: `ROCBA-BACKGROUND.pptx` (38.3 MiB) downloads cle
 
 Prerequisites: `uv==0.11.18` (or any 0.11.x; CLAUDE.md pins this), Python 3.12, and a working `bash`. The `evidence/` directory is `.gitignore`'d so binaries never enter the git index.
 
-The same recipe works for every active dataset. Substitute `<dataset>` with one of `nitroba`, `nist-data-leakage`, `nist-hacking-case`.
+The same recipe works for every active benchmark case. Substitute `<case-id>` with one of `nitroba`, `nist-data-leakage`, `nist-hacking-case`.
 
 ```bash
 # 1. Clone and install
 git clone https://github.com/Blockchain-Oracle/silentwitness.git && cd silentwitness
 uv sync
 
-# 2. Fetch the binary to the gitignored evidence root (see per-dataset section
-#    below for the exact URL — datasets ship from official archives only).
+# 2. Fetch the binary to the gitignored evidence root (see the per-case section
+#    below for the exact URL — corpora ship from official archives only).
 mkdir -p evidence/
 
 # 3. Verify hash against the committed manifest (strict mode aborts on drift).
 #    Note: NIST manifests pin SHA256 on first fetch; strict mode passes once
 #    the manifest's `<computed-on-fetch>` placeholder is populated.
 uv run python harness/datasets/verify_manifest.py \
-    --manifest harness/datasets/<dataset>.manifest.json --strict
+    --manifest harness/datasets/<case-id>.manifest.json --strict
 
 # 4. Run baseline + silentwitness + scorer + delta report
-#    (one-shot via `just harness DATASET=<dataset>`).
-just harness DATASET=<dataset>
+#    (one-shot via `just harness DATASET=<case-id>`).
+just harness DATASET=<case-id>
 # OR step-by-step:
-uv run python -m harness.baseline.runner --dataset <dataset> --evidence ./evidence
-uv run python -m harness.silentwitness.runner --dataset <dataset> --evidence ./evidence
-uv run python -m harness.scorer --dataset <dataset> \
-    --baseline harness/results/<dataset>/baseline-*.json \
-    --silentwitness harness/results/<dataset>/silentwitness-*.json \
+uv run python -m harness.baseline.runner --dataset <case-id> --evidence ./evidence
+uv run python -m harness.silentwitness.runner --dataset <case-id> --evidence ./evidence
+uv run python -m harness.scorer --dataset <case-id> \
+    --baseline harness/results/<case-id>/baseline-*.json \
+    --silentwitness harness/results/<case-id>/silentwitness-*.json \
     --evidence ./evidence
-uv run python -m harness.delta_report --dataset <dataset>
+uv run python -m harness.delta_report --dataset <case-id>
 
 # 5. Read the delta report and bar chart.
-cat harness/results/<dataset>/delta.md
-open harness/results/<dataset>/delta.png   # or xdg-open on Linux / start on Windows
+cat harness/results/<case-id>/delta.md
+open harness/results/<case-id>/delta.png   # or xdg-open on Linux / start on Windows
 ```
 
 ## Nitroba University Harassment
@@ -89,7 +89,7 @@ open harness/results/<dataset>/delta.png   # or xdg-open on Linux / start on Win
 - **What we found:** `harness/results/nitroba/delta.md` carries the latest scoring run with precision / recall / hallucination_rate / time-to-handoff-ready-report. Re-run `just harness DATASET=nitroba` or follow the reproducibility recipe above to regenerate.
 - **What we missed:** the top FALSE_NEGATIVE classifications from the latest scoring run are surfaced as `harness.scorer.compute_false_negatives` rows in `harness/results/nitroba/scoring-*.json`; the delta report (`harness/results/nitroba/delta.md`) summarizes the top 5.
 - **Memorization-risk band:** Medium. Community writeups exist on academic course pages and DFIR blogs but no official answer key is published; the gates are exercised under realistic information-leakage pressure.
-- **Reproducibility:** the dataset is publicly available from the Digital Corpora archive; redistribution permitted under their documented terms.
+- **Reproducibility:** the corpus is publicly available from the Digital Corpora archive; redistribution permitted under their documented terms.
 
 ## NIST CFReDS Data Leakage Case
 
@@ -105,7 +105,7 @@ open harness/results/<dataset>/delta.png   # or xdg-open on Linux / start on Win
 
 ## NIST CFReDS Hacking Case (Greg Schardt / Mr. Evil)
 
-> **Memorization-risk disclosure (verbatim):** Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) appear in hundreds of indexed writeups. A passing finding here is not evidence of working forensic capability — it is evidence the model has seen the writeups. The citation + entity gate forces every claim to ground in evidence-present spans rather than regurgitated memory; this dataset demonstrates the gates work, not latent capability.
+> **Memorization-risk disclosure (verbatim):** Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) appear in hundreds of indexed writeups. A passing finding here is not evidence of working forensic capability — it is evidence the model has seen the writeups. The citation + entity gate forces every claim to ground in evidence-present spans rather than regurgitated memory; this case demonstrates the gates work, not latent capability.
 
 - **Source URL:** `https://cfreds-archive.nist.gov/Hacking_Case.html` (canonical single reassembled EnCase E01 at `images/4Dell Latitude CPi.E01`)
 - **Size:** ~6 GB E01 (reassembled from the 7 segmented files NIST originally distributed)
@@ -114,32 +114,32 @@ open harness/results/<dataset>/delta.png   # or xdg-open on Linux / start on Win
 - **What we tested:** Ethereal / Anonymizer / Cain tool-installation provenance; intercepted-credential trail; LNK / Prefetch / Registry recovery.
 - **What we found:** `harness/results/nist-hacking-case/delta.md` carries the latest scoring run.
 - **What we missed:** top FALSE_NEGATIVE rows from `harness/results/nist-hacking-case/scoring-*.json`.
-- **Memorization-risk band:** **High.** This is the dataset where the entity-gate proof-of-correctness lives — every claim must cite an audit row whose stored stdout contains the entity, otherwise the observation is rejected.
+- **Memorization-risk band:** **High.** This is the case where the entity-gate proof-of-correctness lives — every claim must cite an audit row whose stored stdout contains the entity, otherwise the observation is rejected.
 - **Reproducibility note:** 6 GB download. After verify, expect ~30 minutes baseline + silentwitness runs (the model walks the same evidence the baseline does; the Δ vs the baseline is the headline metric).
 
 ## case-trapdoor
 
 - **Status:** Optional. Synthetic adversary-pair challenge case created specifically for SilentWitness evaluation to avoid LLM memorization bias. Evidence artifacts and ground-truth answers will be provided when Epic 15 ships.
 - **Source:** `harness/datasets/case-trapdoor.manifest.json` (placeholder SHA256; the scorer and runners skip this dataset gracefully when the placeholder is detected).
-- **Why it matters:** when shipped, this is the dataset where a *clean* delta is achievable — no internet writeups can leak answers because the case did not exist before Epic 15.
+- **Why it matters:** when shipped, this is the case where a *clean* delta is achievable — no internet writeups can leak answers because the case did not exist before Epic 15.
 - **Memorization-risk band:** None (synthetic, no public answers).
 
 ## Gitignored evidence binaries
 
-The repo never commits dataset binaries. `evidence/` is in `.gitignore`; fetched files land there and stay local. The committed manifests at `harness/datasets/<id>.manifest.json` carry the canonical SHA256, expected size, and source URL — that triple is what the CI hash-verify gate (`dataset-hash-verify` workflow) anchors against. If you receive a corpus from a colleague, drop it under `evidence/<dataset>/` and run step 3 of the recipe to confirm the hash matches before scoring.
+The repo never commits evidence binaries. `evidence/` is in `.gitignore`; fetched files land there and stay local. The committed manifests at `harness/datasets/<id>.manifest.json` carry the canonical SHA256, expected size, and source URL — that triple is what the CI hash-verify gate anchors against. If you receive a corpus from a colleague, drop it under `evidence/<case-id>/` and run step 3 of the recipe to confirm the hash matches before scoring.
 
 ## Verification
 
-Two CI gates protect against silent dataset drift:
+Two CI gates protect against silent corpus drift:
 
 1. **`harness/datasets/verify_manifest.py --strict`** (run by humans + by `just harness`): reads the committed manifest, computes the SHA256 of the on-disk binary, asserts equality, and aborts with a non-zero exit if either is missing or drifts. Strict mode also refuses to run against a `<computed-on-fetch>` placeholder so an un-pinned manifest never produces fake-clean scoring numbers.
-2. **`.github/workflows/dataset-hash-verify.yml`** (CI on every PR touching `harness/datasets/`): re-computes the SHA256 of the committed `nitroba-stub.manifest.json` fixture and asserts the manifest's hash field is correct. This catches a maintainer mutating the manifest without re-fetching.
+2. **Starter-case hash verification in CI** (on every PR touching `harness/datasets/`): re-computes the SHA256 of the committed `nitroba-stub.manifest.json` fixture and asserts the manifest's hash field is correct. This catches a maintainer mutating the manifest without re-fetching.
 
 Anyone can independently verify a manifest by running `sha256sum <binary> | grep -i $(jq -r .sha256 harness/datasets/<id>.manifest.json)`.
 
 ## Sources + licenses
 
-| Dataset | Distributor | License / terms |
+| Case | Distributor | License / terms |
 |---|---|---|
 | Nitroba | Digital Corpora (NPS) | Free for research + education; redistribution permitted under Digital Corpora's documented terms |
 | NIST Data Leakage Case | NIST CFReDS Archive | Public domain (US Government work, 17 USC §105); redistribution permitted |
@@ -148,7 +148,7 @@ Anyone can independently verify a manifest by running `sha256sum <binary> | grep
 
 ## Cross-references
 
-- Per-dataset binary hashes + ground-truth parser pointers: `harness/datasets/<id>.manifest.json`.
+- Per-case binary hashes + ground-truth parser pointers: `harness/datasets/<id>.manifest.json`.
 - Scoring + delta artifacts (regenerated by the recipe above): `harness/results/<id>/`.
-- Accuracy report (cross-dataset summary): `ACCURACY_REPORT.md`.
+- Accuracy report (cross-case summary): `ACCURACY_REPORT.md`.
 - Memorization-risk discipline: verbatim Mr. Evil paragraph quoted above.

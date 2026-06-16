@@ -15,7 +15,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
-from silentwitness_agent.cli_commands.datasets import app as datasets_app
+from silentwitness_agent.cli_commands.starter_cases import app as starter_cases_app
 from silentwitness_agent.config import SilentWitnessConfig, load_config
 from silentwitness_agent.report.template import Frontmatter, ReportStatus, dump_frontmatter
 from silentwitness_common.atomic_io import write_json_atomic, write_text_atomic
@@ -23,7 +23,18 @@ from silentwitness_common.version import __version__ as _sw_version
 from silentwitness_mcp.audit.logger import AuditLogger
 
 app = typer.Typer(no_args_is_help=True, add_completion=False, rich_markup_mode="rich")
-app.add_typer(datasets_app, name="datasets", help="Catalog and download official datasets.")
+app.add_typer(
+    starter_cases_app,
+    name="starter-cases",
+    help="Catalog and download official starter cases.",
+)
+app.add_typer(
+    starter_cases_app,
+    name="datasets",
+    help="Deprecated alias for starter-cases.",
+    hidden=True,
+    deprecated=True,
+)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

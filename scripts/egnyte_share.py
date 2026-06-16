@@ -9,7 +9,7 @@ _SRC = Path(__file__).resolve().parents[1] / "src"
 if _SRC.is_dir():
     sys.path.insert(0, str(_SRC))
 
-from silentwitness_agent.datasets import egnyte_share as _impl  # noqa: E402
+from silentwitness_agent.starter_cases import egnyte_share as _impl  # noqa: E402
 
 CHUNK_BYTES = _impl.CHUNK_BYTES
 PAGE_LIMIT = _impl.PAGE_LIMIT

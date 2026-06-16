@@ -11,11 +11,11 @@
 #      upload. coverage.py has no native per-directory floor support; the
 #      script is the single source of truth for per-module floors.
 #
-#   3. The `dataset-hash-verify` step's inline comment says "Full NIST 2GB
+#   3. The `starter-case-hash-verify` step's inline comment says "Full NIST 2GB
 #      image is NOT pulled in CI." 2 GB is the actual size of the NIST PC
 #      E01 image.
 #
-#   4. The `docker-build` job's `needs:` list includes `dataset-hash-verify`.
+#   4. The `docker-build` job's `needs:` list includes `starter-case-hash-verify`.
 #      The verify job is a stub today and gating docker-build on a no-op
 #      stub costs nothing now and ensures the real verifier (once it
 #      automatically becomes a docker-build prerequisite when it lands.
@@ -196,8 +196,8 @@ jobs:
           mapfile -t FILES < <(git ls-files '*.py')
           uv run python .pre-commit-hooks/file-size-guard.py "${FILES[@]}"
 
-  dataset-hash-verify:
-    name: dataset-hash-verify
+  starter-case-hash-verify:
+    name: starter-case-hash-verify
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -207,7 +207,7 @@ jobs:
           enable-cache: true
       - run: uv python install ${{ env.PYTHON_VERSION_DEFAULT }}
       - run: uv sync --all-extras --frozen
-      - name: Verify dataset manifest hashes
+      - name: Verify starter-case manifest hashes
         # Verifies the Nitroba 60MB stub (committed under harness/datasets/stubs/).
         # Full NIST 2GB image is NOT pulled in CI; verified locally before submission.
         run: uv run python harness/datasets/verify_manifest.py --stub-only
@@ -267,7 +267,7 @@ jobs:
   docker-build:
     name: docker-build (push to GHCR)
     runs-on: ubuntu-24.04
-    needs: [lint, test, property-tests, file-size-guard, dataset-hash-verify, sbom, license-check]
+    needs: [lint, test, property-tests, file-size-guard, starter-case-hash-verify, sbom, license-check]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Gate: docs/DATASETS.md is structurally complete per story-dataset-doc.
+"""Gate: docs/STARTER_CASES.md is structurally complete.
 
 Enforces 13 rules (see check() body). All failures route through _fail() so the
 CI log carries a grep-able rule slug instead of a Python traceback.
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parents[1]
-_DOC = _REPO / "docs" / "DATASETS.md"
+_DOC = _REPO / "docs" / "STARTER_CASES.md"
 _MANIFEST_DIR = _REPO / "harness" / "datasets"
 _MAX_LINES = 400
 
@@ -52,7 +52,7 @@ _REQUIRED_H2 = (
 
 
 def _fail(rule: str, detail: str = "") -> int:
-    msg = f"DATASETS gate FAIL: {rule}"
+    msg = f"STARTER_CASES gate FAIL: {rule}"
     if detail:
         msg += f" — {detail}"
     print(msg, file=sys.stderr)
@@ -72,8 +72,8 @@ def check(doc_path: Path = _DOC, manifest_dir: Path = _MANIFEST_DIR) -> int:
     if len(lines) > _MAX_LINES:
         return _fail("max_lines", f"{len(lines)} > {_MAX_LINES}")
 
-    if not any(line.startswith("# Datasets") for line in lines[:5]):
-        return _fail("h1", "expected `# Datasets ...` within first 5 lines")
+    if not any(line.startswith("# Starter cases") for line in lines[:5]):
+        return _fail("h1", "expected `# Starter cases ...` within first 5 lines")
 
     for heading in _REQUIRED_H2:
         if heading not in text:
@@ -123,7 +123,7 @@ def check(doc_path: Path = _DOC, manifest_dir: Path = _MANIFEST_DIR) -> int:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Check docs/DATASETS.md against story gate.")
+    parser = argparse.ArgumentParser(description="Check docs/STARTER_CASES.md against story gate.")
     parser.add_argument("--doc", type=Path, default=_DOC)
     parser.add_argument("--manifest-dir", type=Path, default=_MANIFEST_DIR)
     args = parser.parse_args(argv)

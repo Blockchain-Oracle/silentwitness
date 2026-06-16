@@ -1,4 +1,4 @@
-"""Integration tests for `silentwitness datasets`."""
+"""Integration tests for `silentwitness starter-cases`."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from silentwitness_agent.cli import app
-from silentwitness_agent.cli_commands import datasets as dataset_cmd
-from silentwitness_agent.datasets.egnyte_share import Entry
+from silentwitness_agent.cli_commands import starter_cases as starter_case_cmd
+from silentwitness_agent.starter_cases.egnyte_share import Entry
 
 runner = CliRunner()
 
@@ -43,20 +43,22 @@ def _file(path: str, size: int = 4) -> Entry:
     )
 
 
-def test_datasets_help_exposes_catalog_and_download() -> None:
-    result = runner.invoke(app, ["datasets", "--help"], catch_exceptions=False)
+def test_starter_cases_help_exposes_catalog_and_download() -> None:
+    result = runner.invoke(app, ["starter-cases", "--help"], catch_exceptions=False)
 
     assert result.exit_code == 0
     assert "catalog" in result.output
     assert "download" in result.output
 
 
-def test_datasets_catalog_summarizes_official_cases(monkeypatch) -> None:
+def test_starter_cases_catalog_summarizes_official_cases(monkeypatch) -> None:
     fake = _FakeClient()
-    monkeypatch.setattr(dataset_cmd, "open_session", lambda: fake)
-    monkeypatch.setattr(dataset_cmd, "resolve_case_root", lambda _client, _case: "/HACKATHON-2026")
+    monkeypatch.setattr(starter_case_cmd, "open_session", lambda: fake)
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd, "resolve_case_root", lambda _client, _case: "/HACKATHON-2026"
+    )
+    monkeypatch.setattr(
+        starter_case_cmd,
         "list_contents",
         lambda _client, _root: iter([_folder("Standard Forensic Case"), _folder("APT Case")]),
     )
@@ -66,34 +68,34 @@ def test_datasets_catalog_summarizes_official_cases(monkeypatch) -> None:
             return iter([_file(f"{root}/disk.E01", 1024), _file(f"{root}/memory.raw", 2048)])
         return iter([_file(f"{root}/trace.pcap", 512)])
 
-    monkeypatch.setattr(dataset_cmd, "walk", _walk)
+    monkeypatch.setattr(starter_case_cmd, "walk", _walk)
 
-    result = runner.invoke(app, ["datasets", "catalog"], catch_exceptions=False)
+    result = runner.invoke(app, ["starter-cases", "catalog"], catch_exceptions=False)
 
     assert result.exit_code == 0
-    assert "Official Find Evil 2026 datasets" in result.output
+    assert "Official Find Evil 2026 starter cases" in result.output
     assert "Standard Forensic Case" in result.output
     assert "APT Case" in result.output
     assert "2" in result.output
     assert fake.closed is True
 
 
-def test_datasets_catalog_case_prints_files(monkeypatch) -> None:
-    monkeypatch.setattr(dataset_cmd, "open_session", _FakeClient)
+def test_starter_cases_catalog_case_prints_files(monkeypatch) -> None:
+    monkeypatch.setattr(starter_case_cmd, "open_session", _FakeClient)
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "resolve_case_root",
         lambda _client, _case: "/HACKATHON-2026/Standard Forensic Case",
     )
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "walk",
         lambda _client, root: iter([_file(f"{root}/disk.E01", 1024)]),
     )
 
     result = runner.invoke(
         app,
-        ["datasets", "catalog", "Standard Forensic Case"],
+        ["starter-cases", "catalog", "Standard Forensic Case"],
         catch_exceptions=False,
     )
 
@@ -102,25 +104,25 @@ def test_datasets_catalog_case_prints_files(monkeypatch) -> None:
     assert "Total: 1 files" in result.output
 
 
-def test_datasets_download_dry_run_uses_default_evidence_target(
+def test_starter_cases_download_dry_run_uses_default_evidence_target(
     monkeypatch, tmp_path: Path
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(dataset_cmd, "open_session", _FakeClient)
+    monkeypatch.setattr(starter_case_cmd, "open_session", _FakeClient)
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "resolve_case_root",
         lambda _client, _case: "/HACKATHON-2026/Standard Forensic Case",
     )
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "walk",
         lambda _client, root: iter([_file(f"{root}/disk.E01", 1024)]),
     )
 
     result = runner.invoke(
         app,
-        ["datasets", "download", "Standard Forensic Case", "--dry-run"],
+        ["starter-cases", "download", "Standard Forensic Case", "--dry-run"],
         catch_exceptions=False,
     )
 
@@ -129,16 +131,16 @@ def test_datasets_download_dry_run_uses_default_evidence_target(
     assert "evidence/standard-forensic-case/disk.E01" in result.output.replace("\n", "")
 
 
-def test_datasets_download_streams_files_to_target(monkeypatch, tmp_path: Path) -> None:
+def test_starter_cases_download_streams_files_to_target(monkeypatch, tmp_path: Path) -> None:
     streamed: list[Path] = []
-    monkeypatch.setattr(dataset_cmd, "open_session", _FakeClient)
+    monkeypatch.setattr(starter_case_cmd, "open_session", _FakeClient)
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "resolve_case_root",
         lambda _client, _case: "/HACKATHON-2026/Standard Forensic Case",
     )
     monkeypatch.setattr(
-        dataset_cmd,
+        starter_case_cmd,
         "walk",
         lambda _client, root: iter([_file(f"{root}/disk.E01", 4)]),
     )
@@ -149,11 +151,11 @@ def test_datasets_download_streams_files_to_target(monkeypatch, tmp_path: Path) 
         target.write_bytes(b"data")
         return "a" * 64
 
-    monkeypatch.setattr(dataset_cmd, "stream_file", _stream)
+    monkeypatch.setattr(starter_case_cmd, "stream_file", _stream)
 
     result = runner.invoke(
         app,
-        ["datasets", "download", "Standard Forensic Case", str(tmp_path / "rocba")],
+        ["starter-cases", "download", "Standard Forensic Case", str(tmp_path / "rocba")],
         catch_exceptions=False,
     )
 
@@ -161,3 +163,15 @@ def test_datasets_download_streams_files_to_target(monkeypatch, tmp_path: Path) 
     assert streamed == [tmp_path / "rocba" / "disk.E01"]
     assert "OK" in result.output
     assert "Done: 1 files" in result.output
+
+
+def test_datasets_alias_is_hidden_but_still_works() -> None:
+    root_help = runner.invoke(app, ["--help"], catch_exceptions=False)
+    assert root_help.exit_code == 0
+    assert "starter-cases" in root_help.output
+    assert "datasets" not in root_help.output
+
+    alias_help = runner.invoke(app, ["datasets", "--help"], catch_exceptions=False)
+    assert alias_help.exit_code == 0
+    assert "Deprecated" in alias_help.output or "deprecated" in alias_help.output
+    assert "catalog" in alias_help.output

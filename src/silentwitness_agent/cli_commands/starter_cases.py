@@ -1,4 +1,4 @@
-"""Official dataset catalog/download commands."""
+"""Official starter-case catalog/download commands."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from silentwitness_agent.datasets.egnyte_share import (
+from silentwitness_agent.starter_cases.egnyte_share import (
     human_size,
     list_contents,
     open_session,
@@ -27,7 +27,7 @@ _CATALOG_CASE_ARG = typer.Argument(
 )
 _DOWNLOAD_CASE_ARG = typer.Argument(
     ...,
-    help="Official case folder name from `datasets catalog`.",
+    help="Official case folder name from `starter-cases catalog`.",
 )
 _DOWNLOAD_TARGET_ARG = typer.Argument(
     None,
@@ -38,7 +38,7 @@ _DRY_RUN_OPT = typer.Option(False, "--dry-run", help="Print files without downlo
 
 def _case_slug(case_name: str) -> str:
     slug = re.sub(r"[^a-zA-Z0-9._-]+", "-", case_name.strip()).strip("-").lower()
-    return slug or "dataset"
+    return slug or "starter-case"
 
 
 def _close(client: Any) -> None:
@@ -52,7 +52,7 @@ def catalog(
     ctx: typer.Context,
     case: str | None = _CATALOG_CASE_ARG,
 ) -> None:
-    """Show official Find Evil dataset cases and file contents."""
+    """Show official starter cases and file contents."""
     no_color = bool(getattr(ctx.obj, "no_color", False))
     out = Console(no_color=no_color)
     err = Console(stderr=True, no_color=no_color)
@@ -60,7 +60,7 @@ def catalog(
     try:
         root = resolve_case_root(client, case)
         if case is None:
-            table = Table(title="Official Find Evil 2026 datasets")
+            table = Table(title="Official Find Evil 2026 starter cases")
             table.add_column("Case")
             table.add_column("Files", justify="right")
             table.add_column("Size", justify="right")
@@ -101,7 +101,7 @@ def download(
     target: Path | None = _DOWNLOAD_TARGET_ARG,
     dry_run: bool = _DRY_RUN_OPT,
 ) -> None:
-    """Download an official dataset case with resumable SHA256 sidecars."""
+    """Download an official starter case with resumable SHA256 sidecars."""
     no_color = bool(getattr(ctx.obj, "no_color", False))
     out = Console(no_color=no_color)
     err = Console(stderr=True, no_color=no_color)
@@ -152,7 +152,7 @@ def download(
         err.print(f"[red]✗[/red] {exc}", highlight=False)
         raise typer.Exit(code=1) from exc
     except Exception as exc:
-        err.print(f"[red]✗[/red] dataset download failed: {exc}", highlight=False)
+        err.print(f"[red]✗[/red] starter-case download failed: {exc}", highlight=False)
         raise typer.Exit(code=2) from exc
     finally:
         _close(client)

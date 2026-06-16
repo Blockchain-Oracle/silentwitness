@@ -34,15 +34,17 @@ const CANONICAL = {
   "SETUP_GUIDE.md": "setup-guide.mdx",
   "ACCURACY_REPORT.md": "accuracy-report.mdx",
   "THREE_CLAIM_TRACE.md": "three-claim-trace.mdx",
-  "DATASETS.md": "datasets.mdx",
+  "STARTER_CASES.md": "starter-cases.mdx",
   "TRY_IT_OUT.md": "try-it-out.mdx",
 };
+
+const STALE_GENERATED = ["datasets.mdx"];
 
 const DOC_ROUTES = new Map([
   ["SETUP_GUIDE.md", "/docs/setup-guide"],
   ["ACCURACY_REPORT.md", "/docs/accuracy-report"],
   ["THREE_CLAIM_TRACE.md", "/docs/three-claim-trace"],
-  ["DATASETS.md", "/docs/datasets"],
+  ["STARTER_CASES.md", "/docs/starter-cases"],
   ["TRY_IT_OUT.md", "/docs/try-it-out"],
 ]);
 
@@ -204,6 +206,11 @@ function rewriteSiteLinks(body) {
 async function main() {
   if (!existsSync(DST)) await mkdir(DST, { recursive: true });
   if (!existsSync(DIAGRAMS_DST)) await mkdir(DIAGRAMS_DST, { recursive: true });
+
+  for (const stale of STALE_GENERATED) {
+    const stalePath = path.join(DST, stale);
+    if (existsSync(stalePath)) await unlink(stalePath);
+  }
 
   if (existsSync(DIAGRAMS_SRC)) {
     for (const entry of await readdir(DIAGRAMS_DST)) {

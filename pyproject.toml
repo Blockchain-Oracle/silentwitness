@@ -165,7 +165,7 @@ omit = [
     "src/silentwitness_mcp/index/ingest.py",
     "src/silentwitness_agent/cli_commands/index_case.py",
     "src/silentwitness_agent/cli_commands/prepare.py",
-    # Dataset-manifest CLI scripts: exercised behaviorally by
+    # Starter-case manifest CLI scripts: exercised behaviorally by
     # tests/integration/test_harness_dataset_manifests.py, which runs them as
     # subprocesses — so their lines aren't instrumented in-process. Same
     # integration-only rationale as cli.py.

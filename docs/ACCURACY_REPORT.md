@@ -9,7 +9,7 @@
 ## 1. What was measured, and how
 
 - **Case:** the official SANS Find Evil! *Standard Forensic Case* — "The Fred Rocba Case"
-  (one Windows 10 host: ~22 GB E01 disk + memory capture). See [`DATASETS.md`](DATASETS.md).
+  (one Windows 10 host: ~22 GB E01 disk + memory capture). See [`STARTER_CASES.md`](STARTER_CASES.md).
 - **Ground truth:** 10 hand-crafted findings (`harness/ground_truth/rocba.handcrafted.json`)
   keyed to the case's **5 Key Questions** (projects accessed / what was taken / where it went /
   how / when). Expectations come from the SANS briefing deck — **not** from the disk the agent

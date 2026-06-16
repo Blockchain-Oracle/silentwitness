@@ -1,4 +1,4 @@
-"""Tests for docs/DATASETS.md + scripts/check_datasets_doc.py (story-dataset-doc)."""
+"""Tests for docs/STARTER_CASES.md + scripts/check_starter_cases_doc.py."""
 
 from __future__ import annotations
 
@@ -11,11 +11,13 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[2]
-_DOC = _REPO / "docs" / "DATASETS.md"
-_GATE = _REPO / "scripts" / "check_datasets_doc.py"
+_DOC = _REPO / "docs" / "STARTER_CASES.md"
+_GATE = _REPO / "scripts" / "check_starter_cases_doc.py"
 _MANIFEST_DIR = _REPO / "harness" / "datasets"
 
-_NITROBA_SHA = "2b77a9eaefc1d6af163d1ba793c96dbccacb04e6befdf1a0b01f8c67553ec2fb"
+_NITROBA_SHA = (
+    "2b77a9eaefc1d6af163d1ba793c96dbccacb04e6befdf1a0b01f8c67553ec2fb"  # pragma: allowlist secret
+)
 
 
 def _run_gate(*extra: str) -> subprocess.CompletedProcess[str]:
@@ -37,7 +39,7 @@ def test_doc_under_400_lines() -> None:
 
 
 def test_doc_has_h1() -> None:
-    assert _DOC.read_text().startswith("# Datasets")
+    assert _DOC.read_text().startswith("# Starter cases")
 
 
 @pytest.mark.parametrize(
@@ -86,7 +88,7 @@ def test_reproducibility_recipe_has_verify_step() -> None:
     assert "uv run python -m harness" in text
 
 
-def test_results_links_for_every_active_dataset() -> None:
+def test_results_links_for_every_active_case() -> None:
     text = _DOC.read_text()
     for slug in ("nitroba", "nist-data-leakage", "nist-hacking-case"):
         assert f"harness/results/{slug}/" in text
@@ -120,7 +122,7 @@ def test_section_order_matches_spec() -> None:
 def _ok_doc() -> str:
     """Minimal happy-path doc that satisfies every gate rule."""
     return (
-        "# Datasets — test\n"
+        "# Starter cases — test\n"
         "## At a glance\n## Reproducibility recipe\n"
         "uv run python -m harness.baseline\n"
         "verify_manifest.py --strict\n"
@@ -141,7 +143,7 @@ def _ok_doc() -> str:
 
 _MUTATIONS: list[tuple[Callable[[str], str], str]] = [
     # (mutation_fn, expected_rule_slug_in_stderr)
-    (lambda t: t.replace("# Datasets", "# Wrong"), "h1"),
+    (lambda t: t.replace("# Starter cases", "# Wrong"), "h1"),
     (lambda t: t.replace("## At a glance", "## Glance"), "required_section"),
     (lambda t: t.replace(_NITROBA_SHA, "0" * 64), "nitroba_sha_xref"),
     (lambda t: t.replace("verify_manifest.py --strict", "REMOVED"), "repro_recipe"),
@@ -176,7 +178,7 @@ def test_gate_rule_fires_on_mutation(
     expected_rule: str,
 ) -> None:
     """Every gate rule has a corresponding failure-mode test."""
-    bad = tmp_path / "DATASETS.md"
+    bad = tmp_path / "STARTER_CASES.md"
     bad.write_text(mutation(_ok_doc()))
     # Inject the real manifest dir so the gate can still cross-reference
     r = _run_gate("--doc", str(bad), "--manifest-dir", str(_MANIFEST_DIR))
@@ -190,7 +192,7 @@ class TestManifestIoFailures:
     """Manifest IO errors must route through _fail() with a rule slug, not crash."""
 
     def test_missing_manifest_dir_yields_manifest_missing(self, tmp_path: Path) -> None:
-        doc = tmp_path / "DATASETS.md"
+        doc = tmp_path / "STARTER_CASES.md"
         doc.write_text(_ok_doc())
         fake_manifest_dir = tmp_path / "no-manifests"
         r = _run_gate("--doc", str(doc), "--manifest-dir", str(fake_manifest_dir))
@@ -198,7 +200,7 @@ class TestManifestIoFailures:
         assert "manifest_missing" in r.stderr
 
     def test_corrupt_manifest_yields_manifest_corrupt(self, tmp_path: Path) -> None:
-        doc = tmp_path / "DATASETS.md"
+        doc = tmp_path / "STARTER_CASES.md"
         doc.write_text(_ok_doc())
         bad_manifest_dir = tmp_path / "manifests"
         bad_manifest_dir.mkdir()

@@ -103,9 +103,13 @@ test("tilde-fence is also tracked", () => {
 // ---------------------------------------------------------------------------
 
 test("rewriteSiteLinks maps canonical docs to site routes", () => {
-  const input = "See [Accuracy](ACCURACY_REPORT.md) and [Datasets](./DATASETS.md#nitroba).";
+  const input =
+    "See [Accuracy](ACCURACY_REPORT.md) and [Starter cases](./STARTER_CASES.md#nitroba).";
   const output = rewriteSiteLinks(input);
-  assert.equal(output, "See [Accuracy](/docs/accuracy-report) and [Datasets](/docs/datasets#nitroba).");
+  assert.equal(
+    output,
+    "See [Accuracy](/docs/accuracy-report) and [Starter cases](/docs/starter-cases#nitroba).",
+  );
 });
 
 test("rewriteSiteLinks maps repo-only logs to GitHub", () => {

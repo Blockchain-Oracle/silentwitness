@@ -10,7 +10,7 @@ Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native
 |---|---|
 | SIFT 2026 native | SANS Protocol SIFT 2026 OVA (Ubuntu 24.04.2 Noble + Python 3.12 + Claude Code v2.0.61), 16 GB RAM, 80 GB disk, internet access, `ANTHROPIC_API_KEY` (or alternate provider key) |
 | Docker Compose | Docker 24+, Docker Compose v2, 16 GB RAM, 80 GB disk, internet access, `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OPENROUTER_API_KEY` for model-agnostic switching) |
-| Either path | A verified evidence binary — Nitroba pcap is the recommended smoke test; download per [`DATASETS.md`](./DATASETS.md) and verify SHA256 against `harness/datasets/nitroba.manifest.json` |
+| Either path | A verified evidence binary — Nitroba pcap is the recommended smoke test; download per [`STARTER_CASES.md`](./STARTER_CASES.md) and verify SHA256 against `harness/datasets/nitroba.manifest.json` |
 
 ## Path A — SIFT 2026 native
 
@@ -147,7 +147,7 @@ cat harness/results/nitroba/delta.md
 open harness/results/nitroba/delta.png    # or xdg-open on Linux
 ```
 
-The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT.md) — methodology, baseline establishment, per-dataset measured Δ, known false positives + misses + residual hallucinations.
+The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT.md) — methodology, baseline establishment, per-case measured Δ, known false positives + misses + residual hallucinations.
 
 ## Troubleshooting
 
@@ -161,8 +161,8 @@ The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT
 
 ## Where to go next
 
-- Per-dataset reproducibility recipes: [`DATASETS.md`](./DATASETS.md).
-- Cross-dataset accuracy report (Δ vs vanilla Protocol SIFT): [`ACCURACY_REPORT.md`](./ACCURACY_REPORT.md).
+- Per-case reproducibility recipes: [`STARTER_CASES.md`](./STARTER_CASES.md).
+- Cross-case accuracy report (Δ vs vanilla Protocol SIFT): [`ACCURACY_REPORT.md`](./ACCURACY_REPORT.md).
 - Component architecture + ADRs: [`architecture.md`](./architecture.md).
 - Devpost submission entry: see the README badge row for the gallery link.
 

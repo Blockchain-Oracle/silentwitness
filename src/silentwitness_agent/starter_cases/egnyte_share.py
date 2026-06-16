@@ -1,4 +1,4 @@
-"""Egnyte public-share API client used by `download_starter_cases.py`.
+"""Egnyte public-share API client used by `starter-cases` downloads.
 
 Split out from the CLI driver so each file fits the 400-LOC architecture
 gate and the API surface can be tested in isolation.
@@ -333,7 +333,7 @@ def resolve_case_root(client: httpx.Client, case_name: str | None) -> str:
             return entry.path
     raise SystemExit(
         f"case {case_name!r} not found at share root. "
-        "Run `silentwitness datasets catalog` to see what's available."
+        "Run `silentwitness starter-cases catalog` to see what's available."
     )
 
 

@@ -14,7 +14,7 @@ SilentWitness is a hypothesis-first DFIR investigator that turns forensic tool o
 - Try it out: [switness.xyz/docs/try-it-out](https://switness.xyz/docs/try-it-out)
 - Architecture: [switness.xyz/docs/architecture](https://switness.xyz/docs/architecture)
 - Accuracy report: [switness.xyz/docs/accuracy-report](https://switness.xyz/docs/accuracy-report)
-- Datasets: [switness.xyz/docs/datasets](https://switness.xyz/docs/datasets)
+- Starter cases: [switness.xyz/docs/starter-cases](https://switness.xyz/docs/starter-cases)
 - GitHub: [github.com/Blockchain-Oracle/silentwitness](https://github.com/Blockchain-Oracle/silentwitness)
 
 ## What it does
@@ -45,7 +45,7 @@ Protocol SIFT 2026 showed that AI agents can drive the SIFT workstation. SilentW
 |---|---|
 | Custom MCP server | `mcp>=1.23.0,<2.0`, FastMCP, Pydantic v2 envelopes |
 | Reference agent | `pydantic-ai>=1.105.0,<2.0.0`, model-agnostic across OpenAI, Anthropic, Google, and Ollama |
-| CLI | Typer and Rich commands for `initialize`, `register`, `prepare`, `index`, `investigate`, `verify`, `export`, and dataset download |
+| CLI | Typer and Rich commands for `initialize`, `register`, `prepare`, `index`, `investigate`, `verify`, `export`, and starter-case download |
 | Forensic tooling | Volatility 3, Hayabusa, Chainsaw, Zeek, Suricata, and Eric Zimmerman tools through the offline ingest spine |
 | Audit and integrity | HMAC-SHA256 ledger records, PBKDF2-SHA256 key derivation, read-only evidence mounts, and per-case audit files |
 | Reports | Markdown/PDF export with verification references back to the audit ledger |
@@ -58,28 +58,28 @@ The architecture keeps raw evidence behind the ingest boundary. The model does n
 - **SIFT 2026 tool drift.** Volatility plugin paths and Zimmerman tool locations changed across current SIFT builds, so the repo pins the verified paths and checks tool behavior instead of assuming old command names still work.
 - **Noisy forensic output.** Tool banners, timestamps, path separators, and CSV formatting can change between runs. SilentWitness normalizes output before hashing and verification so a claim is checked against stable evidence text.
 - **Keeping claims honest.** The easiest demo would be a polished story. The useful demo is a reproducible chain: evidence in, tools run, observations gated, findings exported, and misses documented in the accuracy report.
-- **Submission polish without hiding limits.** The public docs include the accuracy report and dataset notes because judges should be able to see what works, what still varies, and how to rerun the claims.
+- **Submission polish without hiding limits.** The public docs include the accuracy report and starter-case notes because judges should be able to see what works, what still varies, and how to rerun the claims.
 
 ## Accomplishments
 
 - Built a Custom MCP Server and Pydantic AI reference investigator around real forensic tooling.
 - Added citation and entity gates that reject malformed observations before they become findings.
-- Added dataset catalog and download commands so users do not need to call helper scripts directly.
-- Published a Vercel documentation site with quickstart, architecture, datasets, accuracy report, and demo-facing walkthroughs.
+- Added starter-case catalog and download commands so users do not need to call helper scripts directly.
+- Published a Vercel documentation site with quickstart, architecture, starter cases, accuracy report, and demo-facing walkthroughs.
 - Verified the codebase with the unit, integration, docs sync, and site typecheck suites before submission.
 
 ## What we learned
 
 The main lesson is that provenance has to be part of the system design. A prompt can ask for careful citations, but code has to enforce whether the citation actually exists and whether the named artifact appears in the cited output.
 
-We also learned that public forensic datasets are tricky for evaluation. Some answers are widely indexed online, so a model can appear correct by memory. SilentWitness treats that as a risk and pushes evaluation toward evidence-present spans, reproducible shell checks, and documented residual gaps.
+We also learned that public forensic cases are tricky for evaluation. Some answers are widely indexed online, so a model can appear correct by memory. SilentWitness treats that as a risk and pushes evaluation toward evidence-present spans, reproducible shell checks, and documented residual gaps.
 
 ## What's next
 
 - Add live-host triage through a Velociraptor backend while keeping the same citation envelope.
 - Add multi-case queueing so analysts can stage several investigations and review bounded results later.
 - Add cloud-forensics backends for AWS, Azure, and GCP audit trails.
-- Expand the adversarial synthetic dataset work so evaluations are less exposed to memorized public answers.
+- Expand the adversarial synthetic case work so evaluations are less exposed to memorized public answers.
 
 ## Built with
 
@@ -87,7 +87,7 @@ We also learned that public forensic datasets are tricky for evaluation. Some an
 
 ## Try it yourself
 
-Start with the public walkthrough: [switness.xyz/docs/try-it-out](https://switness.xyz/docs/try-it-out). It covers the SIFT path, Docker path, starter datasets, the Nitroba smoke test, and the command flow from `initialize` through `export`.
+Start with the public walkthrough: [switness.xyz/docs/try-it-out](https://switness.xyz/docs/try-it-out). It covers the SIFT path, Docker path, starter cases, the Nitroba smoke test, and the command flow from `initialize` through `export`.
 
 ## License
 

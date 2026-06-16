@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compatibility driver for official Find Evil dataset downloads.
+"""Compatibility driver for official Find Evil starter-case downloads.
 
 The share at https://sansorg.egnyte.com/fl/HhH7crTYT4JK holds three cases:
 "Standard Forensic Case" (ROCBA / Mr. Evil — single host), "Standard Forensics
@@ -10,10 +10,10 @@ Prefer the packaged CLI:
 
 Usage::
 
-    silentwitness datasets catalog
-    silentwitness datasets catalog "Standard Forensic Case"
-    silentwitness datasets download "Standard Forensic Case" /tmp/rocba
-    silentwitness datasets download "Standard Forensic Case" /tmp/rocba --dry-run
+    silentwitness starter-cases catalog
+    silentwitness starter-cases catalog "Standard Forensic Case"
+    silentwitness starter-cases download "Standard Forensic Case" /tmp/rocba
+    silentwitness starter-cases download "Standard Forensic Case" /tmp/rocba --dry-run
 
 This script remains for older automation. Its preferred verbs mirror the CLI:
 
@@ -109,7 +109,7 @@ def cmd_download(args: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Download SANS Find Evil! 2026 starter datasets from the Egnyte public share.",
+        description="Download SANS Find Evil! 2026 starter cases from the Egnyte public share.",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 

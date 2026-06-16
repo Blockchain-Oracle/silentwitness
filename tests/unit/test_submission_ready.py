@@ -45,7 +45,7 @@ def _make_minimal_fixture(tmp_path: Path) -> Path:
     (docs / "DEVPOST.md").write_text(
         "# SilentWitness\n## One-line pitch\n## What it does\n## Built with\npython\n"
     )
-    (docs / "DATASETS.md").write_text("# Datasets\n")
+    (docs / "STARTER_CASES.md").write_text("# Starter cases\n")
     (docs / "ACCURACY_REPORT.md").write_text("# Accuracy report\n")
     (docs / "TRY_IT_OUT.md").write_text(
         "# Try SilentWitness\ncurl --proto '=https' x install.sh | bash\ndocker compose up -d\n"
@@ -66,12 +66,12 @@ class TestDeliverables:
         r = _run_gate("--mode", "deliverables", "--root", str(root))
         assert r.returncode == 0, r.stderr
 
-    def test_missing_datasets_md_fails(self, tmp_path: Path) -> None:
+    def test_missing_starter_cases_md_fails(self, tmp_path: Path) -> None:
         root = _make_minimal_fixture(tmp_path)
-        (root / "docs" / "DATASETS.md").unlink()
+        (root / "docs" / "STARTER_CASES.md").unlink()
         r = _run_gate("--mode", "deliverables", "--root", str(root))
         assert r.returncode == 1
-        assert "DATASETS.md" in r.stderr
+        assert "STARTER_CASES.md" in r.stderr
 
     def test_missing_license_fails(self, tmp_path: Path) -> None:
         root = _make_minimal_fixture(tmp_path)

@@ -11,7 +11,7 @@ public/pagefind
 # Hand-curated MDX (index, quickstart, architecture, meta.json) IS committed.
 content/docs/accuracy-report.mdx
 content/docs/architecture-deep-dive.mdx
-content/docs/datasets.mdx
+content/docs/starter-cases.mdx
 content/docs/setup-guide.mdx
 content/docs/three-claim-trace.mdx
 content/docs/try-it-out.mdx

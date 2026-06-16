@@ -28,7 +28,7 @@ _BANNED_RE = re.compile(r"(?i)(" + "|".join(re.escape(b) for b in _BANNED) + r")
 _VOCAB_EXCLUDE_FILES = {
     "scripts/check_submission_ready.py",
     "scripts/check_readme_gate.py",
-    "scripts/check_datasets_doc.py",
+    "scripts/check_starter_cases_doc.py",
     "scripts/check_accuracy_report_vocab.py",
     "scripts/check_try_it_out.py",
     "scripts/_notices_catalog.py",
@@ -135,10 +135,10 @@ def _check_deliverables(root: Path) -> list[Check]:
             chk.fail("missing `## Built with` heading")
     checks.append(chk)
 
-    # Deliverable 5: Dataset documentation
-    chk = Check("Deliverable 5: docs/DATASETS.md + >=3 manifests")
-    if not (root / "docs" / "DATASETS.md").exists():
-        chk.fail("docs/DATASETS.md missing")
+    # Deliverable 5: Starter-case documentation
+    chk = Check("Deliverable 5: docs/STARTER_CASES.md + >=3 manifests")
+    if not (root / "docs" / "STARTER_CASES.md").exists():
+        chk.fail("docs/STARTER_CASES.md missing")
     else:
         manifests = list((root / "harness" / "datasets").glob("*.manifest.json"))
         if len(manifests) < 3:
