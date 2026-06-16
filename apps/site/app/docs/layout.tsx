@@ -15,6 +15,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         ),
         // Search bar wired by Fumadocs RootProvider — see `app/layout.tsx`.
       }}
+      themeSwitch={{
+        enabled: false,
+      }}
       sidebar={{
         defaultOpenLevel: 1,
       }}

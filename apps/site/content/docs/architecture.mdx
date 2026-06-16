@@ -1,39 +1,119 @@
 ---
 title: "Architecture"
-description: "Eight boundaries, six of them architectural. The guardrails that make hallucinations against unmounted artifacts impossible."
+description: "How SilentWitness turns a DFIR investigation into cited findings, audit rows, and a verifiable report."
 ---
 
-![SilentWitness architecture overview](/diagrams/architecture.svg)
+SilentWitness is a Custom MCP Server for incident response work. The agent can
+plan an investigation, form hypotheses, and ask for evidence records, but it
+cannot write unsupported findings. The MCP server owns the evidence boundary,
+the citation checks, the entity checks, and the audit trail.
 
-## Eight boundaries — six in code, two supplementary
+The review path:
 
-**In code (architectural):**
-1. **Read-only evidence mount** — `/evidence ro,noexec,nosuid` blocks any write
-   to source artifacts.
-2. **MCP toolset firewall** — per-specialist toolset; memory specialist cannot
-   reach disk tools, disk specialist cannot reach network tools.
-3. **Entity gate** — agent-claimed entities must resolve in `index.db` before
-   an observation is recorded.
-4. **Citation gate** — every finding carries ≥1 `cited_span` resolving to an
-   audit JSONL row.
-5. **Hash-chained audit ledger** — `record_hash` + `prev_record_hash` per row;
-   `silentwitness verify --audit-chain` walks every backend.
-6. **HMAC approval ledger** — `silentwitness approve` adds an HMAC-SHA256 entry
-   that downstream systems can verify out-of-band.
+1. Register evidence.
+2. Prepare and index the case.
+3. Investigate through MCP tools.
+4. Review staged findings.
+5. Verify the audit chain.
+6. Export the report.
 
-**Supplementary (prompt-based):**
-1. Investigator system prompt — encodes domain priors.
-2. Critic agreement prompt — encodes self-doubt heuristics.
+The important idea is simple: the model may suggest a claim, but the server
+decides whether that claim is grounded enough to enter the report.
 
-Removing the supplementary prompts degrades quality but **does not unlock
-hallucinations against unmounted artifacts**. That's the whole point.
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-A-architecture.png"
+  alt="SilentWitness system architecture"
+/>
 
-## Per-component reference
+## What Runs Where
 
-- **MCP server** — [`src/silentwitness_mcp/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_mcp). 12 agent-visible tools over parsed evidence records, findings, and audit output.
-- **Agent + critic** — [`src/silentwitness_agent/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_agent). Pydantic AI 1.105+, `request_limit=None`.
-- **Audit chain** — [`src/silentwitness_mcp/audit/chain.py`](https://github.com/Blockchain-Oracle/silentwitness/blob/main/src/silentwitness_mcp/audit/chain.py). Per-path lock (threading + fcntl) + cross-process cache invalidation.
-- **Verification gates** — [`src/silentwitness_mcp/verification/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_mcp/verification/). Entity gate, citation gate, sanitizer.
+**Examiner and SIFT CLI.** The examiner starts the case, registers evidence,
+builds the index, launches the investigator, and exports the report.
 
-For the full deep-dive (tool surface, offline ingest spine, ADRs, and pin justifications):
-see [`docs/architecture.md`](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/architecture.md).
+**Read-only evidence boundary.** Source artifacts stay mounted read-only. The
+agent never receives a raw evidence write path.
+
+**Offline ingest spine.** dfVFS extraction and targeted feeders parse artifacts
+into citable records. Each useful record gets a stable ID, a source pointer,
+and an audit row.
+
+**MCP server.** This is the product. It exposes a small tool surface over
+registered evidence, indexed records, findings, and audit output. It also runs
+the code-level gates before anything becomes a finding.
+
+**Pydantic AI investigator.** The agent sequences the work: it lists detections,
+forms one hypothesis at a time, searches evidence records, records observations,
+pivots when evidence contradicts the hypothesis, and writes the final narrative
+through server tools.
+
+## The Hallucination Firewall
+
+Unsupported text has to survive multiple checks before it can become a finding.
+The core checks are enforced in code, not by asking the model to behave.
+
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-B-firewall.png"
+  alt="SilentWitness hallucination firewall"
+/>
+
+The enforced path:
+
+1. The agent proposes an observation through `record_observation`.
+2. The server rejects claims without a cited evidence span.
+3. The entity gate checks named entities against indexed evidence.
+4. Contradiction detectors and the live critic can challenge weak findings.
+5. The coverage gate blocks finalization until the report answers WHO, WHAT,
+   WHEN, WHERE, and HOW with citations.
+6. The audit chain records the tool call, the record reference, and the report
+   mutation so verification can replay the trail.
+
+Prompt instructions still matter for quality, but they are supplementary. If a
+prompt is removed, the investigation gets worse. It does not grant the model
+permission to write unsupported findings.
+
+## Investigation Loop
+
+The investigator works like a senior analyst: one hypothesis at a time, tested
+against evidence, then confirmed, pivoted, or abandoned.
+
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-D-investigation-loop.png"
+  alt="SilentWitness investigation loop"
+/>
+
+The loop is intentionally small:
+
+1. Start from staged detections.
+2. Form a concrete hypothesis.
+3. Search evidence and fetch records.
+4. Stage only cited observations.
+5. Confirm, pivot, or abandon the hypothesis.
+6. Let the critic and coverage gate challenge the result before export.
+
+That keeps the demo understandable. It also keeps the implementation auditable:
+every transition leaves a record.
+
+## Claim Trace
+
+A report finding is not just prose. It points back to the record and tool
+execution that produced it.
+
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-F-trace.png"
+  alt="SilentWitness finding trace"
+/>
+
+For judges, the quickest proof path is:
+
+- [Three-Claim Trace](/docs/three-claim-trace): three findings traced from
+  report text to cited record, audit row, and source artifact.
+- [Accuracy Report](/docs/accuracy-report): measured recall, misses, and the
+  bugs fixed during evaluation.
+- [Try It Out](/docs/try-it-out): dataset walkthroughs for the shipped demo
+  cases.
+- [Full architecture spec](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/architecture.md):
+  the long internal spec with pins, ADRs, and implementation notes.

@@ -20,14 +20,6 @@
   --color-brand-line: oklch(0.88 0.012 95);
 }
 
-.dark {
-  --color-brand-beige: oklch(0.16 0.025 264);
-  --color-brand-beige-soft: oklch(0.21 0.025 264);
-  --color-brand-ink: oklch(0.94 0.02 78);
-  --color-brand-indigo-soft: oklch(0.78 0.14 264);
-  --color-brand-forest-soft: oklch(0.78 0.10 158);
-}
-
 @theme inline {
   --color-primary: var(--color-brand-indigo);
   --color-primary-foreground: var(--color-brand-beige-soft);
@@ -38,6 +30,131 @@
 body {
   background: var(--color-brand-paper);
   color: var(--color-brand-ink);
+}
+
+html,
+html.light {
+  color-scheme: light;
+  --fd-background: var(--color-brand-paper);
+  --fd-foreground: var(--color-brand-ink);
+  --fd-card: #ffffff;
+  --fd-card-foreground: var(--color-brand-ink);
+  --fd-popover: #ffffff;
+  --fd-popover-foreground: var(--color-brand-ink);
+  --fd-muted: var(--color-brand-beige-soft);
+  --fd-muted-foreground: var(--color-brand-muted);
+  --fd-accent: var(--color-brand-mint-soft);
+  --fd-accent-foreground: var(--color-brand-ink);
+  --fd-border: var(--color-brand-line);
+  --fd-primary: var(--color-brand-indigo);
+  --fd-primary-foreground: #ffffff;
+  --fd-secondary: var(--color-brand-beige-soft);
+  --fd-secondary-foreground: var(--color-brand-ink);
+}
+
+#nd-sidebar {
+  background: color-mix(in oklch, var(--color-brand-paper), white 45%);
+  border-color: var(--color-brand-line);
+}
+
+#nd-sidebar [data-theme-toggle],
+#nd-sidebar div:has(> [data-theme-toggle]) {
+  display: none !important;
+}
+
+#nd-page,
+.prose {
+  min-width: 0;
+}
+
+.prose {
+  color: var(--color-brand-ink);
+}
+
+.prose :where(p, li, td, th) {
+  color: var(--color-brand-ink);
+}
+
+.prose :where(h1, h2, h3, h4, strong) {
+  color: var(--color-brand-ink);
+}
+
+.prose :where(a) {
+  color: var(--color-brand-indigo);
+  font-weight: 650;
+}
+
+.prose :where(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-color: var(--color-brand-line);
+}
+
+.prose :where(th) {
+  background: var(--color-brand-mint-soft);
+}
+
+.prose :where(code):not(pre code) {
+  border: 1px solid var(--color-brand-line);
+  background: #ffffff;
+  color: var(--color-brand-rust);
+}
+
+.prose :where(pre) {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--color-brand-line);
+  background: #f7f5ee;
+  color: var(--color-brand-ink);
+}
+
+.prose :where(img) {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 0.5rem;
+  border: 1px solid var(--color-brand-line);
+  background: #ffffff;
+}
+
+.sw-doc-figure {
+  margin: 1.75rem 0 2.25rem;
+}
+
+@media (max-width: 1023px) {
+  html,
+  body {
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  #nd-docs-layout {
+    display: block !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden;
+  }
+
+  #nd-page {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    margin-inline: 0;
+    padding-inline: 1rem !important;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .prose {
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  #nd-page > *,
+  .prose > * {
+    max-width: 100%;
+  }
 }
 
 .sw-button {

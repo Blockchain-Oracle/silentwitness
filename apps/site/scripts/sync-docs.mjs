@@ -36,7 +36,6 @@ const CANONICAL = {
   "THREE_CLAIM_TRACE.md": "three-claim-trace.mdx",
   "DATASETS.md": "datasets.mdx",
   "TRY_IT_OUT.md": "try-it-out.mdx",
-  "architecture.md": "architecture-deep-dive.mdx",
 };
 
 const DOC_ROUTES = new Map([
@@ -45,7 +44,6 @@ const DOC_ROUTES = new Map([
   ["THREE_CLAIM_TRACE.md", "/docs/three-claim-trace"],
   ["DATASETS.md", "/docs/datasets"],
   ["TRY_IT_OUT.md", "/docs/try-it-out"],
-  ["architecture.md", "/docs/architecture-deep-dive"],
 ]);
 
 const GITHUB_DOCS_ROOT = "https://github.com/Blockchain-Oracle/silentwitness";
