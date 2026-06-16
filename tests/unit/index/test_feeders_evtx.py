@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from silentwitness_mcp.index import feeders_evtx
-from silentwitness_mcp.index._feeder_util import MAX_TEXT
+from silentwitness_mcp.index._feeder_util import MAX_TEXT, FeederStats
 from silentwitness_mcp.index.feeders_evtx import _event_xml_to_record, evtx_file_records
 from silentwitness_mcp.index.store import IndexRecord
 
@@ -89,7 +89,7 @@ def test_long_text_is_truncated() -> None:
     assert rec is not None and len(rec.text) == MAX_TEXT
 
 
-def test_rust_failure_falls_back_to_python_evtx(
+def test_rust_failure_is_recorded_by_default(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     f = tmp_path / "Security.evtx"
@@ -100,12 +100,37 @@ def test_rust_failure_falls_back_to_python_evtx(
         yield  # pragma: no cover - makes this a generator
 
     def py_fallback(path: Path, **_: object) -> Iterator[IndexRecord]:
-        yield IndexRecord(text="from python-evtx", source_tool="evtx:Security", audit_id="a")
+        raise AssertionError("fallback requires SILENTWITNESS_EVTX_TOLERANT_FALLBACK=1")
+        yield  # pragma: no cover
 
     monkeypatch.setattr(feeders_evtx, "_rust_evtx_records", boom)
     monkeypatch.setattr(feeders_evtx, "_python_evtx_records", py_fallback)
-    out = list(evtx_file_records(f, audit_id="a", host=""))
+    stats = FeederStats()
+    with pytest.raises(RuntimeError, match="tolerant python-evtx fallback disabled"):
+        list(evtx_file_records(f, audit_id="a", host="", stats=stats))
+    assert stats.skipped == {"evtx_rust_failed_file": 1}
+
+
+def test_rust_failure_falls_back_to_python_evtx_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f = tmp_path / "Security.evtx"
+    f.write_bytes(b"evtx-bytes")
+
+    def boom(path: Path, **_: object) -> Iterator[IndexRecord]:
+        raise RuntimeError("Failed to parse chunk header")
+        yield  # pragma: no cover - makes this a generator
+
+    def py_fallback(path: Path, **_: object) -> Iterator[IndexRecord]:
+        yield IndexRecord(text="from python-evtx", source_tool="evtx:Security", audit_id="a")
+
+    monkeypatch.setenv("SILENTWITNESS_EVTX_TOLERANT_FALLBACK", "1")
+    monkeypatch.setattr(feeders_evtx, "_rust_evtx_records", boom)
+    monkeypatch.setattr(feeders_evtx, "_python_evtx_records", py_fallback)
+    stats = FeederStats()
+    out = list(evtx_file_records(f, audit_id="a", host="", stats=stats))
     assert len(out) == 1 and out[0].text == "from python-evtx"
+    assert stats.skipped == {"evtx_rust_failed_file": 1, "evtx_python_fallback_file": 1}
 
 
 def test_rust_success_does_not_invoke_fallback(

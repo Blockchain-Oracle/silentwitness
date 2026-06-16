@@ -4,15 +4,16 @@ Hybrid parser, chosen by measurement on the real ROCBA EVTX:
 
 * **Fast path — Rust ``evtx`` (``PyEvtxParser``)**: parses the large majority of the
   case's logs in seconds.
-* **Tolerant fallback — pure-Python ``python-evtx`` (``Evtx``)**: a tail of files have
-  malformed chunks that crash *both* the Rust parser (a ``Failed to parse chunk
-  header``-class error) and libevtx/pyevtx — and therefore plaso's libevtx-backed
-  ``winevtx`` parser, which extracts 0 events. ``python-evtx`` reads them anyway.
+* **Opt-in tolerant fallback — pure-Python ``python-evtx`` (``Evtx``)**: a tail of
+  files have malformed chunks that crash *both* the Rust parser and libevtx/pyevtx.
+  ``python-evtx`` can recover some of them, but can also monopolize a demo run on badly
+  damaged files, so it is enabled only when ``SILENTWITNESS_EVTX_TOLERANT_FALLBACK=1``.
 
-So we get full recall *and* a fast build: try Rust per file, buffer its output, and on
-any parse error fall back to ``python-evtx`` for that file (no partial+duplicate
-emission). A missing Rust parser (``ImportError``) is re-raised rather than masked as a
-slow fallback. Both parsers yield per-record XML, so the single pure mapper handles both.
+The default path is fast and bounded: try Rust per file, buffer its output, and record a
+structured artifact failure when a malformed file cannot be parsed by Rust. A missing
+Rust parser (``ImportError``) is re-raised rather than masked as a slow fallback. Both
+parsers yield per-record XML, so the single pure mapper handles both when deep recovery
+is explicitly requested.
 
 ``_event_xml_to_record`` is a pure, unit-tested mapper; the file readers are exercised
 on the forensic box (both parsers installed via the forensics extra).
@@ -21,6 +22,7 @@ on the forensic box (both parsers installed via the forensics extra).
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Iterator
 from pathlib import Path
 from xml.etree.ElementTree import Element, ParseError
@@ -31,6 +33,7 @@ from silentwitness_mcp.index._feeder_util import MAX_TEXT, Feeder, FeederStats, 
 from silentwitness_mcp.index.store import IndexRecord
 
 _LOG = logging.getLogger(__name__)
+_TOLERANT_FALLBACK_ENV = "SILENTWITNESS_EVTX_TOLERANT_FALLBACK"
 
 # Salient identity fields appended to a detection row so 18k brute-force hits aren't
 # indistinguishable — the account/host/IP/command is what makes a hit actionable and
@@ -260,6 +263,11 @@ def _python_evtx_records(
             )
 
 
+def _tolerant_fallback_enabled() -> bool:
+    value = os.environ.get(_TOLERANT_FALLBACK_ENV, "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def evtx_file_records(
     path: Path,
     *,
@@ -271,7 +279,8 @@ def evtx_file_records(
     """Stream one :class:`IndexRecord` per event in a single ``.evtx`` file.
 
     Tries the fast Rust parser, buffering its output so that a mid-stream chunk error
-    falls back cleanly to tolerant ``python-evtx`` (no partial+duplicate emission).
+    records a whole-artifact failure without partial+duplicate emission. Set
+    ``SILENTWITNESS_EVTX_TOLERANT_FALLBACK=1`` for the slower python-evtx fallback.
     ``source_path`` overrides the stored citation path (default: the on-disk path)."""
     sha = sha256_file(path)
     cite = source_path if source_path is not None else str(path)
@@ -279,10 +288,17 @@ def evtx_file_records(
         records = list(_rust_evtx_records(path, sha=sha, cite=cite, audit_id=audit_id, host=host))
     except ImportError:
         raise  # a missing Rust parser is an environment defect — surface it, don't mask it
-    except Exception as exc:  # a real parse error → tolerant python-evtx fallback
+    except Exception as exc:  # malformed EVTX: record failure unless deep recovery is explicit
+        if stats is not None:
+            stats.skip("evtx_rust_failed_file")
+        if not _tolerant_fallback_enabled():
+            raise RuntimeError(
+                f"rust EVTX parser failed on {path.name}; tolerant python-evtx fallback "
+                f"disabled (set {_TOLERANT_FALLBACK_ENV}=1 for deep recovery): {exc}"
+            ) from exc
         _LOG.warning("evtx: rust parser failed on %s (%s) — using python-evtx", path.name, exc)
         if stats is not None:
-            stats.skip("evtx_rust_fallback_file")
+            stats.skip("evtx_python_fallback_file")
         yield from _python_evtx_records(
             path, sha=sha, cite=cite, audit_id=audit_id, host=host, stats=stats
         )
