@@ -133,14 +133,15 @@ def download(
         target_root = (target or Path("evidence") / _case_slug(case)).resolve()
         target_root.mkdir(parents=True, exist_ok=True)
         out.print(f"downloading {root} -> {target_root}", highlight=False)
-        total_size = 0
-        file_count = 0
+        out.print("scanning case file list...", highlight=False)
+        entries = list(walk(client, root))
+        total_size = sum(entry.size or 0 for entry in entries)
+        file_count = len(entries)
+        out.print(f"found {file_count} files, {human_size(total_size)}", highlight=False)
         with _download_progress(err) as progress:
-            for entry in walk(client, root):
+            for entry in entries:
                 rel = entry.path[len(root) :].lstrip("/")
                 destination = target_root / rel
-                total_size += entry.size or 0
-                file_count += 1
                 if dry_run:
                     out.print(f"DRY  {human_size(entry.size):>10}  {destination}", highlight=False)
                     continue
