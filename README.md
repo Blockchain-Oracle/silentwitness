@@ -27,7 +27,7 @@ any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_
 | **Python 3.12 or 3.13** | `silentwitness` is a Python CLI. | SIFT 2026 has 3.12 pre-installed. Other OS: [python.org](https://www.python.org) or your package manager. |
 | **LLM API key** | The investigator drives an LLM (Anthropic / OpenAI / Gemini / Ollama). Recommended: `gpt-5.2` or `claude-opus-4-7`. | Export `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` before `silentwitness investigate`. |
 | **`uv` (or `pipx`)** | Installs `silentwitness` as a global command in an isolated env. | `install.sh` installs `uv` automatically. Alt: [astral.sh/uv](https://astral.sh/uv) / [pipx](https://pipx.pypa.io). |
-| **Subprocess forensic tools** *(SIFT only)* | Hayabusa, Chainsaw, Sigma rules, Zeek, Suricata, dfVFS. | `install.sh` provisions them all — version-pinned + SHA256-verified. |
+| **Subprocess forensic tools** *(SIFT only)* | Hayabusa, Chainsaw, Sigma rules, Zeek, Suricata, dfVFS. | `install.sh` provisions them all; direct archive downloads are pinned and SHA256-verified. |
 
 ## Install
 
@@ -40,7 +40,7 @@ git clone https://github.com/Blockchain-Oracle/silentwitness && cd silentwitness
 silentwitness --help    # global command, ready
 ```
 
-`install.sh` is idempotent. It installs `uv`, runs `uv tool install` to put the CLI on `~/.local/bin`, then provisions Hayabusa / Chainsaw / Sigma rules / Zeek / Suricata / dfVFS apt deps / spaCy NER model. Every download is SHA256-verified.
+`install.sh` is idempotent. It installs `uv`, runs `uv tool install` to put the CLI on `~/.local/bin`, then provisions Hayabusa / Chainsaw / Sigma rules / Zeek / Suricata / dfVFS apt deps / the spaCy NER model inside the installed CLI environment. Direct archive downloads are SHA256-verified.
 
 ### Option B — Generic (any OS, no SIFT subprocess tools)
 

@@ -36,7 +36,7 @@ _SHA64 = "e" * 64
 _NEEDS_SPACY = pytest.mark.skipif(
     not _HAS_SPACY,
     reason="spaCy en_core_web_lg model not installed; install via "
-    "`uv run python -m spacy download en_core_web_lg`",
+    "`./install.sh` or the uv tool-env repair command from EntityGateModelError",
 )
 
 

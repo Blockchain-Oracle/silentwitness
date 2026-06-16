@@ -118,6 +118,12 @@ class EntityResult(BaseModel):
 
 _nlp_cache: Any = None  # spacy.Language at runtime; Any to avoid import at type-check
 _NLP_LOAD_FAILED: object = object()  # sentinel — distinguishes "tried + failed" from "untried"
+_SPACY_TOOL_INSTALL_HINT = (
+    "run ./install.sh, or repair the installed CLI env with: "
+    'uv pip install --python "$HOME/.local/share/uv/tools/silentwitness/bin/python" '
+    '"en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/'
+    'en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"'
+)
 
 
 class EntityGateModelError(RuntimeError):
@@ -132,8 +138,8 @@ def _get_nlp() -> Any:
     """Lazy-load and cache spaCy ``en_core_web_lg``. First call: ~3 s + 750 MB.
 
     Raises :class:`EntityGateModelError` if the model isn't installed. The
-    CI workflow ``ci.yml`` includes a ``python -m spacy download en_core_web_lg``
-    step before running gate tests. PR-112 code-reviewer #5 — once a load
+    CI workflow ``ci.yml`` installs ``en_core_web_lg`` before running gate
+    tests. PR-112 code-reviewer #5 — once a load
     attempt fails we cache the failure sentinel so subsequent calls
     re-raise immediately instead of retrying the (expensive) filesystem
     scan from scratch.
@@ -141,8 +147,7 @@ def _get_nlp() -> Any:
     global _nlp_cache
     if _nlp_cache is _NLP_LOAD_FAILED:
         raise EntityGateModelError(
-            "spaCy en_core_web_lg model unavailable — install via "
-            "`uv run python -m spacy download en_core_web_lg`"
+            "spaCy en_core_web_lg model unavailable — " + _SPACY_TOOL_INSTALL_HINT
         )
     if _nlp_cache is None:
         import spacy as _spacy
@@ -153,7 +158,7 @@ def _get_nlp() -> Any:
             _nlp_cache = _NLP_LOAD_FAILED
             raise EntityGateModelError(
                 "Entity gate requires spaCy model 'en_core_web_lg' (~750 MB). "
-                "Install via: uv run python -m spacy download en_core_web_lg. "
+                f"Install fix: {_SPACY_TOOL_INSTALL_HINT}. "
                 f"Underlying spaCy error: {exc}"
             ) from exc
     return _nlp_cache

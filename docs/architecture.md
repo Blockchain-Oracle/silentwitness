@@ -837,7 +837,7 @@ uv add 'httpx>=0.27'
 
 # Entity gate
 uv add 'spacy>=3.8.10,<3.9'
-uv run python -m spacy download en_core_web_lg==3.8.0
+uv pip install 'en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl'
 
 # Forensic memory (own venv at /opt/silentwitness/vol3-venv — see §8 deployment)
 uv add 'volatility3==2.27.0'

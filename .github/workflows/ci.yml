@@ -118,7 +118,7 @@ jobs:
         # despite cache-hit=true.
         run: |
           if ! uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
-            uv run python -m spacy download en_core_web_lg
+            uv pip install "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
           fi
       - name: pytest with coverage
         env:
@@ -162,7 +162,7 @@ jobs:
         # despite cache-hit=true.
         run: |
           if ! uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
-            uv run python -m spacy download en_core_web_lg
+            uv pip install "en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
           fi
       - name: Cache Hypothesis example database
         # Persist failing examples across runs so each new CI run replays

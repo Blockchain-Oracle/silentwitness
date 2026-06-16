@@ -133,7 +133,8 @@ def test_entity_gate_model_error_message_is_actionable() -> None:
         with _pytest.raises(gate_mod.EntityGateModelError) as excinfo:
             gate_mod._get_nlp()
         msg = str(excinfo.value)
-        assert "uv run python -m spacy download en_core_web_lg" in msg
+        assert "uv pip install --python" in msg
+        assert "en_core_web_lg-3.8.0-py3-none-any.whl" in msg
     finally:
         _spacy.load = saved_load  # type: ignore[assignment]
         gate_mod._nlp_cache = None

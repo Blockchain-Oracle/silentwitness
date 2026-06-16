@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # install.sh — Provision SilentWitness tool dependencies on SIFT 2026.
-# Every tool is version-pinned with a SHA256 checksum; never installs "latest".
+# Direct archive downloads are version-pinned with SHA256 checksums; Python
+# packages use the pinned lockfile / direct wheel URLs. Never installs "latest".
 # Run as a user with sudo. Idempotent — skips already-installed tools.
 
 set -euo pipefail
@@ -202,18 +203,27 @@ install_evidence_access() {
 # firewall) loads en_core_web_lg at the first record_observation. Without it
 # EVERY observation is rejected ENTITY_GATE_UNAVAILABLE and the agent stages
 # ZERO findings — the exact failure a fresh-OVA reproduction hits (surfaced by
-# the live ROCBA run). `uv run` supplies the installer the bare model wheel
-# needs (the project venv ships no pip). Idempotent: skip if already loadable.
+# the live ROCBA run). The global CLI runs from uv's tool environment, so the
+# model must be installed into that exact Python env, not the checkout venv.
+# uv tool environments do not include pip, so install the pinned model wheel
+# with `uv pip install --python ...`. Idempotent: skip if already loadable.
 # ---------------------------------------------------------------------------
 install_spacy_model() {
+    local tool_python="$HOME/.local/share/uv/tools/silentwitness/bin/python"
+    local model_wheel
+    model_wheel="en-core-web-lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl"
+
+    [[ -x "$tool_python" ]] \
+        || fail "silentwitness tool Python missing at $tool_python; run CLI install first"
+
     log "installing spaCy en_core_web_lg (entity-gate NER model, ~560 MB)"
-    if uv run python -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
+    if "$tool_python" -c "import spacy; spacy.load('en_core_web_lg')" 2>/dev/null; then
         log "en_core_web_lg already present — skipping"
         return
     fi
-    uv run python -m spacy download en_core_web_lg \
+    uv pip install --python "$tool_python" "$model_wheel" \
         || fail "spaCy en_core_web_lg install failed — entity gate would reject every observation"
-    uv run python -c "import spacy; spacy.load('en_core_web_lg')" \
+    "$tool_python" -c "import spacy; spacy.load('en_core_web_lg')" \
         || fail "en_core_web_lg installed but does not load"
 }
 
