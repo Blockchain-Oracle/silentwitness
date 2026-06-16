@@ -25,6 +25,8 @@ per-record / per-plugin diagnostics inside a worker are best-effort.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import logging
 import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -170,7 +172,10 @@ def _parse_artifact(
     boundary and reach :class:`IngestResult.diagnostics`."""
     stats = FeederStats()
     feeder = _feeder_for(kind)
-    rows = list(feeder(Path(path_str), audit_id=audit_id, host=host, source_path=cite, stats=stats))
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        rows = list(
+            feeder(Path(path_str), audit_id=audit_id, host=host, source_path=cite, stats=stats)
+        )
     return rows, stats.skipped
 
 
@@ -237,9 +242,10 @@ def _ingest_one(
     shipped behaviour."""
     stats = FeederStats()
     try:
-        written = index.bulk_ingest(
-            _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite, stats=stats)
-        )
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            written = index.bulk_ingest(
+                _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite, stats=stats)
+            )
     except Exception as exc:  # parse OR bulk-insert failure -> skip + record
         _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
         result.failures.append((kind, path.name, str(exc)))

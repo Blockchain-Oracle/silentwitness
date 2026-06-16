@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -177,6 +178,32 @@ def test_per_record_skips_are_surfaced_in_diagnostics(
         assert len(result.diagnostics) == 1
         kind, name, skipped = result.diagnostics[0]
         assert kind == "evtx" and name == "a.evtx" and skipped == {"corrupt_record": 2}
+
+
+def test_feeder_stdout_stderr_noise_is_suppressed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def noisy_feeder(
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
+    ) -> Iterator[IndexRecord]:
+        print("raw parser stdout warning")
+        print("raw parser stderr warning", file=sys.stderr)
+        yield IndexRecord(text="kept", source_tool="evtx:Security", audit_id=audit_id)
+
+    monkeypatch.setattr(ingest_artifacts, "evtx_file_records", noisy_feeder)
+    registry = _FakeRegistry([_Rec(EvidenceType.EVTX, Path("/c/prepared/img/evtx/a.evtx"))])
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        result = ingest_prepared_artifacts(registry, idx, audit_id="a", host="", max_workers=1)
+
+    captured = capsys.readouterr()
+    assert result.counts == {"evtx": 1}
+    assert "raw parser" not in captured.out
+    assert "raw parser" not in captured.err
 
 
 # ---------------------------------------------------------------------------
