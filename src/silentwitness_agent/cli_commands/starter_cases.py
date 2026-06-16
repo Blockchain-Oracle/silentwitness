@@ -12,6 +12,7 @@ from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
+    SpinnerColumn,
     TextColumn,
     TimeRemainingColumn,
     TransferSpeedColumn,
@@ -57,6 +58,7 @@ def _close(client: Any) -> None:
 
 def _download_progress(console: Console) -> Progress:
     return Progress(
+        SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
         DownloadColumn(),
@@ -165,11 +167,13 @@ def download(
                     destination.unlink()
                 part = destination.with_suffix(destination.suffix + ".part")
                 completed = part.stat().st_size if part.exists() else 0
+                out.print(f"GET  {human_size(entry.size):>10}  {destination}", highlight=False)
                 task_id = progress.add_task(
                     destination.name,
                     total=entry.size,
                     completed=completed,
                 )
+                progress.refresh()
 
                 def _update(done: int, total: int | None, task_id: Any = task_id) -> None:
                     progress.update(task_id, completed=done, total=total)
