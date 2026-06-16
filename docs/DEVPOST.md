@@ -1,70 +1,94 @@
 # SilentWitness
 
+![SilentWitness banner](https://switness.xyz/brand/banner.png)
+
 ## One-line pitch
 
-> SilentWitness — a hypothesis-first DFIR investigator whose report writes itself, with every claim locked to the tool that produced it.
+SilentWitness is a hypothesis-first DFIR investigator that turns forensic tool output into a defensible audit trail: every report claim must point back to the exact tool output that produced it.
+
+## Links
+
+- Demo video: [vimeo.com/1201573890](https://vimeo.com/1201573890)
+- Live docs: [switness.xyz](https://switness.xyz)
+- Quick start: [switness.xyz/docs/quickstart](https://switness.xyz/docs/quickstart)
+- Try it out: [switness.xyz/docs/try-it-out](https://switness.xyz/docs/try-it-out)
+- Architecture: [switness.xyz/docs/architecture](https://switness.xyz/docs/architecture)
+- Accuracy report: [switness.xyz/docs/accuracy-report](https://switness.xyz/docs/accuracy-report)
+- Datasets: [switness.xyz/docs/datasets](https://switness.xyz/docs/datasets)
+- GitHub: [github.com/Blockchain-Oracle/silentwitness](https://github.com/Blockchain-Oracle/silentwitness)
 
 ## What it does
 
-DFIR analysts spend two to three hours of every shift not investigating — they're stenographers, copying tool output into a Markdown report and remembering which command produced which line. The cost compounds: by the time the report is written, the hypothesis chain is half-forgotten, and the citation back to the exact `vol3` row or `MFTECmd` entry that grounds a finding is reconstructed from memory rather than carried forward.
+DFIR analysts lose too much time copying terminal output into reports and trying to remember which command proved which claim. SilentWitness keeps that provenance attached while the investigation is still happening.
 
-SilentWitness flips the operating mode. The AI investigator forms a hypothesis, dispatches a specialist (memory / disk / log / network) that holds a small MCP tool family, reads the tool's stored output, and emits a `record_observation` envelope whose `cited_spans` field is verified by an **architectural** citation gate against the immutable audit ledger. An entity gate refuses any observation whose claimed artifacts (process names, file paths, MAC addresses) don't appear, byte-for-byte, in a cited span. The Markdown report is rendered as the case unfolds, every finding carrying a `[verify:audit_id]` link that resolves to the exact audit row that produced it.
+The agent works from a hypothesis stack. It registers evidence, prepares a case, indexes forensic artifacts, investigates with bounded MCP tools, verifies findings against stored output, and exports a report. A citation gate rejects any observation whose cited span cannot be found in the audit ledger. An entity gate rejects claimed process names, paths, hashes, IPs, or MAC addresses unless those entities appear in the cited evidence text.
 
-The demo's killer beat is the head-to-head: vanilla Protocol SIFT 2026 emits N hallucinated artifacts on the Nitroba / NIST Data Leakage / NIST Hacking Case corpora; SilentWitness emits zero, because the gates REJECT the malformed observations before they land. The Δ is measured (not estimated) by `harness/scorer.py` shelling out to `find`/`grep` against the mounted evidence. The verdict is reproducible by re-running the cited shell-out against the same mount.
+The result is a report where each finding carries a verification reference, not a loose narrative paragraph. The analyst can audit the chain from conclusion back to command output.
+
+## Visual overview
+
+![SilentWitness architecture](https://switness.xyz/brand/diagram-A-architecture.png)
+
+![SilentWitness investigation loop](https://switness.xyz/brand/diagram-D-investigation-loop.png)
+
+![SilentWitness three-claim trace](https://switness.xyz/brand/diagram-F-trace.png)
 
 ## Inspiration
 
-Rob T. Lee's framing in conversation with the SANS faculty was the anchor: analysts spend the late-shift hours acting as "command-line stenographers" — transcribing tool stdout into a coherent report with the right citations. The model spend on a SANS GIAC course's case is roughly two to three evenings of writing — for a competent FOR508 graduate, the bottleneck isn't the analysis, it's the prose + provenance work.
+The SANS [Find Evil!](https://findevil.devpost.com/) challenge is a strong fit because the work is not just "can an agent run forensic tools?" The harder question is whether an agent can produce findings that a senior analyst can review, challenge, and reproduce.
 
-Protocol SIFT 2026 demonstrated AI agents *can* drive forensic tools competently against the SIFT mount. What it didn't yet have was a defensible audit trail (per the GTG-1002 framing — guardrails belong in code, not in prompts). SilentWitness's wedge is the architectural-gate layer that the prompt-only baseline can't offer: the same model behind both runs produces a measurably cleaner output when the citation + entity gates run in code on every observation.
+Protocol SIFT 2026 showed that AI agents can drive the SIFT workstation. SilentWitness adds the missing control layer: evidence registration, offline ingest, bounded tool access, signed audit rows, citation verification, entity verification, and report export.
 
 ## How we built it
 
 | Layer | Stack |
 |---|---|
-| Custom MCP server | `mcp>=1.23.0,<2.0` (CVE closures), FastMCP sub-module, Pydantic v2 envelopes |
-| Reference agent | `pydantic-ai>=1.105.0,<2.0.0` — model-agnostic across Anthropic, OpenAI, Google, Ollama |
-| CLI | `typer>=0.15`, `rich>=14.1,<16` (nested-Live fix) |
-| Forensic tooling | Volatility 3 2.27.0 in own venv at `/opt/silentwitness/vol3-venv/bin/vol`; Hayabusa / Chainsaw / Zeek / Suricata / EZ Tools via subprocess; spaCy NER for entity-gate extraction |
-| Report rendering | `weasyprint>=68.1,<70.0` (CVE closures), `mistune>=3.2.1` |
-| Audit + integrity | HMAC-SHA256 with PBKDF2-SHA256 at 600,000 iterations; per-case ledger at `/var/lib/silentwitness/verification/<case_id>.jsonl` (mode 0600) |
-| Test discipline | `pytest`, `hypothesis` property tests on the verification gates; 95% coverage floor on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere |
-| Build | `uv==0.11.18` (Astral), `ruff>=0.8`, `mypy --strict` on every src file |
+| Custom MCP server | `mcp>=1.23.0,<2.0`, FastMCP, Pydantic v2 envelopes |
+| Reference agent | `pydantic-ai>=1.105.0,<2.0.0`, model-agnostic across OpenAI, Anthropic, Google, and Ollama |
+| CLI | Typer and Rich commands for `initialize`, `register`, `prepare`, `index`, `investigate`, `verify`, `export`, and dataset download |
+| Forensic tooling | Volatility 3, Hayabusa, Chainsaw, Zeek, Suricata, and Eric Zimmerman tools through the offline ingest spine |
+| Audit and integrity | HMAC-SHA256 ledger records, PBKDF2-SHA256 key derivation, read-only evidence mounts, and per-case audit files |
+| Reports | Markdown/PDF export with verification references back to the audit ledger |
+| Site and docs | Next.js, Fumadocs, Pagefind, Vercel, and the public docs at `switness.xyz` |
 
-The investigator runs a hypothesis stack — `form → dispatch specialist → confirm → pivot` — with the critic agent firing every N steps on a fresh context to challenge the in-flight findings. We dropped `structlog` in favour of Pydantic's `model_dump_json()` for the JSONL audit. It preserved the typed shape and removed a dependency. The live server exposes 12 agent-visible MCP tools: evidence registration and hash verification, index search/retrieval/timeline/detection tools, finding recorders, bounded output reading, and the examiner approval path. Memory, disk, log, and network parsers run in the offline ingest spine so the agent can't free-read raw evidence.
+The architecture keeps raw evidence behind the ingest boundary. The model does not free-read a disk image or memory image. It asks the MCP server for indexed, bounded, citable records, then records findings through typed envelopes that the gates can validate.
 
 ## Challenges we ran into
 
-- **Pinning to SIFT 2026's tool versions.** SIFT 2026 ships dotnet 9 + Python 3.12 but NOT Node.js; the judge-facing diagram pack now lives as tracked SVG assets under `docs/diagrams/`, so the base install path stays focused on running the investigator instead of rebuilding visuals. Vol3 plugin paths changed mid-cycle (`windows.malware.malfind.Malfind` replaced `windows.malfind.Malfind`); the MCP allowlist tracks the canonical 2026-06-07 plugin names verbatim.
-- **Entity gate across Volatility 3 stdout shapes.** Vol3's pretty-printed columns drift between minor versions; the sanitizer normalizes whitespace + path separators + strips timestamps before SHA256, so the entity-substring check is run against a stable bytestream regardless of console-wrap differences.
-- **Hitting 95% coverage on `verification/`.** Property tests on `sanitizer.normalize_for_audit` and the entity-gate substring matcher needed targeted boundary cases — Unicode bidi controls, zero-width characters, embedded `[verify:...]` tokens — which the property suite generates via hypothesis.
+- **SIFT 2026 tool drift.** Volatility plugin paths and Zimmerman tool locations changed across current SIFT builds, so the repo pins the verified paths and checks tool behavior instead of assuming old command names still work.
+- **Noisy forensic output.** Tool banners, timestamps, path separators, and CSV formatting can change between runs. SilentWitness normalizes output before hashing and verification so a claim is checked against stable evidence text.
+- **Keeping claims honest.** The easiest demo would be a polished story. The useful demo is a reproducible chain: evidence in, tools run, observations gated, findings exported, and misses documented in the accuracy report.
+- **Submission polish without hiding limits.** The public docs include the accuracy report and dataset notes because judges should be able to see what works, what still varies, and how to rerun the claims.
 
-## Accomplishments that we're proud of
+## Accomplishments
 
-- **Measured Δ vs vanilla Protocol SIFT 2026** on three datasets (Nitroba, NIST Data Leakage, NIST Hacking Case), with HALLUCINATION verdicts grounded in real `find`/`grep` shell-outs against the mounted evidence (`harness/scorer.py`). Reproducible end-to-end via `just harness DATASET=<id>`.
-- **12 agent-visible MCP tools plus an offline ingest spine** — the agent queries parsed, citable evidence records; raw forensic parsers stay behind the ingest boundary.
-- **HMAC-signed approval ledger** with PBKDF2-SHA256 at 600,000 iterations + a named-volume Docker mount so the chain survives container restarts (per `architecture.md §4.9`).
-- **Self-correcting hypothesis stack.** The `transition=pivot` row in `audit/hypothesis.jsonl` is the architectural artifact that proves the investigator detected a stale assumption (vol3 symbol-table mismatch is the canonical example) and revised — without the analyst needing to step in.
+- Built a Custom MCP Server and Pydantic AI reference investigator around real forensic tooling.
+- Added citation and entity gates that reject malformed observations before they become findings.
+- Added dataset catalog and download commands so users do not need to call helper scripts directly.
+- Published a Vercel documentation site with quickstart, architecture, datasets, accuracy report, and demo-facing walkthroughs.
+- Verified the codebase with the unit, integration, docs sync, and site typecheck suites before submission.
 
 ## What we learned
 
-Honesty over polish. NIST Hacking Case canonical answers (MAC, IP, hostname, email for Greg Schardt / Mr. Evil) appear in hundreds of indexed writeups; a passing finding there can be memorized rather than investigated. The citation + entity gates force every claim to ground in evidence-present spans instead of regurgitated memory. We report run-to-run variance, misses, noisy observations, and residual issues in `docs/ACCURACY_REPORT.md`; the next iteration's headline is closing those gaps, not advertising a number we can't defend.
+The main lesson is that provenance has to be part of the system design. A prompt can ask for careful citations, but code has to enforce whether the citation actually exists and whether the named artifact appears in the cited output.
 
-## What's next for SilentWitness
+We also learned that public forensic datasets are tricky for evaluation. Some answers are widely indexed online, so a model can appear correct by memory. SilentWitness treats that as a risk and pushes evaluation toward evidence-present spans, reproducible shell checks, and documented residual gaps.
 
-- **Live-host triage via Velociraptor MCP.** A `velociraptor` backend that wraps the AGPL-licensed agent via subprocess invocation, identical to the Hayabusa / Chainsaw pattern. No additional copyleft trigger because Velociraptor runs as a subprocess, not a linked library.
-- **Multi-case management.** A `silentwitness queue` command that holds an ordered investigation backlog with budget caps, so a SOC analyst can stage three cases overnight and triage the staged findings in the morning.
-- **Cloud forensics.** AWS / Azure / GCP audit-trail backends with the same MCP tool envelope shape, so the citation gate generalizes from local-mount evidence to cloud-trail evidence with no agent-side change.
-- **Case-trapdoor synthesis.** The Epic 15 adversary-pair case (`harness/datasets/case-trapdoor.manifest.json`) — synthetic and contemporary, so the memorization risk that haunts Mr. Evil doesn't apply.
+## What's next
+
+- Add live-host triage through a Velociraptor backend while keeping the same citation envelope.
+- Add multi-case queueing so analysts can stage several investigations and review bounded results later.
+- Add cloud-forensics backends for AWS, Azure, and GCP audit trails.
+- Expand the adversarial synthetic dataset work so evaluations are less exposed to memorized public answers.
 
 ## Built with
 
-`python`, `pydantic-ai`, `mcp`, `fastmcp`, `volatility-3`, `sift-workstation`, `claude`, `docker`, `weasyprint`
+`python`, `pydantic-ai`, `mcp`, `fastmcp`, `typer`, `rich`, `volatility-3`, `sift-workstation`, `docker`, `weasyprint`, `next.js`, `fumadocs`, `pagefind`, `vercel`
 
 ## Try it yourself
 
-Two paths in `docs/TRY_IT_OUT.md`: SIFT 2026 native or Docker Compose. The README's `## Quick start` callout summarizes both. The long-form walkthrough has troubleshooting + a Nitroba smoke test that finishes in about three minutes.
+Start with the public walkthrough: [switness.xyz/docs/try-it-out](https://switness.xyz/docs/try-it-out). It covers the SIFT path, Docker path, starter datasets, the Nitroba smoke test, and the command flow from `initialize` through `export`.
 
 ## License
 
-MIT — see [`LICENSE`](../LICENSE) and [`NOTICES.md`](../NOTICES.md) for third-party attributions.
+MIT. Third-party attribution details are in the repository notices.

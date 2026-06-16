@@ -20,7 +20,7 @@ mapping") are documented so a teammate audit can re-run them in <5 minutes.
 - [ ] README's `<!-- DEMO_VIDEO_URL -->` placeholder has been swapped for a real URL — `uv run python scripts/check_submission_ready.py --mode placeholder-swap` exits 0
 - [ ] `docs/EXAMPLE_EXECUTION_LOGS/` deterministic regeneration test passes — `uv run pytest tests/integration/test_example_execution_logs.py` exits 0
 - [ ] `NOTICES.md` present at repo root with required H2 sections — `test -s NOTICES.md && uv run pytest tests/unit/test_build_notices.py` exits 0
-- [ ] Demo video URL well-formed (manual after recording) — `uv run python scripts/check_submission_ready.py --mode video-url --video-url <url>` exits 0; URL pattern `https://youtu.be/<11-char-id>` or `https://www.youtube.com/watch?v=<11-char-id>`
+- [ ] Demo video URL well-formed (manual after recording) — `uv run python scripts/check_submission_ready.py --mode video-url --video-url <url>` exits 0; accepted forms: `https://vimeo.com/<numeric-id>`, `https://youtu.be/<11-char-id>`, or `https://www.youtube.com/watch?v=<11-char-id>`
 
 ## Manual (judge-facing reality check)
 
@@ -36,14 +36,16 @@ mapping") are documented so a teammate audit can re-run them in <5 minutes.
 | Tagline | Verbatim one-liner from README |
 | Project story | `docs/DEVPOST.md` body verbatim (the Markdown renders) |
 | Built-with tags | `docs/DEVPOST.md` §"Built with" comma list |
-| Demo video URL | YouTube Unlisted URL from the demo-recording session |
+| Demo video URL | `https://vimeo.com/1201573890` |
+| Project website / docs URL | `https://switness.xyz` |
 | Repository URL | `https://github.com/Blockchain-Oracle/silentwitness` |
-| Try-It-Out URL | `https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/TRY_IT_OUT.md` |
+| Try-It-Out URL | `https://switness.xyz/docs/try-it-out` |
+| Architecture URL | `https://switness.xyz/docs/architecture` |
 
 ## Order of operations
 
 1. Run `uv run python scripts/check_submission_ready.py --mode all` — fix anything red.
-2. Record the demo video; upload as YouTube Unlisted; copy the URL.
+2. Record the demo video; upload it; copy the hosted URL.
 3. Run `uv run python scripts/swap_demo_video_url.py <url>` — swaps the placeholder in README.md + docs/TRY_IT_OUT.md.
 4. Commit with `docs(submission): swap demo video URL` and push to `main`.
 5. Re-run `uv run python scripts/check_submission_ready.py --mode all` — every box must be green.

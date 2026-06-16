@@ -23,7 +23,7 @@ pnpm --filter @silentwitness/site build
 
 ## Deploy
 
-Pushes to `main` trigger Vercel automatically — see `vercel.json` at the repo root. Preview deployments fire on every PR. Live URL: https://silentwitness.vercel.app.
+Pushes to `main` trigger Vercel automatically — see `vercel.json` at the repo root. Preview deployments fire on every PR. Live URL: https://switness.xyz.
 
 ## Content sources
 
