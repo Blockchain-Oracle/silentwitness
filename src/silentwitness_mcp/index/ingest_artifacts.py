@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import logging
 import os
 import signal
 from collections.abc import Iterator
@@ -51,7 +50,6 @@ from silentwitness_mcp.index.feeders_srum import srum_records
 from silentwitness_mcp.index.feeders_usnjrnl import usnjrnl_records
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
-_LOG = logging.getLogger(__name__)
 _DEFAULT_PARSER_TIMEOUT_SEC = 300.0
 
 # Marker dir written by `prepare`; citations are stored relative to it so they're
@@ -262,7 +260,6 @@ def ingest_prepared_artifacts(
                 rows, skipped = future.result()
                 written = index.bulk_ingest(rows)
             except Exception as exc:  # parse OR bulk-insert failure -> skip + record
-                _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
                 result.failures.append((kind, path.name, str(exc)))
                 continue
             result.counts[kind] = result.counts.get(kind, 0) + written
@@ -295,7 +292,6 @@ def _ingest_one(
                 _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite, stats=stats)
             )
     except Exception as exc:  # parse OR bulk-insert failure -> skip + record
-        _LOG.warning("%s feeder failed on %s: %s", kind, path.name, exc)
         result.failures.append((kind, path.name, str(exc)))
         return
     result.counts[kind] = result.counts.get(kind, 0) + written

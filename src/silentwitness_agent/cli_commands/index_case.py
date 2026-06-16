@@ -23,6 +23,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from rich.console import Console
@@ -33,6 +34,47 @@ from silentwitness_mcp.evidence.registry import EvidenceRegistry
 from silentwitness_mcp.index.store import EvidenceIndex
 
 _INDEX_DB = "index.db"
+_SUMMARY_SAMPLE_LIMIT = 5
+
+
+def _counts_by_kind(items: Sequence[tuple[str, object, object]]) -> str:
+    counts: dict[str, int] = {}
+    for kind, _, _ in items:
+        counts[kind] = counts.get(kind, 0) + 1
+    return ", ".join(f"{kind}={count}" for kind, count in sorted(counts.items()))
+
+
+def _print_artifact_failure_summary(
+    err: Console,
+    failures: list[tuple[str, str, str]],
+) -> None:
+    if not failures:
+        return
+    samples = ", ".join(f"{kind}:{name}" for kind, name, _ in failures[:_SUMMARY_SAMPLE_LIMIT])
+    more = len(failures) - _SUMMARY_SAMPLE_LIMIT
+    more_note = f"; +{more} more" if more > 0 else ""
+    err.print(
+        f"[yellow]⚠[/yellow] {len(failures)} artifact parser failure(s) recorded "
+        f"({_counts_by_kind(failures)}; samples: {samples}{more_note}; full details in audit)",
+        highlight=False,
+    )
+
+
+def _print_skip_summary(
+    err: Console,
+    diagnostics: list[tuple[str, str, dict[str, int]]],
+) -> None:
+    if not diagnostics:
+        return
+    skipped_total = sum(sum(skipped.values()) for _, _, skipped in diagnostics)
+    samples = ", ".join(f"{kind}:{name}" for kind, name, _ in diagnostics[:_SUMMARY_SAMPLE_LIMIT])
+    more = len(diagnostics) - _SUMMARY_SAMPLE_LIMIT
+    more_note = f"; +{more} more" if more > 0 else ""
+    err.print(
+        f"[yellow]⚠[/yellow] {skipped_total} parser record skip(s) recorded "
+        f"({_counts_by_kind(diagnostics)}; samples: {samples}{more_note}; full details in audit)",
+        highlight=False,
+    )
 
 
 def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color: bool) -> int:
@@ -80,15 +122,11 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
             counts = ingested.counts
             for kind, name, message in ingested.failures:
                 advisories.append(f"{kind} parse FAILED on {name}: {message}")
-                err.print(f"[red]✗[/red] {kind} parse FAILED on {name}: {message}", highlight=False)
+            _print_artifact_failure_summary(err, ingested.failures)
             for kind, name, skipped in ingested.diagnostics:
                 detail = ", ".join(f"{r}={c}" for r, c in sorted(skipped.items()))
                 advisories.append(f"{kind} {name}: skipped records ({detail})")
-                err.print(
-                    f"[yellow]⚠[/yellow] {kind} {name}: skipped {sum(skipped.values())} "
-                    f"record(s) ({detail})",
-                    highlight=False,
-                )
+            _print_skip_summary(err, ingested.diagnostics)
 
             images = [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE]
             for rec in images:
