@@ -16,7 +16,7 @@ any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_
 
 ## Demo
 
-📺 **2-minute demo:** <!-- DEMO_VIDEO_URL --> [youtu.be/PLACEHOLDER](https://youtu.be/PLACEHOLDER)
+📺 **Demo video:** [vimeo.com/1201573890](https://vimeo.com/1201573890)
 
 ![SilentWitness — hypothesis-first DFIR investigator for SANS Find Evil! 2026](./assets/brand/banner.png)
 
@@ -90,7 +90,7 @@ silentwitness export mr-evil-001 --format markdown
 
 ## Architecture
 
-![SilentWitness architecture diagram showing read-only evidence, offline ingest, typed MCP tools, and the audited report path](./docs/diagrams/architecture.svg)
+![SilentWitness architecture diagram showing read-only evidence, offline ingest, MCP server, Pydantic AI investigator, audit ledger, and report export](./assets/brand/diagram-A-architecture.png)
 
 **Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but doesn't unlock hallucinations against unmounted artifacts.
 

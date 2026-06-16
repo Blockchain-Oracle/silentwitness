@@ -159,7 +159,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 ## 8. For judges
 
 - **Fastest path:** you do **not** need to run it — the [Accuracy Report](ACCURACY_REPORT.md),
-  [Architecture](architecture.md) + [diagram](diagrams/architecture.svg), and the
+  [Architecture](architecture.md) + [diagram](../assets/brand/diagram-A-architecture.png), and the
   [execution logs](execution_logs/) contain everything scored. If you do run it, follow §3–§5
   with your own API key.
 - **Three-claim trace:** [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) walks three findings from
@@ -180,7 +180,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 
 | You want… | Look here |
 |---|---|
-| How it's built | [`docs/architecture.md`](architecture.md) + [`docs/diagrams/architecture.svg`](diagrams/architecture.svg) |
+| How it's built | [`docs/architecture.md`](architecture.md) + [`assets/brand/diagram-A-architecture.png`](../assets/brand/diagram-A-architecture.png) |
 | How accurate it is (honest) | [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) |
 | What data it was tested on | [`docs/DATASETS.md`](DATASETS.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |

@@ -63,7 +63,7 @@ Each rejection cites the survey doc + a one-sentence reason.
 Top-level shape of the system. The three artifacts (`silentwitness-mcp`, `silentwitness-agent`, `silentwitness-claude-code`) are independently usable. Trust boundaries are annotated.
 
 <!-- canonical-architecture-diagram -->
-![SilentWitness system architecture](diagrams/architecture.svg)
+![SilentWitness system architecture](../assets/brand/diagram-A-architecture.png)
 
 ### Trust boundaries (annotated)
 
@@ -901,7 +901,7 @@ Implementing agents must not weaken any of these gates without an ADR.
 ## 15. Submission checklist gates
 
 - **No mocks in production code.** All MCP tool wrappers must invoke real CLIs. Mocks live in `tests/` only.
-- **README shape:** project name + pitch + demo video + 3-command run + architecture SVG + MIT badge — in that order, above the fold.
+- **README shape:** project name + pitch + demo video + 3-command run + architecture diagram + MIT badge — in that order, above the fold.
 - **CLI structure:** all commands listed in §5.6 must be implemented by submission.
 - **CI green on main.** Final main commit prior to submission must have all CI jobs green including the property-test slow profile.
 - **8 mandatory deliverables** produced and linked from README: repo, video, architecture diagram, write-up, dataset doc, accuracy report, setup instructions, agent execution logs (sample case shipped at `docs/EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/`).

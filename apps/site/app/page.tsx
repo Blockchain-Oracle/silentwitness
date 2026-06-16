@@ -55,9 +55,9 @@ const figures = [
     body: "A finding has to resolve to the exact tool execution that produced it.",
   },
   {
-    src: "/brand/card-self-correction.png",
-    title: "Self-Correction",
-    body: "Critic challenges and coverage-gate retries are visible in the audit logs.",
+    src: "/brand/diagram-D-investigation-loop.png",
+    title: "Investigation Loop",
+    body: "Detections become hypotheses, cited observations, pivots, critic review, and report output.",
   },
 ];
 
@@ -170,7 +170,7 @@ export default function Landing() {
             </div>
           </div>
           <Image
-            src="/brand/firewall-animated-still.png"
+            src="/brand/diagram-B-firewall.png"
             alt="SilentWitness hallucination firewall showing staged claim checks"
             width={924}
             height={540}
