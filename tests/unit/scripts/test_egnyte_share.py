@@ -298,6 +298,30 @@ def test_stream_file_writes_target_and_sidecar(tmp_path: Path) -> None:
     assert sidecar.read_text(encoding="utf-8").startswith(expected_sha)
 
 
+def test_stream_file_uses_streaming_not_buffered_request(monkeypatch, tmp_path: Path) -> None:
+    """Large downloads must not use `client.request`, which buffers the body."""
+
+    body = b"x" * (2 * 1024 * 1024)
+    client = _client(httpx.MockTransport(lambda _r: httpx.Response(200, content=body)))
+    entry = Entry(
+        path="/x/big.bin",
+        name="big.bin",
+        type="file",
+        size=len(body),
+        last_modified=None,
+        entry_id="abc-def",
+    )
+
+    def _fail_buffered_path(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("stream_file must use client.stream, not request_with_retry")
+
+    monkeypatch.setattr(_module._impl, "request_with_retry", _fail_buffered_path)
+
+    target = tmp_path / "big.bin"
+    assert stream_file(client, entry, target) == hashlib.sha256(body).hexdigest()
+    assert target.stat().st_size == len(body)
+
+
 def test_stream_file_size_mismatch_raises(tmp_path: Path) -> None:
     client = _client(
         httpx.MockTransport(lambda _r: httpx.Response(200, content=b"only 24 bytes here long.."))

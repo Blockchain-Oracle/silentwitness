@@ -69,6 +69,10 @@ class ChecksumMismatchError(RuntimeError):
     integrity; better to re-download than to ship a tainted artefact."""
 
 
+def _is_transient_status(status_code: int) -> bool:
+    return status_code in (408, 429) or 500 <= status_code < 600
+
+
 @dataclass(frozen=True)
 class Entry:
     """One share item — file or folder. ``path`` begins with the share root;
@@ -122,7 +126,7 @@ def request_with_retry(
     for attempt in range(MAX_RETRIES):
         try:
             r = client.request(method, url, **kwargs)
-            if r.status_code in (408, 429) or 500 <= r.status_code < 600:
+            if _is_transient_status(r.status_code):
                 wait = BACKOFF_BASE_SECONDS * (2**attempt)
                 print(
                     f"  retry {attempt + 1}/{MAX_RETRIES} HTTP {r.status_code} on {url} "
@@ -274,43 +278,68 @@ def stream_file(client: httpx.Client, entry: Entry, target: Path) -> str:
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_suffix(target.suffix + ".part")
     url = f"{DOWNLOAD_URL}?entryId={entry.entry_id}"
-    resume_from = tmp.stat().st_size if tmp.exists() else 0
-    sha = hashlib.sha256()
-    headers: dict[str, str] = {}
-    mode = "wb"
-    if resume_from > 0:
-        # Re-hash existing bytes so the final digest covers the whole file,
-        # not just the suffix we're about to append.
-        with tmp.open("rb") as fh:
-            while True:
-                chunk = fh.read(CHUNK_BYTES)
-                if not chunk:
-                    break
-                sha.update(chunk)
-        print(f"  RESUME {human_size(resume_from):>10}  {target}", file=sys.stderr)
-        headers = {"Range": f"bytes={resume_from}-"}
-        mode = "ab"
-    r = request_with_retry(client, "GET", url, headers=headers)
-    try:
-        r.raise_for_status()
-    except httpx.HTTPStatusError:
-        r.close()
-        raise
-    if resume_from > 0 and r.status_code == 200:
-        print(
-            f"  RESTART {human_size(resume_from):>10}  {target} (server ignored Range)",
-            file=sys.stderr,
+    last_exc: Exception | None = None
+    for attempt in range(MAX_RETRIES):
+        resume_from = tmp.stat().st_size if tmp.exists() else 0
+        sha = hashlib.sha256()
+        headers: dict[str, str] = {}
+        mode = "wb"
+        if resume_from > 0:
+            with tmp.open("rb") as fh:
+                while chunk := fh.read(CHUNK_BYTES):
+                    sha.update(chunk)
+            print(f"  RESUME {human_size(resume_from):>10}  {target}", file=sys.stderr)
+            headers = {"Range": f"bytes={resume_from}-"}
+            mode = "ab"
+        try:
+            with client.stream("GET", url, headers=headers) as r:
+                if _is_transient_status(r.status_code):
+                    wait = BACKOFF_BASE_SECONDS * (2**attempt)
+                    print(
+                        f"  retry {attempt + 1}/{MAX_RETRIES} HTTP {r.status_code} on {url} "
+                        f"(sleep {wait:.1f}s)",
+                        file=sys.stderr,
+                    )
+                    time.sleep(wait)
+                    continue
+                r.raise_for_status()
+                if resume_from > 0 and r.status_code == 200:
+                    print(
+                        f"  RESTART {human_size(resume_from):>10}  {target} (server ignored Range)",
+                        file=sys.stderr,
+                    )
+                    tmp.unlink(missing_ok=True)
+                    continue
+                written = resume_from
+                last_report = time.monotonic()
+                with tmp.open(mode) as fh:
+                    for chunk in r.iter_bytes(chunk_size=CHUNK_BYTES):
+                        if not chunk:
+                            continue
+                        fh.write(chunk)
+                        sha.update(chunk)
+                        written += len(chunk)
+                        now = time.monotonic()
+                        if now - last_report >= 10:
+                            print(
+                                f"  DOWN {human_size(written):>10}  {target}",
+                                file=sys.stderr,
+                            )
+                            last_report = now
+            break
+        except httpx.TransportError as exc:
+            last_exc = exc
+            wait = BACKOFF_BASE_SECONDS * (2**attempt)
+            print(
+                f"  retry {attempt + 1}/{MAX_RETRIES} after {type(exc).__name__}: {exc} "
+                f"(sleep {wait:.1f}s)",
+                file=sys.stderr,
+            )
+            time.sleep(wait)
+    else:
+        raise RuntimeError(
+            f"giving up after {MAX_RETRIES} retries on GET {url}; last error: {last_exc!r}"
         )
-        r.close()
-        tmp.unlink(missing_ok=True)
-        return stream_file(client, entry, target)
-    with tmp.open(mode) as fh:
-        for chunk in r.iter_bytes(chunk_size=CHUNK_BYTES):
-            if not chunk:
-                continue
-            fh.write(chunk)
-            sha.update(chunk)
-    r.close()
     final_size = tmp.stat().st_size
     if entry.size is not None and final_size != entry.size:
         raise ChecksumMismatchError(
