@@ -145,8 +145,15 @@ def test_starter_cases_download_streams_files_to_target(monkeypatch, tmp_path: P
         lambda _client, root: iter([_file(f"{root}/disk.E01", 4)]),
     )
 
-    def _stream(_client: object, _entry: Entry, target: Path) -> str:
+    def _stream(
+        _client: object,
+        _entry: Entry,
+        target: Path,
+        progress: object | None = None,
+    ) -> str:
         streamed.append(target)
+        if callable(progress):
+            progress(4, 4)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"data")
         return "a" * 64

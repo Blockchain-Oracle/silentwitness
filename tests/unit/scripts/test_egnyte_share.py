@@ -291,11 +291,16 @@ def test_stream_file_writes_target_and_sidecar(tmp_path: Path) -> None:
         entry_id="abc-def",
     )
     target = tmp_path / "f.bin"
-    digest = stream_file(client, entry, target)
+    updates: list[tuple[int, int | None]] = []
+    digest = stream_file(
+        client, entry, target, progress=lambda done, total: updates.append((done, total))
+    )
     assert digest == expected_sha
     assert target.read_bytes() == body
     sidecar = tmp_path / "f.bin.sha256"
     assert sidecar.read_text(encoding="utf-8").startswith(expected_sha)
+    assert updates
+    assert updates[-1] == (len(body), len(body))
 
 
 def test_stream_file_uses_streaming_not_buffered_request(monkeypatch, tmp_path: Path) -> None:

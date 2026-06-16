@@ -26,7 +26,7 @@ from __future__ import annotations
 import hashlib
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -262,7 +262,12 @@ def verify_sidecar(target: Path) -> bool:
     return expected == _sha256_of_file(target)
 
 
-def stream_file(client: httpx.Client, entry: Entry, target: Path) -> str:
+def stream_file(
+    client: httpx.Client,
+    entry: Entry,
+    target: Path,
+    progress: Callable[[int, int | None], None] | None = None,
+) -> str:
     """Download one file to ``target`` with Range resume + SHA verify.
 
     Resume: ``<target>.part`` size → ``Range: bytes=N-``. Server-ignored-
@@ -311,7 +316,8 @@ def stream_file(client: httpx.Client, entry: Entry, target: Path) -> str:
                     tmp.unlink(missing_ok=True)
                     continue
                 written = resume_from
-                last_report = time.monotonic()
+                if progress:
+                    progress(written, entry.size)
                 with tmp.open(mode) as fh:
                     for chunk in r.iter_bytes(chunk_size=CHUNK_BYTES):
                         if not chunk:
@@ -319,13 +325,8 @@ def stream_file(client: httpx.Client, entry: Entry, target: Path) -> str:
                         fh.write(chunk)
                         sha.update(chunk)
                         written += len(chunk)
-                        now = time.monotonic()
-                        if now - last_report >= 10:
-                            print(
-                                f"  DOWN {human_size(written):>10}  {target}",
-                                file=sys.stderr,
-                            )
-                            last_report = now
+                        if progress:
+                            progress(written, entry.size)
             break
         except httpx.TransportError as exc:
             last_exc = exc

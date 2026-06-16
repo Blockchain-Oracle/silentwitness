@@ -8,6 +8,14 @@ from typing import Any
 
 import typer
 from rich.console import Console
+from rich.progress import (
+    BarColumn,
+    DownloadColumn,
+    Progress,
+    TextColumn,
+    TimeRemainingColumn,
+    TransferSpeedColumn,
+)
 from rich.table import Table
 
 from silentwitness_agent.starter_cases.egnyte_share import (
@@ -45,6 +53,18 @@ def _close(client: Any) -> None:
     close = getattr(client, "close", None)
     if callable(close):
         close()
+
+
+def _download_progress(console: Console) -> Progress:
+    return Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        DownloadColumn(),
+        TransferSpeedColumn(),
+        TimeRemainingColumn(),
+        console=console,
+        transient=False,
+    )
 
 
 @app.command("catalog")
@@ -113,40 +133,53 @@ def download(
         out.print(f"downloading {root} -> {target_root}", highlight=False)
         total_size = 0
         file_count = 0
-        for entry in walk(client, root):
-            rel = entry.path[len(root) :].lstrip("/")
-            destination = target_root / rel
-            total_size += entry.size or 0
-            file_count += 1
-            if dry_run:
-                out.print(f"DRY  {human_size(entry.size):>10}  {destination}", highlight=False)
-                continue
-            if (
-                destination.exists()
-                and entry.size is not None
-                and destination.stat().st_size == entry.size
-                and verify_sidecar(destination)
-            ):
+        with _download_progress(err) as progress:
+            for entry in walk(client, root):
+                rel = entry.path[len(root) :].lstrip("/")
+                destination = target_root / rel
+                total_size += entry.size or 0
+                file_count += 1
+                if dry_run:
+                    out.print(f"DRY  {human_size(entry.size):>10}  {destination}", highlight=False)
+                    continue
+                if (
+                    destination.exists()
+                    and entry.size is not None
+                    and destination.stat().st_size == entry.size
+                    and verify_sidecar(destination)
+                ):
+                    out.print(
+                        f"SKIP {human_size(entry.size):>10}  {destination}  (sha256 verified)",
+                        highlight=False,
+                    )
+                    continue
+                if (
+                    destination.exists()
+                    and entry.size is not None
+                    and destination.stat().st_size == entry.size
+                ):
+                    err.print(
+                        f"REDO {human_size(entry.size):>10}  {destination}  (sha256 mismatch)",
+                        highlight=False,
+                    )
+                    destination.unlink()
+                part = destination.with_suffix(destination.suffix + ".part")
+                completed = part.stat().st_size if part.exists() else 0
+                task_id = progress.add_task(
+                    destination.name,
+                    total=entry.size,
+                    completed=completed,
+                )
+
+                def _update(done: int, total: int | None, task_id: Any = task_id) -> None:
+                    progress.update(task_id, completed=done, total=total)
+
+                digest = stream_file(client, entry, destination, progress=_update)
+                progress.update(task_id, completed=entry.size or completed)
                 out.print(
-                    f"SKIP {human_size(entry.size):>10}  {destination}  (sha256 verified)",
+                    f"OK   {human_size(entry.size):>10}  {destination}  sha256={digest[:12]}...",
                     highlight=False,
                 )
-                continue
-            if (
-                destination.exists()
-                and entry.size is not None
-                and destination.stat().st_size == entry.size
-            ):
-                err.print(
-                    f"REDO {human_size(entry.size):>10}  {destination}  (sha256 mismatch)",
-                    highlight=False,
-                )
-                destination.unlink()
-            digest = stream_file(client, entry, destination)
-            out.print(
-                f"OK   {human_size(entry.size):>10}  {destination}  sha256={digest[:12]}...",
-                highlight=False,
-            )
         out.print(f"Done: {file_count} files, {human_size(total_size)}", highlight=False)
     except SystemExit as exc:
         err.print(f"[red]✗[/red] {exc}", highlight=False)
