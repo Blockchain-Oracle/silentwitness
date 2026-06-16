@@ -62,8 +62,21 @@ silentwitness index mr-evil-001
 silentwitness investigate mr-evil-001
 silentwitness review mr-evil-001                  # materialise findings
 silentwitness verify --audit-chain mr-evil-001    # tamper check
-silentwitness export mr-evil-001 --format markdown
+silentwitness export mr-evil-001 --md
 ```
+
+## What Each Command Does
+
+| Command | Meaning |
+|---|---|
+| `init` | Creates `cases/<case-id>/`, the empty report, audit directory, evidence registry, and case metadata. |
+| `register-evidence` | Adds the evidence file or folder to the case, records its hash, classifies its type, and blocks unsafe writable evidence mounts. |
+| `prepare` | Extracts the artifacts SilentWitness needs from the registered evidence without modifying the original image. |
+| `index` | Parses those artifacts into a searchable SQLite/FTS evidence index. |
+| `investigate` | Runs the agent: form hypotheses, search the index, record cited observations, pivot, and stage findings. |
+| `review` | Shows staged findings for examiner approval, rejection, or edits. |
+| `verify --audit-chain` | Rechecks the audit JSONL hash chains so tampering is visible. |
+| `export` | Produces the final report output, and optional PDF or IOC files when requested. |
 
 That's the full workflow. The report drops at `cases/mr-evil-001/report.md`
 with inline `[verify:audit_id]` links resolving to JSONL audit entries.

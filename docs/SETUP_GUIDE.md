@@ -74,50 +74,91 @@ export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"
 
 ---
 
-## 5. Run an investigation — the five steps
+## 5. Run an investigation - the workflow
 
 Each command is one line. We'll use a case named `rocba` and an image at `~/evidence/rocba.E01`
 (change the path to your image).
 
-### Step 1 — Register the evidence (records what you're investigating)
+### Step 1 - Create the case workspace
+
+```bash
+silentwitness init rocba --examiner "$USER"
+```
+
+*What it does:* creates `cases/rocba/`, the empty report, audit directory, evidence registry,
+case metadata, and per-case verification salt. This is the project folder for one investigation.
+
+### Step 2 - Register the evidence
+
 ```bash
 silentwitness register-evidence rocba ~/evidence/rocba.E01
 ```
-*What you'll see:* a confirmation with the image's SHA-256 hash. This proves the evidence is
-recorded read-only and un-tampered.
 
-### Step 2 — Prepare (extract the artifacts, read-only)
+*What it does:* records what you are investigating, classifies the artifact type, computes hashes,
+and refuses unsafe writable evidence mounts. The original evidence is not modified.
+
+*What you'll see:* a confirmation with the image's SHA-256 hash.
+
+### Step 3 - Prepare the artifacts
+
 ```bash
 silentwitness prepare rocba
 ```
+
 *What it does:* opens the disk image **read-only** and copies out the high-value Windows
 artifacts (event logs, registry, file table, shortcuts, prefetch, etc.). Takes a few minutes.
 *The original image is never modified.*
 
-### Step 3 — Index (parse everything into a searchable database)
+### Step 4 - Build the evidence index
+
 ```bash
 silentwitness index rocba
 ```
+
 *What it does:* runs the forensic parsers + the Sigma detection engine over the extracted
 artifacts and builds a fast searchable index. This is the heavy step (~10–15 min for a large
 image); it only happens once.
 *What you'll see:* a summary like `indexed 2,673,733 records`.
 
-### Step 4 — Investigate (the AI does the analysis)
+### Step 5 - Investigate
+
 ```bash
 silentwitness investigate rocba
 ```
+
 *What it does:* the agent investigates — starting from the staged detections, forming
 hypotheses, searching the index, and recording cited findings. It will **refuse to finish**
 until it has addressed all five Key Questions. Takes a few minutes.
 *What you'll see:* a live stream of hypotheses being formed, confirmed, and (when needed) pivoted
 or challenged by its own critic.
 
-### Step 5 — Read the report
+### Step 6 - Review the staged findings
+
 ```bash
 silentwitness review rocba          # see the staged findings
+```
+
+*What it does:* shows the findings the agent staged so the examiner can approve, reject, modify,
+or skip them before they become report material.
+
+### Step 7 - Verify the audit trail
+
+```bash
+silentwitness verify --audit-chain rocba
+```
+
+*What it does:* walks every `audit/<backend>.jsonl` file and recomputes the hash chain. If an
+audit row is missing or edited, this command exits non-zero and tells you where the chain broke.
+
+### Step 8 - Export the report
+
+```bash
+silentwitness export rocba --md
 cat cases/rocba/report.md           # the full investigative narrative
 ```
+
+*What it does:* writes the final report from the reviewed findings. Use `--pdf` when you want a
+PDF report, or IOC options when you want a machine-readable indicator export.
 
 ### (Optional) Score it against known answers
 If you have a ground-truth file (we ship one for the ROCBA case):

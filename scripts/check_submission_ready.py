@@ -42,17 +42,18 @@ _VOCAB_EXCLUDE_PREFIXES = (
     "archive/",
     "docs/EXAMPLE_EXECUTION_LOGS/",
 )
-_YT_URL_PATTERN = (
+_VIDEO_URL_PATTERN = (
     r"https://(?:youtu\.be/[A-Za-z0-9_-]{11}"
-    r"|(?:www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11})"
+    r"|(?:www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11}"
+    r"|vimeo\.com/\d+)"
 )
 # Anchored at both ends — used by --video-url for strict validation. The 11-char
 # ID upper bound (no trailing junk) matches swap_demo_video_url._YT_PATTERNS so
-# the two scripts agree on what counts as a valid YouTube URL.
-_YT_RE_STRICT = re.compile(rf"^{_YT_URL_PATTERN}$")
-# Search variant: used to detect a YouTube URL anywhere in README.md prose. The
-# trailing word-boundary stops the ID match from accepting `abcdefghijkEXTRA`.
-_YT_RE_SEARCH = re.compile(rf"{_YT_URL_PATTERN}(?=\b|$)")
+# the two scripts agree on what counts as a valid hosted video URL.
+_VIDEO_RE_STRICT = re.compile(rf"^{_VIDEO_URL_PATTERN}$")
+# Search variant: used to detect a hosted video URL anywhere in README.md prose. The
+# trailing word-boundary stops YouTube IDs from accepting `abcdefghijkEXTRA`.
+_VIDEO_RE_SEARCH = re.compile(rf"{_VIDEO_URL_PATTERN}(?=\b|$)")
 
 
 class Check:
@@ -99,20 +100,26 @@ def _check_deliverables(root: Path) -> list[Check]:
         head = "\n".join(full.splitlines()[:100])
         if "youtu.be/PLACEHOLDER" in full or "<!-- DEMO_VIDEO_URL -->" in full:
             chk.fail("README still contains demo-video placeholder marker")
-        elif not _YT_RE_SEARCH.search(head):
-            chk.fail("no YouTube URL in first 100 lines")
+        elif not _VIDEO_RE_SEARCH.search(head):
+            chk.fail("no YouTube or Vimeo URL in first 100 lines")
     checks.append(chk)
 
     # Deliverable 3: Architecture diagram asset + README reference
     chk = Check("Deliverable 3: Architecture diagram asset + README reference")
     arch_md = root / "docs" / "architecture.md"
     arch_svg = root / "docs" / "diagrams" / "architecture.svg"
+    arch_png = root / "assets" / "brand" / "diagram-A-architecture.png"
     if not arch_md.exists():
         chk.fail("docs/architecture.md missing")
-    elif not arch_svg.exists():
-        chk.fail("docs/diagrams/architecture.svg missing")
-    elif "docs/diagrams/architecture.svg" not in readme.read_text(encoding="utf-8"):
-        chk.fail("README does not reference docs/diagrams/architecture.svg")
+    elif not arch_svg.exists() and not arch_png.exists():
+        chk.fail("architecture diagram asset missing")
+    else:
+        readme_text = readme.read_text(encoding="utf-8")
+        if (
+            "docs/diagrams/architecture.svg" not in readme_text
+            and "assets/brand/diagram-A-architecture.png" not in readme_text
+        ):
+            chk.fail("README does not reference a tracked architecture diagram")
     checks.append(chk)
 
     # Deliverable 4: Devpost write-up
@@ -222,8 +229,8 @@ def _check_placeholder_swap(root: Path) -> Check:
 
 def _check_video_url(url: str) -> Check:
     chk = Check(f"Video URL well-formed: {url}")
-    if not _YT_RE_STRICT.fullmatch(url):
-        chk.fail("not a recognized youtu.be/ or youtube.com/watch URL")
+    if not _VIDEO_RE_STRICT.fullmatch(url):
+        chk.fail("not a recognized YouTube or Vimeo URL")
     return chk
 
 

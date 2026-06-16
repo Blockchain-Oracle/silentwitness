@@ -14,7 +14,10 @@ from pathlib import Path
 _MAX_LINES = 400
 # First-screen checks (demo, image, architecture asset) scope to the first 100 lines.
 _HEAD_LINES = 100
-_DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|<!--\s*DEMO_VIDEO_URL\s*-->")
+_DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|vimeo\.com/\d+|<!--\s*DEMO_VIDEO_URL\s*-->")
+_ARCHITECTURE_RE = re.compile(
+    r"docs/diagrams/architecture\.svg|assets/brand/diagram-A-architecture\.png"
+)
 _MIT_RE = re.compile(r"\bMIT\b")
 _H1_RE = re.compile(r"^# SilentWitness\b")
 _BANNED = (
@@ -60,7 +63,10 @@ def check(readme_path: Path) -> int:
 
     # Rule 2: demo video link or placeholder marker
     if not _DEMO_RE.search(head):
-        return _fail("demo_video", "no YouTube link or DEMO_VIDEO_URL marker in first 100 lines")
+        return _fail(
+            "demo_video",
+            "no YouTube/Vimeo link or DEMO_VIDEO_URL marker in first 100 lines",
+        )
 
     # Rule 3: image embed alt-text
     if "![" not in head:
@@ -85,10 +91,10 @@ def check(readme_path: Path) -> int:
         return _fail("docker_compose", "missing `docker compose up` shell line")
 
     # Rule 6: tracked architecture diagram reference
-    if "docs/diagrams/architecture.svg" not in text:
+    if not _ARCHITECTURE_RE.search(text):
         return _fail(
             "architecture_diagram",
-            "missing README reference to `docs/diagrams/architecture.svg`",
+            "missing README reference to a tracked architecture diagram",
         )
 
     # Rule 8: literal `MIT` (word-bounded — must not match `transMIT`, `commit`, etc.)

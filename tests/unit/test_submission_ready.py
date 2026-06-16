@@ -91,14 +91,18 @@ class TestVideoUrl:
         )
         assert r.returncode == 0, r.stderr
 
-    def test_non_youtube_url_fails(self) -> None:
+    def test_valid_vimeo_passes(self) -> None:
+        r = _run_gate("--mode", "video-url", "--video-url", "https://vimeo.com/1201573890")
+        assert r.returncode == 0, r.stderr
+
+    def test_non_hosted_video_url_fails(self) -> None:
         r = _run_gate("--mode", "video-url", "--video-url", "https://example.com/video.mp4")
         assert r.returncode == 1
 
     def test_trailing_junk_after_id_fails(self) -> None:
-        # Anchor-mismatch regression: pre-fix, `_YT_RE` lacked end-anchor and
+        # Anchor-mismatch regression: pre-fix, the strict URL regex lacked end-anchor and
         # accepted IDs followed by arbitrary junk — divergent from the swap
-        # script's _YT_PATTERNS which correctly rejected it.
+        # script's URL patterns which correctly rejected it.
         r = _run_gate(
             "--mode",
             "video-url",
@@ -194,6 +198,19 @@ class TestSwapDemoVideoUrl:
         assert "PLACEHOLDER" not in readme.read_text()
         assert "aaaaaaaaaaa" in readme.read_text()
         assert "aaaaaaaaaaa" in try_md.read_text()
+
+    def test_valid_vimeo_url_swaps(self, tmp_path: Path) -> None:
+        readme = tmp_path / "README.md"
+        readme.write_text("# X\n<!-- DEMO_VIDEO_URL --> https://youtu.be/PLACEHOLDER\n")
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("swap", _SWAP)
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rc = mod.swap("https://vimeo.com/1201573890", targets=(readme,))
+        assert rc == 0
+        assert "vimeo.com/1201573890" in readme.read_text()
 
     def test_invalid_url_refused(self, tmp_path: Path) -> None:
         import importlib.util

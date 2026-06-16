@@ -1,4 +1,4 @@
-"""Tests for the tracked SVG diagram pack under docs/diagrams/."""
+"""Tests for the tracked diagram assets used by judge-facing docs."""
 
 from __future__ import annotations
 
@@ -40,20 +40,20 @@ def test_svgs_stay_small_enough_for_repo_docs() -> None:
         assert 512 < size <= 256_000, f"{name} size {size} outside [512B, 256KiB]"
 
 
-def test_readme_references_architecture_svg() -> None:
+def test_readme_references_architecture_png() -> None:
     text = (_REPO / "README.md").read_text(encoding="utf-8")
-    assert "docs/diagrams/architecture.svg" in text
+    assert "assets/brand/diagram-A-architecture.png" in text
 
 
-def test_setup_guide_references_architecture_svg() -> None:
+def test_setup_guide_references_architecture_png() -> None:
     text = (_REPO / "docs" / "SETUP_GUIDE.md").read_text(encoding="utf-8")
-    assert "diagrams/architecture.svg" in text
+    assert "../assets/brand/diagram-A-architecture.png" in text
 
 
-def test_architecture_doc_references_public_svg_pack() -> None:
+def test_architecture_doc_references_public_diagram_pack() -> None:
     text = (_REPO / "docs" / "architecture.md").read_text(encoding="utf-8")
     for rel in (
-        "diagrams/architecture.svg",
+        "../assets/brand/diagram-A-architecture.png",
         "diagrams/hypothesis-state.svg",
         "diagrams/investigation-flow.svg",
         "diagrams/approval-flow.svg",

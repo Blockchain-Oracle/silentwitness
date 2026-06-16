@@ -28,6 +28,11 @@ silentwitness index nitroba-smoke-001
 
 # 4) Investigate
 silentwitness investigate nitroba-smoke-001
+
+# 5) Review, verify, and export the report
+silentwitness review nitroba-smoke-001
+silentwitness verify --audit-chain nitroba-smoke-001
+silentwitness export nitroba-smoke-001 --md
 ```
 
 Expected timing: install ~5 min on clean SIFT; investigate against Nitroba ~3 min wall-clock with the default model.
@@ -74,6 +79,9 @@ docker compose exec silentwitness silentwitness register-evidence nitroba-smoke-
 docker compose exec silentwitness silentwitness prepare nitroba-smoke-001
 docker compose exec silentwitness silentwitness index nitroba-smoke-001
 docker compose exec silentwitness silentwitness investigate nitroba-smoke-001
+docker compose exec silentwitness silentwitness review nitroba-smoke-001
+docker compose exec silentwitness silentwitness verify --audit-chain nitroba-smoke-001
+docker compose exec silentwitness silentwitness export nitroba-smoke-001 --md
 ```
 
 Expected timing (estimated, unmeasured on this branch — verified during the demo session): image build ~2 min on first run; init + register ≤10 s; investigate ~3 min.
@@ -106,12 +114,14 @@ volumes:
 
 ## Step-by-step against Nitroba (recommended first run)
 
-1. **`silentwitness init nitroba-smoke-001 --examiner $USER`** — creates `cases/nitroba-smoke-001/.silentwitness/case.toml`, `audit/`, `findings.json`, and an empty `evidence.json` registry.
-2. **`silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap`** — computes SHA256, verifies against the canonical hash in `harness/datasets/nitroba.manifest.json`, refuses to register if the mount is writable (`ro,noexec,nosuid` check per architecture.md §4.11).
-3. **`silentwitness investigate nitroba-smoke-001`** — opens the live rich layout; the hypothesis sequence is `form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC → confirm`. Each tool call appears in `audit/<backend>.jsonl` with its `audit_id`, `result_sha256`, and `elapsed_ms`.
-4. **`silentwitness review nitroba-smoke-001`** — paginates staged findings with the `[a]pprove [r]eject [m]odify [s]kip` examiner UI. Approval signs the HMAC ledger row at `/var/lib/silentwitness/verification/<case_id>.jsonl`.
-5. **`silentwitness export nitroba-smoke-001 --pdf --out ./report.pdf`** — WeasyPrint renders the Markdown report with verify-link Appendix-Audit; pdf opens in any viewer.
-6. **`silentwitness verify nitroba-smoke-001`** — recomputes the HMAC chain and asserts the audit trail is intact; exits non-zero on any drift.
+1. **`silentwitness init nitroba-smoke-001 --examiner $USER`** — creates `cases/nitroba-smoke-001/.silentwitness/case.toml`, `audit/`, `report.md`, `CASE.yaml`, and an empty `evidence.json` registry.
+2. **`silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap`** — computes SHA256, classifies the artifact type, and refuses unsafe writable evidence mounts (`ro,noexec,nosuid` check per architecture.md §4.11).
+3. **`silentwitness prepare nitroba-smoke-001`** — extracts high-value artifacts from the registered evidence without modifying the original file.
+4. **`silentwitness index nitroba-smoke-001`** — parses the prepared artifacts into `cases/nitroba-smoke-001/index.db`, the searchable evidence index used by the agent.
+5. **`silentwitness investigate nitroba-smoke-001`** — opens the live rich layout; the hypothesis sequence is `form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC → confirm`. Each tool call appears in `audit/<backend>.jsonl` with its `audit_id`, `result_sha256`, and `elapsed_ms`.
+6. **`silentwitness review nitroba-smoke-001`** — paginates staged findings with the `[a]pprove [r]eject [m]odify [s]kip` examiner UI. Approval signs the HMAC ledger row at `/var/lib/silentwitness/verification/<case_id>.jsonl`.
+7. **`silentwitness verify --audit-chain nitroba-smoke-001`** — recomputes every audit JSONL hash chain and exits non-zero if a row is missing or edited.
+8. **`silentwitness export nitroba-smoke-001 --md`** — writes the final Markdown report. Use `--pdf --out ./report.pdf` when you want the WeasyPrint-rendered PDF.
 
 ## Model selection (provider-agnostic)
 
