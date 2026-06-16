@@ -71,7 +71,7 @@ h4 {
 }
 
 /* ------------------------------------------------------------------ */
-/* Monospace — evidence, IOCs, audit refs (ux-spec §5.4 / §3.5)       */
+/* Monospace — evidence, IOCs, audit refs                            */
 /* ------------------------------------------------------------------ */
 code, pre, tt {
     font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
@@ -230,7 +230,7 @@ tr:nth-child(even) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Appendix-Audit — isolated page block (ux-spec §5.4 §D.4)           */
+/* Appendix-Audit — isolated page block                              */
 /* ------------------------------------------------------------------ */
 #appendix-audit {
     page-break-before: always;

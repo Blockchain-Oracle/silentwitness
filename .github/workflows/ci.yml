@@ -1,10 +1,8 @@
-# .github/workflows/ci.yml — verbatim from CICD_SPEC §4.1 except for the
-# audit-driven deviations enumerated below.
+# .github/workflows/ci.yml — CI pipeline.
 #
-# Audit-driven deviations from spec text — each fix is documented in
-# DEEP_AUDIT_REPORT.md and pinned to a single root cause:
+# Pin / config notes:
 #
-#   1. UV_VERSION is "0.11.18" instead of the spec's "0.5.11" (audit B-PY-2).
+#   1. UV_VERSION is "0.11.18".
 #      pyproject.toml pins [tool.uv].required-version = "==0.11.18"; uv refuses
 #      to run on any other version, so the workflow must mirror the lockfile.
 #
@@ -43,8 +41,8 @@
 #      written rationale in the allowlist file.
 #
 # The eight gated jobs below are required-status-checks for branch protection
-# on `main` (CICD_SPEC §5.1). Renaming any job here will break protection until
-# the protection rule is updated to match.
+# on `main`. Renaming any job here will break protection until the protection
+# rule is updated to match.
 
 name: ci
 
@@ -133,7 +131,7 @@ jobs:
           uv run coverage report --fail-under=85
       - name: Per-module coverage floors (verification 95 / audit 90)
         # coverage.py only enforces a single global floor; per-directory floors
-        # are enforced by scripts/coverage_gate.py per CICD_SPEC §8.2.
+        # are enforced by scripts/coverage_gate.py.
         run: uv run python scripts/coverage_gate.py coverage.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -308,9 +306,8 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
       - name: Run trivy scan on built image
-        # CICD_SPEC §4.1 deviations:
-        #   - Tag is `v0.36.0` (the spec's `0.28.0` doesn't exist; tags are
-        #     v-prefixed per `git ls-remote`).
+        # Pinning notes:
+        #   - Tag is `v0.36.0` (tags are v-prefixed per `git ls-remote`).
         #   - `exit-code: '0'` (was '1'). Local reproduction with
         #     `docker build -t silentwitness:audit . && trivy image
         #     silentwitness:audit --severity HIGH,CRITICAL --exit-code 1`

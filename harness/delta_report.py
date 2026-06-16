@@ -28,8 +28,8 @@ from harness.delta_report_models import (
 )
 from silentwitness_common.atomic_io import write_bytes_atomic
 
-_BASELINE_COLOR = "#d96c5c"  # ux-spec §3.5 Error red (baseline = "needs improvement")
-_SW_COLOR = "#7fb069"  # ux-spec §3.5 Success green (SilentWitness = improved)
+_BASELINE_COLOR = "#d96c5c"  # Error red (baseline = "needs improvement")
+_SW_COLOR = "#7fb069"  # Success green (SilentWitness = improved)
 _DATASET_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
@@ -100,7 +100,7 @@ def render_markdown(report: DeltaReport) -> str:
     lines = [
         f"# Δ vs vanilla Protocol SIFT baseline — {report.dataset_id}",
         "",
-        "## Headline (PRD §4)",
+        "## Headline",
         "| Metric | Baseline | SilentWitness | Δ | Direction |",
         "|---|---|---|---|---|",
     ]
@@ -131,7 +131,7 @@ def render_markdown(report: DeltaReport) -> str:
         "## Footnotes",
         f"- Run anchor: {report.baseline_result_path.name}, "
         f"{report.silentwitness_result_path.name}, {report.scoring_result_path.name}",
-        "- Methodology: harness/scorer.py classification tree; see PRD §6 for definitions.",
+        "- Methodology: harness/scorer.py classification tree.",
         f"- Generated at: {report.generated_at.isoformat()}",
     ]
     return "\n".join(lines) + "\n"

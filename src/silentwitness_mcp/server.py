@@ -7,7 +7,7 @@ in this story (story-fastmcp-server-bootstrap); the actual finding-
 recording logic lands in stories 8-12 of Epic 4 (one tool per story).
 
 Loopback-only HTTP binding (``127.0.0.1`` — never ``0.0.0.0``) is the
-DNS-rebinding defense from ``context/technical/07`` §A3.2. Enforcement
+DNS-rebinding defense (per MCP spec §A3.2). Enforcement
 sits in :func:`_validate_http_config`, called before FastMCP construction
 so a misconfigured invocation fails synchronously rather than after a
 socket has bound. The ``host`` we pass into ``FastMCP(host=...)`` is then

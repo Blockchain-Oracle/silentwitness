@@ -96,7 +96,7 @@ def test_justfile_declares_strict_shell_and_dotenv_load() -> None:
 
     `-cu` makes unset-variable references abort the recipe rather than expand
     silently. `dotenv-load` reads `.env` so local API keys flow into the test
-    process (CICD_SPEC §9.2).
+    process.
     """
     text = _JUSTFILE_PATH.read_text(encoding="utf-8")
     assert 'set shell := ["bash", "-cu"]' in text, (

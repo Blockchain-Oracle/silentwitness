@@ -1,4 +1,4 @@
-"""Examiner approve command — password-gated HMAC ledger write (ux-spec §2.4)."""
+"""Examiner approve command — password-gated HMAC ledger write."""
 
 from __future__ import annotations
 

@@ -1,6 +1,6 @@
 """Hypothesis profile registration for the property-test suite.
 
-Three profiles per CICD_SPEC §4.1 + story-gates-property-tests:
+Three profiles for the Hypothesis property suite:
 
 * ``dev`` (50 examples) — fast feedback during local edits.
 * ``ci`` (500 examples) — the CI ``property-tests`` job floor.

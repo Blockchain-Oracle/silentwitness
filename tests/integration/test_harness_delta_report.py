@@ -292,7 +292,7 @@ class TestReviewFindings:
         assert "\nnewline" not in md or md.count("nnewline") == 1  # newline collapsed to space
 
     def test_brand_colors_used_in_chart(self, tmp_path: Path) -> None:
-        """Bar chart uses ux-spec §3.5 brand colors (#d96c5c / #7fb069)."""
+        """Bar chart uses brand colors (#d96c5c / #7fb069)."""
         from harness.delta_report import _BASELINE_COLOR, _SW_COLOR
 
         assert _BASELINE_COLOR == "#d96c5c"

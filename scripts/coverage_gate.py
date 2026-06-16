@@ -1,4 +1,4 @@
-"""Per-module coverage floors — CICD_SPEC §8.1 / §8.2.
+"""Per-module coverage floors enforced by CI.
 
 coverage.py only enforces a single global ``fail_under`` floor. The wedge
 demands tighter floors on the verification gates (95 %) and the audit trail
@@ -123,7 +123,7 @@ def main(argv: list[str]) -> int:
     if failures:
         print("coverage_gate: per-module floors NOT met:", file=sys.stderr)
         for label, floor, pct in failures:
-            print(f"  - {label}: {pct:.2f}% < {floor}% (CICD_SPEC §8.1)", file=sys.stderr)
+            print(f"  - {label}: {pct:.2f}% < {floor}%", file=sys.stderr)
         return 1
     print(f"coverage_gate: OK ({xml_path})")
     return 0

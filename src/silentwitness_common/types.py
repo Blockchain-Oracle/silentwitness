@@ -1,8 +1,8 @@
 """Shared Pydantic v2 contracts — single source of truth across MCP + agent.
 
 Centralises shared types to prevent drift across tool-wrappers,
-report-renderer, and audit-logger (architecture.md §4.3 ToolResponse;
-§4.4 AuditEntry; §5.4 report-as-state; PRD §FR5).
+report-renderer, and audit-logger (architecture.md §4.3 ToolResponse,
+§4.4 AuditEntry, §5.4 report-as-state).
 All models use ``frozen=True`` + ``extra="forbid"`` except ``Finding``.
 """
 
@@ -336,8 +336,8 @@ class LedgerEntry(BaseModel):
 
 
 class AuditEntry(BaseModel):
-    """One line of audit/<backend>.jsonl. Verbatim BRAINSTORM §4 schema +
-    Phase 6b hash-chain fields. ``prev_record_hash`` is ``None`` for the first
+    """One line of audit/<backend>.jsonl with Phase 6b hash-chain fields.
+    ``prev_record_hash`` is ``None`` for the first
     row of a chain; ``record_hash`` is mandatory once chaining is enabled and
     None on the legacy plain-JSONL fallback path. The chain is verified by
     :func:`silentwitness_mcp.audit.chain.verify_chain_lines`."""

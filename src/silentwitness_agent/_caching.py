@@ -19,8 +19,8 @@ Two deliberate choices:
 * **Anthropic-only, gated on the resolved model.** ``cache_control`` is an
   Anthropic-specific API, so ``AnthropicModelSettings`` only applies to Anthropic
   models. Returning ``None`` for any other provider preserves the model-agnostic
-  contract (PRD §5 FR3): OpenAI and Gemini cache the prefix *automatically*
-  server-side, so they need no explicit setting — they are not running "uncached".
+  contract: OpenAI and Gemini cache the prefix *automatically* server-side, so
+  they need no explicit setting — they are not running "uncached".
 """
 
 from __future__ import annotations

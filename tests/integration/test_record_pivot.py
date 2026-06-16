@@ -1,5 +1,5 @@
 """BDD acceptance scenarios for ``record_pivot`` (architecture §4.2 +
-§5.3). The pivot count is PRD §4's secondary metric — read via
+§5.3). Pivot count is a secondary metric — read via
 ``grep -c '"type":"pivot"' cases/<id>/audit/hypothesis.jsonl``."""
 
 from __future__ import annotations
@@ -141,10 +141,9 @@ def test_from_hypothesis_id_matches_prior_pivot_row(
 
 
 def test_pivot_count_metric_grep_works(case_env: tuple[Path, AuditLogger]) -> None:
-    """PRD §4 secondary metric: ``grep -c '"type":"pivot"'
-    hypothesis.jsonl`` returns the pivot count. The emitted JSONL must
-    use that key ordering — Pydantic's serialization gives us a stable
-    layout."""
+    """Secondary metric: ``grep -c '"type":"pivot"' hypothesis.jsonl``
+    returns the pivot count. The emitted JSONL must use that key
+    ordering — Pydantic's serialization gives us a stable layout."""
     case_dir, logger = case_env
     _seed_hypothesis_log(case_dir, ("H-001",))
     payload = PivotInput(

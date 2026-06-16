@@ -1,11 +1,11 @@
 # SilentWitness — Agent Guide
 
-A hypothesis-first IR investigator (Custom MCP Server + Pydantic AI reference agent) for SANS Find Evil! Wedge in `STRATEGY.md`. Full specs in `docs/`. Domain knowledge in `context/` (~241K words). Source-code-validated pins per `docs/DEEP_AUDIT_REPORT.md`.
+A hypothesis-first IR investigator (Custom MCP Server + Pydantic AI reference agent) for SANS Find Evil! See `docs/architecture.md` for the architecture spec.
 
 ## Non-negotiables
 
 1. **Quality > deadline.** AI coding gives us speed to ship the *right thing*, not to cut corners. **No mocks on the hot path. No half-built features.** If the right way takes longer, do it the right way. Per Abu 2026-06-03: *"by using AI coding…a deadline is not a barrier. I don't want this to go; I've been doing mock integration and something like that."*
-2. **Test before commit.** Coverage per `docs/CICD_SPEC.md §8`: 95% on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere. Property tests with `hypothesis` where applicable. BDD criteria from the story are the acceptance bar.
+2. **Test before commit.** Coverage gate (enforced per-package in CI): 95% on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere. Property tests with `hypothesis` where applicable.
 3. **Research when stuck.** Library APIs drift. If behavior differs from spec: Context7 the library → web-search the symptom → read source → amend. Don't ship a workaround that hides the underlying issue.
 4. **Research existing libraries BEFORE hand-rolling.** It's 2026 — a mature permissive library probably already solves it. Don't reinvent (e.g. evidence access/parsing/indexing = `dfvfs`/`plaso`/`regipy`/`python-evtx`/SQLite-FTS5, NOT bespoke TSK glue). **Licensing gate: submission is MIT/Apache, so every dep must be permissive — `dissect` (Fox-IT) is AGPL-3.0, DO NOT USE.** Check license before adopting.
 5. **Use sub-agents liberally for research/audits.** Parallel, fast, keeps main context clean — delegate surveys/audits/deep-dives to `general-purpose`/`Explore` agents. (Implementation stays one-task-at-a-time: sub-agents are for research, not parallel coding.)
@@ -15,21 +15,10 @@ A hypothesis-first IR investigator (Custom MCP Server + Pydantic AI reference ag
 Never: "Ralph Wiggum Loop", "court-admissible", "autonomous SOC", "eliminates hallucinations", "find evil" as marketing.
 Use: "defensible audit trail", "senior-analyst sequencing", "hypothesis pivot", "self-correct".
 
-## Process per story
-- One story = one branch (`story-<slug>`)
-- Read the story file in `docs/stories/`, then the architecture section it references
-- Implement → `uv run ruff check && uv run mypy --strict src/ && uv run pytest` → commit → PR
-- **Open PR → spin up a fresh-context sub-agent invoking `pr-review-toolkit:review-pr` against the PR.** That toolkit fans out specialist reviewers (logic, security, test quality, comment quality, type design, silent-failure hunter, code-simplifier). Read the findings.
-- **Address review findings:** fix in the same branch, push amends, re-run the review pass if substantive. Once review verdict is clean → squash-merge to main → delete branch → continue on the next story's branch.
-- **Plan-vs-shipped audit (MANDATORY before claiming "done").** Never report a story/phase complete by shipping a subset and calling it finished. Before saying done, write an explicit checklist: enumerate *every* feature/item the plan, story, or your own stated scope promised, and mark each **SHIPPED** (cite the file/commit that proves it), **CUT** (state why + who decided), or **CHANGED** (we took a different approach than planned — state the deviation and why). Any item that is not SHIPPED must be named out loud, not silently dropped. If the architecture/plan changed mid-flight, say so explicitly. "I built the index" is not an audit; "feeders EVTX✓ registry✓ SRUM✓ MFT✓, plaso demoted (changed: unreliable on this evidence), UsnJrnl deferred (cut: tracked as follow-up)" is.
-- Update `docs/sprint-status.yaml`: `status: COMPLETE` + `merged_at:` + `pr_url:` on merge.
-- Reviewer sub-agent always has FRESH context — never reuse the implementer's context for review.
+## Plan-vs-shipped audit (MANDATORY before claiming "done")
+Never report work complete by shipping a subset and calling it finished. Before saying done, write an explicit checklist: enumerate *every* feature/item the plan or your own stated scope promised, and mark each **SHIPPED** (cite the file/commit that proves it), **CUT** (state why + who decided), or **CHANGED** (we took a different approach than planned — state the deviation and why). Any item that is not SHIPPED must be named out loud, not silently dropped.
 
-## Decision-making
-- Operational/process decisions: I decide and execute. Only escalate for strategic redirects (wedge change, architectural pivot).
-- When a story spec is ambiguous: read referenced architecture + context first; web-search / Context7 / source-read the library if still unclear; document the resolved interpretation in the PR description.
-
-## Critical pin reminders (full list in `docs/architecture.md §2`)
+## Critical pin reminders
 - `mcp>=1.23.0,<2.0` (CVE-2025-66416 + CVE-2025-53366 closed)
 - `pydantic-ai[anthropic,openai,google,ollama,mcp,fastmcp]>=1.105.0,<2.0.0`
 - `mistune>=3.2.1` (6 CVEs in 3.0-3.2.0 closed)
@@ -57,7 +46,6 @@ Use: "defensible audit trail", "senior-analyst sequencing", "hypothesis pivot", 
 - Claude Code v2.0.61 pre-installed at `/usr/local/bin/claude`
 
 ## When in doubt
-1. Read the story file in `docs/stories/`
-2. Read the architecture section it references
-3. `context/` for domain
-4. Context7 / web for fresh library API
+1. Read the relevant section of `docs/architecture.md`
+2. Read the source code (this repo is the source of truth — no external spec to consult)
+3. Context7 / web for fresh library API

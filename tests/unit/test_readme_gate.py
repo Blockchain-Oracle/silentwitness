@@ -1,4 +1,4 @@
-"""Tests for scripts/check_readme_gate.py — PRD §11 README shape gate."""
+"""Tests for scripts/check_readme_gate.py — README shape gate."""
 
 from __future__ import annotations
 

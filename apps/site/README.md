@@ -34,7 +34,7 @@ Pushes to `main` trigger Vercel automatically — see `vercel.json` at the repo 
 | `content/docs/architecture.mdx` | hand-curated | High-level boundaries + mermaid |
 | `content/docs/*.mdx` (rest) | mirrored from `docs/*.md` via `scripts/sync-docs.mjs` | The canonical docs/ tree is the source of truth; this site is a renderer. |
 
-Internal-only docs (`CICD_SPEC`, `BRAINSTORM`, `stories/`, etc.) are NOT mirrored — see the `CANONICAL` allow-list in `scripts/sync-docs.mjs`.
+Only judge-facing docs are mirrored — see the `CANONICAL` allow-list in `scripts/sync-docs.mjs`.
 
 ## Brand tokens
 

@@ -172,7 +172,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 - **Guardrails (architectural, not prompt):** the citation gate, entity gate, and coverage gate
   live in `silentwitness_mcp` / the agent's `output_validator` — see
   [Architecture](architecture.md).
-- **Dataset & findings:** [`DATASET.md`](DATASET.md).
+- **Dataset & findings:** [`DATASETS.md`](DATASETS.md).
 
 ---
 
@@ -182,7 +182,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 |---|---|
 | How it's built | [`docs/architecture.md`](architecture.md) + [`docs/diagrams/architecture.png`](diagrams/architecture.png) |
 | How accurate it is (honest) | [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) |
-| What data it was tested on | [`docs/DATASET.md`](DATASET.md) |
+| What data it was tested on | [`docs/DATASETS.md`](DATASETS.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |
 | Real run logs | [`docs/execution_logs/`](execution_logs/) |
 | The MCP server (the product) | `src/silentwitness_mcp/` |

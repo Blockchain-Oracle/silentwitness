@@ -8,9 +8,8 @@
 #    gitleaks' generic-api-key heuristic mis-classifies as actual keys.
 # 2. ``ANSWER_KEY_SHA256`` and ``answer-key SHA256`` references are
 #    SHA-256 hashes of forensic ground-truth answer keys (NIST CFReDS
-#    leakage case). They are deliberately committed as integrity pins
-#    per ``docs/stories/story-ground-truth-parsers.md``; they're hashes,
-#    not credentials.
+#    leakage case). They are deliberately committed as integrity pins;
+#    they're hashes, not credentials.
 #
 # Extend gitleaks default rule set with allowlists targeting these
 # specific surfaces. Real secrets in other files still fire.

@@ -204,7 +204,7 @@ def _render_table(
         direction = "lower is better" if metric in _LOWER_BETTER else "higher is better"
         table.add_row(metric, cell, direction)
     console.print(table)
-    console.print("Δ measured against Protocol SIFT baseline (PRD §4 headline metric).")
+    console.print("Δ measured against Protocol SIFT baseline.")
 
 
 def run(

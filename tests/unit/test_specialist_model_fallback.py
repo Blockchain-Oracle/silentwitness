@@ -3,7 +3,7 @@
 Without this, setting SILENTWITNESS_MODEL=openai:* switches the investigator
 to OpenAI but leaves the specialists pinned to the Anthropic default — which
 fails under an OpenAI-only key. These tests lock the model-agnostic contract
-(PRD §5 FR3) at the specialist resolution layer.
+at the specialist resolution layer.
 """
 
 from __future__ import annotations

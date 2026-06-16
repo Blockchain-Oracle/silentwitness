@@ -26,7 +26,7 @@ model_used: anthropic:claude-opus-4-7
 ---
 """
 
-# ux-spec §5.1 verbatim frontmatter (abbreviated hash `sha256:f0c2...a991` expanded
+# Verbatim report frontmatter (abbreviated hash `sha256:f0c2...a991` expanded
 # to a valid 64-hex value while preserving the case/examiner/version fields exactly).
 _UX_SPEC_51_FRONTMATTER = """\
 ---

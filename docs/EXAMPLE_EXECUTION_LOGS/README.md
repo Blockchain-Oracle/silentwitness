@@ -3,27 +3,27 @@
 This is a static synthetic case. The case **directory** is suffixed `_EXAMPLE`
 (individual filenames keep their canonical names — `report.md`,
 `findings.json`, etc. — to faithfully demonstrate the production schema
-shape). It exists to make PRD §10 deliverable 8 readable without running
-the system (no SIFT, no LLM, no evidence corpus required).
+shape). It exists to make the agent-execution-logs deliverable readable
+without running the system (no SIFT, no LLM, no evidence corpus required).
 
-PRD §14 vocabulary discipline / CICD_SPEC §14 no-mock carve-out: the
-`_EXAMPLE` directory suffix + the `synthetic: true` key in the report
-frontmatter + the `EXAMPLE-not-a-real-secret-EXAMPLE` ledger key are the
-explicit discriminators that let this synthetic case ship alongside the
-no-fake-data gate.
+Vocabulary discipline / no-mock carve-out: the `_EXAMPLE` directory suffix
++ the `synthetic: true` key in the report frontmatter + the
+`EXAMPLE-not-a-real-secret-EXAMPLE` ledger key are the explicit
+discriminators that let this synthetic case ship alongside the no-fake-data
+gate.
 
 ## What this contains
 
 - `case-example-001_EXAMPLE/.silentwitness/case.toml` — case metadata
 - `case-example-001_EXAMPLE/evidence.json` — evidence registry; 1 entry for a 4-byte sample
-- `case-example-001_EXAMPLE/audit/memory.jsonl` — 1 vol_pslist call (PRD FR5)
-- `case-example-001_EXAMPLE/audit/disk.jsonl` — 1 parse_mft call (PRD FR5)
-- `case-example-001_EXAMPLE/audit/log.jsonl` — 1 parse_evtx call (PRD FR5)
+- `case-example-001_EXAMPLE/audit/memory.jsonl` — 1 vol_pslist call
+- `case-example-001_EXAMPLE/audit/disk.jsonl` — 1 parse_mft call
+- `case-example-001_EXAMPLE/audit/log.jsonl` — 1 parse_evtx call
 - `case-example-001_EXAMPLE/audit/findings.jsonl` — 1 APPROVED record_observation
-- `case-example-001_EXAMPLE/audit/hypothesis.jsonl` — 5 events: form → dispatch → confirm → PIVOT → confirm (PRD FR7)
+- `case-example-001_EXAMPLE/audit/hypothesis.jsonl` — 5 events: form → dispatch → confirm → PIVOT → confirm
 - `case-example-001_EXAMPLE/audit/critic.jsonl` — 1 CHALLENGE + 1 APPROVED verdict
 - `case-example-001_EXAMPLE/findings.json` — 1 APPROVED finding
-- `case-example-001_EXAMPLE/report.md` — Markdown report with verify-links, Gaps + Appendix-Audit (FR6)
+- `case-example-001_EXAMPLE/report.md` — Markdown report with verify-links, Gaps + Appendix-Audit
 - `case-example-001_EXAMPLE/ledger.jsonl` — 1 HMAC-signed approval ledger entry
 
 ## How to read this
@@ -38,10 +38,10 @@ and find the row whose `audit_id` matches.
 
 ## What it demonstrates
 
-- **FR5** (JSONL audit per tool call): 3 tool calls across memory/disk/log JSONL files.
-- **FR6** (Markdown report with Gaps + Appendix-Audit): both sections present in `report.md`.
-- **FR7** (≥1 self-correction): hypothesis log has 1 `pivot` transition with `reason="vol3 symbol-table mismatch; rebuilt"` (mirrors PRD §2 3:00–3:30 demo moment).
-- **Critic CHALLENGE → APPROVED**: `audit/critic.jsonl` shows the verdict arc (mirrors PRD §2 4:00–4:30).
+- **JSONL audit per tool call**: 3 tool calls across memory/disk/log JSONL files.
+- **Markdown report with Gaps + Appendix-Audit**: both sections present in `report.md`.
+- **Self-correction**: hypothesis log has 1 `pivot` transition with `reason="vol3 symbol-table mismatch; rebuilt"` (mirrors the demo's 3:00–3:30 self-correction moment).
+- **Critic CHALLENGE → APPROVED**: `audit/critic.jsonl` shows the verdict arc (mirrors the demo's 4:00–4:30 beat).
 - **Entity gate pass**: `audit/findings.jsonl` shows the `record_observation` envelope with citation_gate=PASS + non-empty entity_gate_matches.
 - **HMAC ledger**: `ledger.jsonl` carries the SHA256 + PBKDF2 iter count + HMAC over the finding's substantive text.
 

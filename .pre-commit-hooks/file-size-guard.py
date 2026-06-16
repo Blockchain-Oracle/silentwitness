@@ -1,22 +1,21 @@
 #!/usr/bin/env python3
 """file-size-guard.py — enforce the ≤400-LOC-per-.py invariant.
 
-The 400-LOC cap (architecture.md §14 — CI gates; rationale in BRAINSTORM
-Decisions 6 + 7) keeps modules auditable for the judges: small enough that a
+The 400-LOC cap keeps modules auditable for the judges: small enough that a
 reviewer can hold every branch of a verification gate or tool wrapper in
 their head at once.
 
 Counts ALL physical lines (blanks + comments included). Encourages splitting
 at natural module boundaries rather than hiding bulk in whitespace.
 
-Skips (CICD_SPEC §6.1 SKIP_PATTERNS):
+Skips (SKIP_PATTERNS):
   - ``uv.lock`` and other auto-generated files
   - ``tests/<anything>/fixtures/*`` (forensic fixture blobs may be large)
   - ``vendored/*`` (third-party drop-ins)
   - ``.pre-commit-hooks/*`` (this hook is tooling, not product code)
 
 ------------------------------------------------------------------------------
-Two deviations from CICD_SPEC §6.1 verbatim
+Implementation notes
 ------------------------------------------------------------------------------
 1. ``count_lines`` catches ``FileNotFoundError`` (not the broader ``OSError``).
    The verbatim version's ``except OSError`` silently swallows
@@ -53,7 +52,7 @@ SKIP_PATTERNS = (
     ".pre-commit-hooks/*",
     # Typer command registry — every CLI command registers on a single `app =
     # typer.Typer(...)` module-level object. Splitting requires typer.add_typer
-    # sub-apps which changes the public CLI surface (docs/ux-spec §2 contract).
+    # sub-apps which changes the public CLI surface (ergonomic contract).
     "src/silentwitness_agent/cli.py",
 )
 

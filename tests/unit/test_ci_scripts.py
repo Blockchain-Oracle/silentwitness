@@ -67,7 +67,7 @@ def test_license_gate_rejects_gpl3(tmp_path: Path) -> None:
 
 
 def test_license_gate_accepts_lgpl(tmp_path: Path) -> None:
-    """LGPL is allowed via runtime-linkage carve-out (CICD_SPEC §4.3)."""
+    """LGPL is allowed via runtime-linkage carve-out."""
     result = _run_license_gate([{"Name": "ok-pkg", "License": "LGPL-3.0"}], tmp_path)
     assert result.returncode == 0, f"expected exit 0, got {result.returncode}: {result.stderr}"
 

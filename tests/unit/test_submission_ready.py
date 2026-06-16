@@ -151,20 +151,14 @@ class TestVocab:
         r = _run_gate("--mode", "vocab", "--root", str(root))
         assert r.returncode == 1
 
-    def test_vocab_carve_out_for_stories_prefix(self, tmp_path: Path) -> None:
-        # docs/stories/ legitimately documents the banned vocab as part of the
-        # story-spec text; the carve-out must keep the gate green there.
+    def test_vocab_carve_out_for_archive_prefix(self, tmp_path: Path) -> None:
+        # archive/ legitimately documents banned vocab inside the archived
+        # spec set; the carve-out must keep the gate green there.
         root = _make_minimal_fixture(tmp_path)
-        (root / "docs" / "stories").mkdir()
-        (root / "docs" / "stories" / "spec.md").write_text(
-            "Banned per §14: court-admissible, autonomous SOC.\n"
+        (root / "archive").mkdir()
+        (root / "archive" / "spec.md").write_text(
+            "Banned vocab examples: court-admissible, autonomous SOC.\n"
         )
-        r = _run_gate("--mode", "vocab", "--root", str(root))
-        assert r.returncode == 0, r.stderr
-
-    def test_vocab_carve_out_for_prd_meta_doc(self, tmp_path: Path) -> None:
-        root = _make_minimal_fixture(tmp_path)
-        (root / "docs" / "PRD.md").write_text("§14 bans court-admissible.\n")
         r = _run_gate("--mode", "vocab", "--root", str(root))
         assert r.returncode == 0, r.stderr
 

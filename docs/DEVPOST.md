@@ -28,7 +28,7 @@ Protocol SIFT 2026 demonstrated AI agents *can* drive forensic tools competently
 | Forensic tooling | Volatility 3 2.27.0 in own venv at `/opt/silentwitness/vol3-venv/bin/vol`; Hayabusa / Chainsaw / Zeek / Suricata / EZ Tools via subprocess; spaCy NER for entity-gate extraction |
 | Report rendering | `weasyprint>=68.1,<70.0` (CVE closures), `mistune>=3.2.1` |
 | Audit + integrity | HMAC-SHA256 with PBKDF2-SHA256 at 600,000 iterations; per-case ledger at `/var/lib/silentwitness/verification/<case_id>.jsonl` (mode 0600) |
-| Test discipline | `pytest`, `hypothesis` property tests on the verification gates; 95% coverage floor on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere per CICD_SPEC §6 |
+| Test discipline | `pytest`, `hypothesis` property tests on the verification gates; 95% coverage floor on `verification/`, 90% on `audit/` + `findings/`, 85% elsewhere |
 | Build | `uv==0.11.18` (Astral), `ruff>=0.8`, `mypy --strict` on every src file |
 
 The investigator runs a hypothesis stack — `form → dispatch specialist → confirm → pivot` — with the critic agent firing every N steps on a fresh context to challenge the in-flight findings. We dropped `structlog` (Decision A in the deep audit) in favour of Pydantic's `model_dump_json()` for the JSONL audit; it preserved the typed shape and removed a dependency. The 22-tool MCP catalog is split into five backends — memory / disk / log / network / agent — so a single backend can be exercised, audited, or replaced without touching the others.

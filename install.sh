@@ -2,7 +2,6 @@
 # install.sh — Provision SilentWitness tool dependencies on SIFT 2026.
 # Every tool is version-pinned with a SHA256 checksum; never installs "latest".
 # Run as a user with sudo. Idempotent — skips already-installed tools.
-# See context/.raw-design-research/03 §"Tools our install script MUST add".
 
 set -euo pipefail
 
@@ -25,7 +24,6 @@ verify_sha256() {
 # ---------------------------------------------------------------------------
 # Hayabusa v3.9.0
 # SHA256: ffb31e02bd47d840d999d964d4663287cdb194a22ea856904348786acba414d7
-# Source: docs/.audit/06-sift-and-datasets-verification.md §Hayabusa v3.9.0
 # License: GPL-3.0 — subprocess use (no linking); acceptable per architecture §6.
 # ---------------------------------------------------------------------------
 install_hayabusa() {
@@ -81,7 +79,6 @@ install_hayabusa_rules() {
 # ---------------------------------------------------------------------------
 # Chainsaw v2.16.0
 # SHA256: 5d46cd140838413aeb5711451a282b3922443d9ec6afaea3e6b6b220454fd807
-# Source: docs/.audit/06-sift-and-datasets-verification.md §Chainsaw v2.16.0
 # License: GPL-3.0 — subprocess use; acceptable.
 # ---------------------------------------------------------------------------
 install_chainsaw() {
@@ -120,7 +117,6 @@ install_sigma_rules() {
 
 # ---------------------------------------------------------------------------
 # Zeek — NOT pre-installed on SIFT 2026.
-# context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 217.
 # Install via OpenSUSE security:zeek repo (Ubuntu Noble). The package installs
 # to /opt/zeek/bin/zeek; we symlink to /usr/local/bin/zeek for get_zeek_bin().
 # Use zeek-lts (LTS series) rather than zeek (always-latest) for reproducibility.
@@ -160,7 +156,6 @@ install_zeek() {
 
 # ---------------------------------------------------------------------------
 # Suricata — NOT pre-installed on SIFT 2026.
-# context/.raw-design-research/03 §"Tools NEEDED but NOT pre-installed" line 218.
 # Ubuntu Noble universe ships Suricata 7.x at /usr/bin/suricata — no third-party
 # repo needed. After install, run suricata-update to fetch ET Open rules.
 # ---------------------------------------------------------------------------
@@ -225,8 +220,8 @@ install_spacy_model() {
 # ---------------------------------------------------------------------------
 # Mermaid CLI (optional, --diagrams flag) — DOCS-TIME ONLY, NOT RUNTIME.
 #
-# Why this exists: SIFT 2026 ships dotnet 9 + Python but NOT Node.js
-# (context/.raw-design-research/03 line 207). The CLI never invokes mmdc at
+# Why this exists: SIFT 2026 ships dotnet 9 + Python but NOT Node.js.
+# The CLI never invokes mmdc at
 # runtime; only docs/diagrams/*.mmd regeneration needs it. We gate behind
 # `--diagrams` so the base install path stays fast for judges who only need
 # `silentwitness investigate`.

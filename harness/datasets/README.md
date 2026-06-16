@@ -30,7 +30,7 @@ NIST CFReDS archive — single reassembled EnCase E01. Drop at `harness/datasets
 See `schema.py` — Pydantic v2 `DatasetManifest`. Key fields:
 
 - `sha256` — hex digest of the primary evidence file, or the placeholder `<computed-on-fetch>` / `<filled-by-epic-15>` until the binary is locally available.
-- `LLM_memorization_risk` — per PRD §9 honesty rubric. Disclosed in `memorization_risk_note`.
+- `LLM_memorization_risk` — honesty-rubric disclosure. Surfaced in `memorization_risk_note`.
 - `expected_investigation_path` — ordered hypothesis-step labels that ground-truth parsers and scorer use.
 
 ## Verifying hashes
@@ -49,6 +49,6 @@ uv run python harness/datasets/verify_manifest.py --strict
 uv run python harness/datasets/recompute_manifest.py harness/datasets/nist-hacking-case.manifest.json
 ```
 
-## PRD §10 deliverable-5 framing
+## Dataset documentation framing
 
-Each manifest encodes the `memorization_risk_note` verbatim from PRD §9 for the "Dataset documentation" deliverable. The nist-hacking-case manifest in particular carries the full Greg Schardt / Mr. Evil disclosure paragraph, which satisfies Rob T. Lee's honesty rubric requirement for that dataset.
+Each manifest encodes the `memorization_risk_note` verbatim for the "Dataset documentation" submission deliverable. The nist-hacking-case manifest in particular carries the full Greg Schardt / Mr. Evil disclosure paragraph, which satisfies Rob T. Lee's honesty rubric requirement for that dataset.

@@ -9,7 +9,7 @@
 # so analysts can grep historical sanitizer output for a known vector.
 #
 # Source of truth: architecture §4.8 paragraph 3 + threat model §9 row
-# "Prompt injection in evidence" + context/technical/08 §3.5.
+# "Prompt injection in evidence".
 
 schema_version: 1
 

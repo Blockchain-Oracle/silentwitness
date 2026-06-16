@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""README gate (story-readme-polish): verify PRD §11 + §14 invariants.
+"""README gate: verify README shape + banned-vocab invariants.
 
 Exit 0 on pass; exit 1 with the failing rule name on stderr.
 """
@@ -10,7 +10,7 @@ import re
 import sys
 from pathlib import Path
 
-# PRD §11 caps README at 400 lines to stay scannable on one Devpost screen.
+# README is capped at 400 lines to stay scannable on one Devpost screen.
 _MAX_LINES = 400
 # First-screen checks (demo, image, mermaid labels) scope to the first 100 lines.
 _HEAD_LINES = 100
@@ -25,7 +25,7 @@ _BANNED = (
     "eliminates hallucinations",
 )
 # "Find Evil!" (with trailing `!`) — the literal hackathon name — is allowed anywhere.
-# The marketing phrase "find evil" without `!` is banned per PRD §14.
+# The marketing phrase "find evil" without `!` is banned by vocab discipline.
 # Implementation: first strip the markdown link form `[Find Evil!](url)` in check()
 # (line 96), then this regex catches bare "find evil" without `!`.
 _FIND_EVIL_MARKETING = re.compile(r"\bfind evil(?!!)", re.IGNORECASE)
@@ -106,10 +106,10 @@ def check(readme_path: Path) -> int:
     if not _MIT_RE.search(text):
         return _fail("mit_license", "missing literal `MIT` license reference")
 
-    # Rule 10: banned vocab list (CI grep gate, PRD §14)
+    # Rule 10: banned vocab list (CI grep gate)
     for phrase in _BANNED:
         if phrase.lower() in text.lower():
-            return _fail("banned_vocab", f"phrase {phrase!r} present (PRD §14)")
+            return _fail("banned_vocab", f"phrase {phrase!r} present")
     # "find evil" as marketing (not the hackathon link form)
     # Strip the hackathon link `[Find Evil!](https://...)` then scan
     text_no_link = re.sub(r"\[\s*find\s*evil\s*!?\s*\]\([^)]+\)", "", text, flags=re.IGNORECASE)

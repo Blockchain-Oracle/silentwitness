@@ -1,8 +1,8 @@
-# .github/dependabot.yml — verbatim from CICD_SPEC §12.
+# .github/dependabot.yml — supply-chain dependency-bump cadence.
 #
 # Three ecosystems: pip (Python deps via pyproject.toml/uv.lock), github-actions
 # (workflow action versions), docker (base image bumps). Weekly Monday cadence.
-# Auto-merge intentionally OFF for the hackathon window (CICD_SPEC §12.1).
+# Auto-merge intentionally OFF for the hackathon window.
 
 version: 2
 

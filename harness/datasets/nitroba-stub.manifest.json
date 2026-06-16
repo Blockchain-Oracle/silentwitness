@@ -20,5 +20,5 @@
   "ground_truth_status": "password_gated",
   "LLM_memorization_risk": "medium",
   "memorization_risk_note": "The Nitroba challenge is a 2010 competition dataset with published community writeups. Memorization risk is medium — the wardrive scenario is widely discussed but per-packet evidence paths require genuine forensic reasoning. The stub in this manifest is a minimal pcap header for CI only; the full 56 MB pcap is gitignored and hash-verified locally.",
-  "notes": "Truncated stub used only for CI dataset-hash-verify per CICD_SPEC §3.dataset-hash-verify. The stub is a 24-byte valid pcap global header (no packet records). Full Nitroba pcap SHA256 is pinned in nitroba.manifest.json."
+  "notes": "Truncated stub used only for CI dataset-hash-verify. The stub is a 24-byte valid pcap global header (no packet records). Full Nitroba pcap SHA256 is pinned in nitroba.manifest.json."
 }

@@ -1,8 +1,8 @@
 """Evidence registry — refuse-on-unregistered structural defense.
 
 The registry (architecture.md §4.10) is one of the six architectural
-boundaries (PRD §8 Constraint Implementation table) that make finding-path
-fabrication mechanically impossible: every tool wrapper calls
+boundaries that make finding-path fabrication mechanically impossible:
+every tool wrapper calls
 :meth:`~silentwitness_mcp.evidence.registry.EvidenceRegistry.assert_registered`
 before invoking the underlying forensic CLI, so a hallucinated evidence path
 fails closed before any artefact is touched.

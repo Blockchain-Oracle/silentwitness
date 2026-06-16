@@ -34,13 +34,13 @@ def get_commit_sha() -> str:
 
 
 def check_mount_writable(evidence_root: Path, notes: list[str]) -> None:
-    """Append a note if evidence_root is writable or statvfs fails (PRD §6 NFR)."""
+    """Append a note if evidence_root is writable or statvfs fails."""
     try:
         flags = os.statvfs(str(evidence_root)).f_flag
         if not (flags & os.ST_RDONLY):
             notes.append(
                 f"warning: evidence mount at {evidence_root} appears writable "
-                "(expected ro,noexec,nosuid per PRD §6 NFR; proceeding)"
+                "(expected ro,noexec,nosuid; proceeding)"
             )
     except OSError as exc:
         notes.append(f"warning: could not statvfs evidence mount {evidence_root}: {exc}")

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Pre-submission gate: confirm all 8 PRD §10 deliverables + license + vocab + URL.
+"""Pre-submission gate: confirm all 8 deliverables + license + vocab + URL.
 
 CLI: ``--mode {all,deliverables,vocab,license,placeholder-swap,video-url}``
 (default ``all``). Each rule prints ✓/✗ to stderr; exit 0 if all pass.
 
-Carve-out: meta-docs that document the §14 banned-vocab list (this script, the
-checklist, PRD/CICD/architecture/epics specs, etc.) are excluded from the vocab
-scan. The authoritative carve-out lists are ``_VOCAB_EXCLUDE_FILES`` and
+Carve-out: meta-docs that document the banned-vocab list (this script, the
+checklist, and the per-doc gate scripts) are excluded from the vocab scan.
+The authoritative carve-out lists are ``_VOCAB_EXCLUDE_FILES`` and
 ``_VOCAB_EXCLUDE_PREFIXES`` below.
 """
 
@@ -33,20 +33,13 @@ _VOCAB_EXCLUDE_FILES = {
     "scripts/check_try_it_out.py",
     "scripts/_notices_catalog.py",
     "docs/devpost-submission-checklist.md",
-    "docs/PRD.md",
-    "docs/CICD_SPEC.md",
     "docs/architecture.md",
-    "docs/epics.md",
-    "docs/AUDIT_REPORT.md",
-    "docs/DEEP_AUDIT_REPORT.md",
-    "docs/ux-spec.md",
 }
-# Meta-doc directories that document the banned vocab as part of their content
-# (specs, audit reports, internal audit notes) are excluded from the scan; the
-# gate covers committed src/, scripts/, and the judge-facing docs/*.md leaves.
+# Directories that document the banned vocab as part of their content are
+# excluded from the scan; the gate covers committed src/, scripts/, and the
+# judge-facing docs/*.md leaves.
 _VOCAB_EXCLUDE_PREFIXES = (
-    "docs/stories/",
-    "docs/.audit/",
+    "archive/",
     "docs/EXAMPLE_EXECUTION_LOGS/",
 )
 _YT_URL_PATTERN = (
@@ -183,7 +176,7 @@ def _check_deliverables(root: Path) -> list[Check]:
 
 
 def _check_vocab(root: Path) -> Check:
-    chk = Check("PRD §14 banned vocab absent from committed src/docs")
+    chk = Check("banned vocab absent from committed src/docs")
     hits: list[str] = []
     for path in root.rglob("*"):
         if not path.is_file():

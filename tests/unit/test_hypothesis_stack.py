@@ -182,7 +182,7 @@ def test_pivot_emits_pivot_then_form_events(tmp_path: Path) -> None:
 
 
 def test_pivot_jsonl_contains_type_pivot_literal(tmp_path: Path) -> None:
-    """PRD §4 grep -c '"type":"pivot"' must match."""
+    """Pivot count grep -c '"type":"pivot"' must match the emitted lines."""
     s = _stack(tmp_path)
     h1 = s.form(_STMT, SpecialistName.MEMORY)
     s.pivot(h1.id, _STMT3, "reason")

@@ -18,7 +18,7 @@ any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_
 
 📺 **2-minute demo:** <!-- DEMO_VIDEO_URL --> [youtu.be/PLACEHOLDER](https://youtu.be/PLACEHOLDER)
 
-![Markdown report with inline `[verify:audit_id]` links resolving to JSONL audit entries](./docs/assets/report-verify-links.png)
+![SilentWitness — hypothesis-first DFIR investigator for SANS Find Evil! 2026](./assets/brand/banner.png)
 
 ## Prerequisites
 
@@ -162,7 +162,7 @@ uv run coverage html
 open htmlcov/index.html
 ```
 
-Tests run on every push: see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). The coverage gate is enforced per-package: `verification/` 95%, `audit/` + `findings/` 90%, everywhere else 85% (per [CICD_SPEC](./docs/internal/CICD_SPEC.md) §8 — the floors that catch silent failures before merge).
+Tests run on every push: see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). The coverage gate is enforced per-package: `verification/` 95%, `audit/` + `findings/` 90%, everywhere else 85% — the floors that catch silent failures before merge.
 
 ## License
 

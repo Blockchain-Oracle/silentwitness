@@ -1,9 +1,8 @@
 # .github/workflows/release.yml — PR-based release flow.
 #
-# Original CICD_SPEC §4.2 had semantic-release push the bump commit directly
-# to main. Branch protection on a user-owned repo (no Ruleset bypass-actors
-# available) blocks that path. We split into two stages so all changes flow
-# through PRs:
+# Why PR-based: branch protection on a user-owned repo (no Ruleset bypass-actors
+# available) blocks semantic-release from pushing the bump commit directly to
+# main. We split release into two stages so all changes flow through PRs:
 #
 #   bump:    on push-to-main, compute next version, write pyproject.toml +
 #            CHANGELOG.md locally, open a "chore(release): X.Y.Z" PR via

@@ -1,7 +1,7 @@
 """ID generators and parsers — shared between MCP server, agent, and report.
 
 The audit_id format ``sift-<examiner>-<YYYYMMDD>-<NNN>`` is specified in
-architecture.md §4.4 + PRD §FR5 and is the load-bearing primitive that
+architecture.md §4.4 and is the load-bearing primitive that
 joins the audit log, the HMAC ledger, the report's inline verify links, and
 the citation gate. Centralising the generators here prevents string-template
 drift across packages.
