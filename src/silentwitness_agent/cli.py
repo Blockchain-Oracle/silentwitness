@@ -15,6 +15,7 @@ from pathlib import Path
 import typer
 from rich.console import Console
 
+from silentwitness_agent import cli_evidence_flow
 from silentwitness_agent.cli_commands.starter_cases import app as starter_cases_app
 from silentwitness_agent.config import SilentWitnessConfig, load_config
 from silentwitness_agent.report.template import Frontmatter, ReportStatus, dump_frontmatter
@@ -28,6 +29,10 @@ app.add_typer(
     name="starter-cases",
     help="Catalog and download official starter cases.",
 )
+app.command("register-evidence")(cli_evidence_flow.register_evidence)
+app.command("prepare")(cli_evidence_flow.prepare)
+app.command("index")(cli_evidence_flow.index)
+app.command("baseline-comparison")(cli_evidence_flow.baseline_comparison)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -386,110 +391,3 @@ def audit_hook() -> None:
     import sys
 
     sys.stdin.read()
-
-
-@app.command("register-evidence")
-def register_evidence(
-    ctx: typer.Context,
-    case_id: str = typer.Argument(...),
-    path: Path = typer.Argument(..., readable=False),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    recursive: bool = typer.Option(False, "--recursive"),
-    as_type: str | None = typer.Option(
-        None,
-        "--as",
-        help=(
-            "Override auto-classification (suffix-based, see _evidence_types._SUFFIX_TYPE). "
-            "Useful when a memory dump is named `.raw` (auto-classified as disk_image). "
-            "Values: disk_image, memory_dump, evtx, pcap, hive, ids_rules, other."
-        ),
-    ),
-) -> None:
-    from silentwitness_agent.cli_commands.register_evidence import run as _run
-    from silentwitness_common.types import EvidenceType
-
-    cli_ctx: _CliCtx = ctx.obj
-    err = _console(cli_ctx.no_color, stderr=True)
-    case_dir = _resolve_case_dir(case_id)
-    if not case_dir.exists():
-        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
-        raise typer.Exit(code=1)
-    override: EvidenceType | None = None
-    if as_type is not None:
-        try:
-            override = EvidenceType(as_type)
-        except ValueError:
-            allowed = ", ".join(t.value for t in EvidenceType)
-            err.print(f"[red]✗[/red] invalid --as '{as_type}'. Allowed: {allowed}", highlight=False)
-            raise typer.Exit(code=2) from None
-    examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
-    code = _run(
-        case_dir,
-        case_id,
-        path,
-        dry_run=dry_run,
-        recursive=recursive,
-        as_type=override,
-        examiner=examiner,
-        no_color=cli_ctx.no_color,
-    )
-    raise typer.Exit(code=code)
-
-
-@app.command("prepare")
-def prepare(
-    ctx: typer.Context,
-    case_id: str = typer.Argument(...),
-) -> None:
-    """Extract artifacts from registered disk images and decompress memory archives."""
-    from silentwitness_agent.cli_commands.prepare import run as _run
-
-    cli_ctx: _CliCtx = ctx.obj
-    err = _console(cli_ctx.no_color, stderr=True)
-    case_dir = _resolve_case_dir(case_id)
-    if not case_dir.exists():
-        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
-        raise typer.Exit(code=1)
-    examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
-    code = _run(case_dir, case_id, examiner=examiner, no_color=cli_ctx.no_color)
-    raise typer.Exit(code=code)
-
-
-@app.command("index")
-def index(
-    ctx: typer.Context,
-    case_id: str = typer.Argument(...),
-    host: str = typer.Option("", "--host", help="Host label stamped on indexed rows (multi-host)."),
-) -> None:
-    """Parse the prepared artifacts into the case's searchable evidence index."""
-    from silentwitness_agent.cli_commands.index_case import run as _run
-
-    cli_ctx: _CliCtx = ctx.obj
-    err = _console(cli_ctx.no_color, stderr=True)
-    case_dir = _resolve_case_dir(case_id)
-    if not case_dir.exists():
-        err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
-        raise typer.Exit(code=1)
-    examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
-    code = _run(case_dir, case_id, examiner=examiner, host=host, no_color=cli_ctx.no_color)
-    raise typer.Exit(code=code)
-
-
-@app.command("baseline-comparison")
-def baseline_comparison(
-    ctx: typer.Context,
-    case_id: str = typer.Argument(...),
-    baseline: str = typer.Option("protocol-sift", "--baseline"),
-    out: Path | None = typer.Option(None, "--out"),
-    metrics: str = typer.Option("time,pivots,provenance,hallucinations,epistemic", "--metrics"),
-    results_dir: Path | None = typer.Option(None, "--results-dir"),
-) -> None:
-    from silentwitness_agent.cli_commands.baseline_comparison import run as _run
-
-    cli_ctx: _CliCtx = ctx.obj
-    # fmt: off
-    raise typer.Exit(code=_run(
-        _resolve_case_dir(case_id), case_id, baseline_mode=baseline, out=out,
-        metrics_arg=metrics, no_color=cli_ctx.no_color, results_dir=results_dir,
-    ))
-    # fmt: on

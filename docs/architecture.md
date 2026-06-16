@@ -213,9 +213,10 @@ first firewall layer: the model can request citable records, not raw evidence sc
 
 Memory indexing stays inside that same offline spine. When a registered memory image is present,
 `silentwitness index` runs Volatility 3 plugins individually and ingests each plugin's rows into
-the case index. The order is cheap/high-signal inventory first (`pslist`, `cmdline`, `netscan`,
-`psscan`) and expensive malware scanning last (`malfind`). Each plugin has visible CLI progress and
-a bounded timeout (`SILENTWITNESS_VOL3_TIMEOUT_SEC`, default 300 seconds, with plugin-specific
+the case index. The default `standard` profile indexes cheap/high-signal inventory (`pslist`,
+`cmdline`, `netscan`, `psscan`) for process and network corroboration. The `deep` profile adds the
+expensive all-process malware VAD scanner (`malfind`). Each plugin has visible CLI progress and a
+bounded timeout (`SILENTWITNESS_VOL3_TIMEOUT_SEC`, default 300 seconds, with plugin-specific
 overrides such as `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC`). A slow or failed plugin becomes an
 audit advisory while successful memory rows remain searchable.
 

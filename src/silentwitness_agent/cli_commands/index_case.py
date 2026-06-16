@@ -25,6 +25,7 @@ import json
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Literal
 
 from rich.console import Console
 
@@ -84,7 +85,15 @@ def _brief(message: str, *, limit: int = 220) -> str:
     return compact[: limit - 1].rstrip() + "…"
 
 
-def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color: bool) -> int:
+def run(
+    case_dir: Path,
+    case_id: str,
+    *,
+    examiner: str,
+    host: str = "",
+    no_color: bool,
+    memory_profile: Literal["standard", "deep"] = "standard",
+) -> int:
     """Run the targeted parsers (+ best-effort plaso) over prepared artifacts.
 
     Returns 0 once the index is populated, 1 if there is nothing registered to index.
@@ -103,6 +112,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
         return 1
 
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
+    from silentwitness_mcp.index.feeders_memory import DEEP_PLUGINS, STANDARD_PLUGINS
     from silentwitness_mcp.index.ingest import IngestError, ingest_image_timeline
     from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
     from silentwitness_mcp.index.ingest_memory import MemoryPluginEvent, ingest_memory_image
@@ -114,6 +124,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
     memory_counts: dict[str, int] = {}
     memory_total = 0
     advisories: list[str] = []
+    memory_plugins = DEEP_PLUGINS if memory_profile == "deep" else STANDARD_PLUGINS
     # Sentinel so the post-finally summary doesn't UnboundLocalError if the try block
     # raised before `ingested` was assigned (e.g. EvidenceIndex open fails).
     ingested = IngestResult()
@@ -188,6 +199,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
                     audit_id=audit_id,
                     artifact_path=str(rec.path.name),
                     host=host,
+                    plugins=memory_plugins,
                     progress=_memory_progress,
                 )
                 for plugin, written in mem.counts.items():

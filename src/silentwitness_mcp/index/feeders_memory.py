@@ -40,15 +40,23 @@ class Mapper(Protocol):
     ) -> Iterator[IndexRecord]: ...
 
 
-# The plugins we ingest. Keep cheap/high-signal plugins before expensive scanners so a
-# slow malware sweep cannot delay basic process/network memory rows.
-PLUGINS: Final[tuple[str, ...]] = (
+# Standard memory inventory used by the CLI's default index profile. These produce
+# useful process/network corroboration without the expensive all-process VAD scan.
+STANDARD_PLUGINS: Final[tuple[str, ...]] = (
     "windows.pslist.PsList",
     "windows.cmdline.CmdLine",
     "windows.netscan.NetScan",
     "windows.psscan.PsScan",
+)
+
+# Deep memory scan used when explicitly requested. Keep expensive scanners last so
+# a slow malware sweep cannot delay basic process/network memory rows.
+DEEP_PLUGINS: Final[tuple[str, ...]] = (
+    *STANDARD_PLUGINS,
     "windows.malware.malfind.Malfind",
 )
+
+PLUGINS: Final[tuple[str, ...]] = DEEP_PLUGINS
 
 
 # ---------------------------------------------------------------------------
@@ -285,4 +293,4 @@ if set(MAPPERS) != set(PLUGINS):  # load-time invariant
     raise AssertionError("PLUGINS and MAPPERS keys diverged")
 
 
-__all__ = ["MAPPERS", "PLUGINS", "Mapper"]
+__all__ = ["DEEP_PLUGINS", "MAPPERS", "PLUGINS", "STANDARD_PLUGINS", "Mapper"]

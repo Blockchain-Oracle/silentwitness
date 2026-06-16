@@ -168,13 +168,17 @@ def test_mappers_and_plugins_stay_in_sync() -> None:
 
 def test_expensive_memory_plugins_run_after_basic_inventory() -> None:
     """Keep process/network inventory ahead of expensive malware scans."""
-    assert fm.PLUGINS == (
+    assert fm.STANDARD_PLUGINS == (
         "windows.pslist.PsList",
         "windows.cmdline.CmdLine",
         "windows.netscan.NetScan",
         "windows.psscan.PsScan",
+    )
+    assert fm.DEEP_PLUGINS == (
+        *fm.STANDARD_PLUGINS,
         "windows.malware.malfind.Malfind",
     )
+    assert fm.PLUGINS == fm.DEEP_PLUGINS
 
 
 def test_make_record_truncates_at_max_text() -> None:
