@@ -9,7 +9,7 @@
  * and runs as `pnpm predev` / `pnpm prebuild`.
  *
  * Hand-curated pages (index.mdx, quickstart.mdx, architecture.mdx) are
- * preserved — sync only writes files matching the canonical doc list.
+ * preserved — sync only writes files in the canonical allow-list.
  */
 
 import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
@@ -26,7 +26,8 @@ const DST = path.join(SITE_ROOT, "content", "docs");
 
 // Files we mirror from repo docs/*.md → content/docs/*.mdx. Kept explicit so
 // internal sprint docs (CICD_SPEC, BRAINSTORM, stories/) never accidentally
-// land on the public site.
+// land on the public site. Missing source → fatal (see main()) so a bad
+// rebase doesn't ship empty docs to Vercel.
 const CANONICAL = {
   "SETUP_GUIDE.md": "setup-guide.mdx",
   "ACCURACY_REPORT.md": "accuracy-report.mdx",
@@ -36,17 +37,31 @@ const CANONICAL = {
   "architecture.md": "architecture-deep-dive.mdx",
 };
 
+// JSX components we expect to find in real MDX prose (after migration).
+// Any `<Name>` token starting with a capital letter is treated as JSX and
+// left alone — the regex never escapes these. Lowercase tags like `<https>`
+// are NOT JSX and ARE escaped/de-fanged.
+const JSX_COMPONENT_RE = /^<[A-Z][A-Za-z0-9]*[\s/>]/;
+
+function _escapeYamlString(value) {
+  // YAML double-quoted strings need backslash + quote escaping. We use
+  // double-quoted strings (not single) because they support \n etc., and we
+  // want any embedded newline in a description to be \n-escaped, not
+  // wrap to a new YAML line and break parsing.
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ");
+}
+
 function extractFrontmatter(markdown, sourceName) {
   const lines = markdown.split("\n");
   let title = sourceName.replace(/\.md$/, "");
   let description = null;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (!title && line.startsWith("# ")) {
+    if (line.startsWith("# ")) {
       title = line.slice(2).trim();
-    } else if (line.startsWith("# ")) {
-      title = line.slice(2).trim();
-    } else if (
+      continue;
+    }
+    if (
       description === null &&
       (line.startsWith("> ") || (line.trim().length > 20 && !line.startsWith("#")))
     ) {
@@ -54,22 +69,73 @@ function extractFrontmatter(markdown, sourceName) {
       if (description) break;
     }
   }
-  // Escape quotes for YAML safety.
-  const safeTitle = title.replace(/"/g, "'");
-  const safeDescription = description ? description.replace(/"/g, "'") : "";
+  const safeTitle = _escapeYamlString(title);
+  const safeDescription = description ? _escapeYamlString(description) : "";
   return safeDescription
     ? `---\ntitle: "${safeTitle}"\ndescription: "${safeDescription}"\n---\n\n`
     : `---\ntitle: "${safeTitle}"\n---\n\n`;
 }
 
+/**
+ * Apply MDX-safety transforms ONLY to prose, never inside fenced code
+ * blocks. Walks the markdown line-by-line, tracking whether the cursor is
+ * inside a ```fence```. Inside a fence we yield the line unchanged — code
+ * samples like `curl <https://...>` or `<10ms` MUST render literally.
+ *
+ * Outside a fence we apply three transforms:
+ *
+ *   1. `<!-- HTML comment -->` → `{/* MDX comment * /}` — MDX rejects the
+ *      HTML form.
+ *   2. `<https://...>` autolink → bare URL — MDX parses `<https://` as a
+ *      JSX opening tag and chokes.
+ *   3. `<` followed by whitespace / digit / equals → `&lt;` — MDX would
+ *      otherwise try to parse it as a JSX tag opener. JSX components
+ *      (`<Name…`) start with a capital letter and are LEFT alone by the
+ *      explicit JSX_COMPONENT_RE guard.
+ */
+function applyMdxSafety(body) {
+  const lines = body.split("\n");
+  const fenceRe = /^(```|~~~)/;
+  let inFence = false;
+  const out = [];
+  for (const line of lines) {
+    if (fenceRe.test(line)) {
+      inFence = !inFence;
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    let transformed = line.replace(/<!--([\s\S]*?)-->/g, (_, inner) => `{/*${inner}*/}`);
+    transformed = transformed.replace(/<(https?:\/\/[^\s>]+)>/g, "$1");
+    // Escape `<` followed by whitespace/digit/equals, BUT only if what
+    // follows doesn't look like a JSX component opener. The substring
+    // check guards against `<Name`, `<Cards>`, etc. — those stay literal
+    // so the docs can ship custom Fumadocs components without losing
+    // them to over-eager escaping.
+    transformed = transformed.replace(/</g, (match, offset, str) => {
+      const tail = str.slice(offset);
+      if (JSX_COMPONENT_RE.test(tail)) return match;
+      const next = str.charAt(offset + 1);
+      if (next === "" || /[\s\d=]/.test(next)) return "&lt;";
+      return match;
+    });
+    out.push(transformed);
+  }
+  return out.join("\n");
+}
+
 async function main() {
   if (!existsSync(DST)) await mkdir(DST, { recursive: true });
 
+  const missing = [];
   let mirrored = 0;
   for (const [src, dst] of Object.entries(CANONICAL)) {
     const srcPath = path.join(SRC, src);
     if (!existsSync(srcPath)) {
-      console.warn(`sync-docs: skipping missing ${src}`);
+      missing.push(src);
       continue;
     }
     const content = await readFile(srcPath, "utf-8");
@@ -81,34 +147,39 @@ async function main() {
       h1Index >= 0
         ? bodyLines.slice(h1Index + 1).join("\n").replace(/^\s+/, "")
         : content;
-
-    // MDX-safety transforms — these are valid GitHub markdown but invalid MDX:
-    //
-    // 1. HTML comments `<!-- ... -->` → MDX comments `{/* ... */}`
-    body = body.replace(/<!--([\s\S]*?)-->/g, (_, inner) => `{/*${inner}*/}`);
-    //
-    // 2. Autolinks `<https://...>` → bare URL (MDX parses `<https://` as JSX).
-    //    Inside code fences we DO NOT want to touch URLs, but for the docs we
-    //    mirror these only appear in prose, so a global replace is safe.
-    body = body.replace(/<(https?:\/\/[^\s>]+)>/g, "$1");
-    //
-    // 3. Stand-alone `<` not followed by an identifier (e.g. `<10` in prose).
-    //    Escape with HTML entity so MDX leaves it alone. The negative
-    //    lookahead protects real JSX tags + opening code-fence `<` shells.
-    body = body.replace(/<(?=[\s\d=])/g, "&lt;");
-
+    body = applyMdxSafety(body);
     await writeFile(path.join(DST, dst), fm + body, "utf-8");
     mirrored++;
   }
 
-  // Sanity-check what hand-curated files survived.
+  if (missing.length > 0) {
+    // Fail loudly — the canonical list is intentionally curated; absence
+    // means a bad rebase or a typo, not a feature. Override with
+    // SYNC_DOCS_ALLOW_MISSING=1 for local dev iteration where you've
+    // staged but not yet committed a renamed doc.
+    const msg = `sync-docs: ${missing.length} canonical doc(s) missing: ${missing.join(", ")}`;
+    if (process.env.SYNC_DOCS_ALLOW_MISSING === "1") {
+      console.warn(`${msg} (SYNC_DOCS_ALLOW_MISSING=1 set — continuing)`);
+    } else {
+      console.error(msg);
+      console.error("set SYNC_DOCS_ALLOW_MISSING=1 to continue with partial mirror");
+      process.exit(1);
+    }
+  }
+
   const present = await readdir(DST);
   console.log(
     `sync-docs: mirrored ${mirrored} canonical docs; ${present.length} files now in content/docs/`,
   );
 }
 
-main().catch((err) => {
-  console.error("sync-docs failed:", err);
-  process.exit(1);
-});
+// Exported for testing — see tests/unit/site/test_sync_docs.test.mjs.
+export { applyMdxSafety, extractFrontmatter, _escapeYamlString };
+
+// Run when invoked directly (not when imported by a test).
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error("sync-docs failed:", err);
+    process.exit(1);
+  });
+}

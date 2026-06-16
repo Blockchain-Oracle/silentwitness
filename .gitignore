@@ -61,6 +61,7 @@ Thumbs.db
 node_modules/
 package-lock.json
 yarn.lock
+# pnpm-lock.yaml IS committed (supply-chain pin; CI uses --frozen-lockfile)
 
 # Node / Next.js / Fumadocs site under apps/site/
 apps/**/.next/

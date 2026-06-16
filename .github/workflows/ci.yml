@@ -335,3 +335,86 @@ jobs:
           name: trivy-sarif
           path: trivy-results.sarif
           retention-days: 30
+
+  shellcheck-install:
+    # PR #238 review: install.sh ships 350+ LOC of Bash that gates the entire
+    # judge-onboarding flow. Catching a `set -e` / quoting bug locally before
+    # push beats catching it on a fresh OVA at submission time. `bash -n` is
+    # syntax-only; shellcheck adds semantic checks.
+    name: shellcheck install.sh
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: bash -n install.sh
+      - name: shellcheck
+        # shellcheck-action pins a known release; SC2086 (word-splitting) is
+        # disabled because install.sh deliberately splits some paths.
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          severity: warning
+          scandir: '.'
+          additional_files: 'install.sh'
+
+  apps-site-build:
+    # PR #238 review: apps/site/ is the docs surface deployed to Vercel; if
+    # MDX renders break on a PR we catch them here, not on the deployment.
+    # Mirrors the production build (sync-docs → next build → pagefind).
+    name: apps/site build (Fumadocs + Pagefind)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: pnpm install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Run sync-docs unit tests
+        # 16 tests covering MDX-safety transforms (in-fence tracking,
+        # autolink, HTML comments, `<` escape) and frontmatter extraction.
+        # These pin the silent-corruption regressions from PR #238 review.
+        run: node --test apps/site/scripts/sync-docs.test.mjs
+      - name: Build apps/site
+        run: pnpm --filter @silentwitness/site build
+      - name: Verify Pagefind index produced
+        # Pagefind silently produces an empty index if the build dir glob
+        # misses; assert it indexed something so a future config drift fails
+        # loudly instead of shipping a broken search box.
+        run: |
+          test -f apps/site/public/pagefind/pagefind.js \
+            || (echo "::error::pagefind.js missing from build output" && exit 1)
+          test -s apps/site/public/pagefind/pagefind-entry.json \
+            || (echo "::error::pagefind-entry.json empty or missing" && exit 1)
+
+  npm-wrapper-syntax:
+    # PR #238 review: the npm/silentwitness wrapper is shipped to npmjs.org;
+    # a syntax error would be caught by `npm publish` but only after we'd
+    # already merged. `node --check` is the cheapest possible gate.
+    name: npm wrapper syntax check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: node --check
+        run: node --check npm/silentwitness/bin/silentwitness.js
+      - name: Smoke (prints help when Python CLI absent)
+        # On a CI runner with no Python silentwitness installed, the wrapper
+        # should print the install-help and exit 127. Anything else (crash,
+        # silent success) is a regression.
+        run: |
+          set +e
+          node npm/silentwitness/bin/silentwitness.js --help
+          status=$?
+          set -e
+          # 127 = neither silentwitness nor uvx on PATH (expected on fresh runner)
+          # 0   = uvx happened to be present and ran the real CLI (also fine)
+          if [ "$status" -ne 127 ] && [ "$status" -ne 0 ]; then
+            echo "::error::npm wrapper exited $status (expected 0 or 127)"
+            exit 1
+          fi

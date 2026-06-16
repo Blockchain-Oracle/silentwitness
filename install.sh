@@ -290,23 +290,42 @@ install_silentwitness_cli() {
 
     if ! command -v uv >/dev/null 2>&1; then
         log "uv not found — installing via astral.sh installer (no root needed)"
-        curl -LsSf https://astral.sh/uv/install.sh | sh \
-            || fail "uv install failed (https://astral.sh/uv/install.sh)"
-        # uv installer drops the binary in ~/.local/bin and patches the user's
-        # shell rc to add it to PATH on next login. For this script we need it
-        # NOW, so export the path explicitly.
+        # Download to a file FIRST + sanity-check the body BEFORE piping to sh.
+        # `curl … | sh` runs whatever bytes come back; a captive portal / proxy
+        # returning HTML would otherwise have sh parse <html> as commands and
+        # produce a wall of "Syntax error" with no clear cause (silent-failure
+        # hunter #6, PR #238 review).
+        local uv_installer="$TMPDIR/uv-install.sh"
+        curl -fsSL -o "$uv_installer" https://astral.sh/uv/install.sh \
+            || fail "uv installer download failed"
+        # Astral's installer starts with `#!/bin/sh` and a recognisable marker
+        # comment. Reject anything that isn't a POSIX shell script.
+        head -1 "$uv_installer" | grep -q '^#!/.*sh' \
+            || fail "uv installer body is not a shell script — captive portal / proxy intercept?"
+        grep -q -i 'astral\|uv' "$uv_installer" \
+            || fail "uv installer body missing astral/uv marker — refusing to execute"
+        sh "$uv_installer" || fail "uv installer execution failed"
+        # uv installer attempts to patch the shell rc; behaviour varies by
+        # shell/OS/interactive state, so hard-export PATH for this script's
+        # duration regardless.
         export PATH="$HOME/.local/bin:$PATH"
     fi
 
     command -v uv >/dev/null 2>&1 || fail "uv still not on PATH after install"
 
     # CLAUDE.md pins uv==0.11.18 (0.5.x has breaking semantics for `uv lock`
-    # and `uv tool`). Warn rather than fail so newer pins can be tested
-    # explicitly without breaking install.sh for everyone.
+    # and `uv tool`). FAIL (not warn) on drift so a judge with a wrong uv on
+    # PATH doesn't get an inscrutable failure 30 lines later attributed to
+    # uv when the real cause is version skew. Override with the env var when
+    # intentionally testing a different uv.
     local uv_ver
     uv_ver="$(uv --version | awk '{print $2}')"
     if [[ "$uv_ver" != "0.11.18" ]]; then
-        log "WARNING: uv $uv_ver detected; CLAUDE.md pins 0.11.18 — please verify behaviour"
+        if [[ "${SILENTWITNESS_ALLOW_UV_DRIFT:-0}" == "1" ]]; then
+            log "WARNING: uv $uv_ver vs pinned 0.11.18 — SILENTWITNESS_ALLOW_UV_DRIFT=1 set, continuing"
+        else
+            fail "uv $uv_ver does not match pinned 0.11.18; set SILENTWITNESS_ALLOW_UV_DRIFT=1 to override"
+        fi
     fi
 
     # Resolve the silentwitness repo.
@@ -316,14 +335,35 @@ install_silentwitness_cli() {
         if [[ ! -d "$repo_root/.git" ]]; then
             log "cloning silentwitness into $repo_root (no checkout in CWD)"
             sudo mkdir -p /opt/silentwitness
-            sudo chown -R "$USER:$USER" /opt/silentwitness 2>/dev/null \
-                || sudo chown -R "$USER" /opt/silentwitness
+            # Use the user's actual primary group (not username — Debian uses
+            # `users`, macOS uses `staff`); the prior `$USER:$USER` form
+            # silently fell back to bare $USER which strips group perms.
+            sudo chown -R "$USER:$(id -gn)" /opt/silentwitness
             git clone --depth 1 https://github.com/Blockchain-Oracle/silentwitness.git "$repo_root" \
                 || fail "git clone of silentwitness repo failed"
+            # Defense in depth: a "successful" clone can still produce an
+            # empty / partial checkout (network drop mid-pack, renamed
+            # default branch, bad mirror). Assert the manifest is there
+            # BEFORE handing the repo to uv tool install — otherwise the
+            # failure surfaces 20 lines later as "pyproject.toml not found"
+            # and the user blames uv.
+            [[ -f "$repo_root/pyproject.toml" ]] \
+                || fail "git clone succeeded but pyproject.toml missing at $repo_root — corrupt clone?"
+            grep -q '^name = "silentwitness"' "$repo_root/pyproject.toml" \
+                || fail "git clone produced wrong repo at $repo_root — pyproject.toml is not silentwitness's"
         else
             log "using existing checkout at $repo_root"
-            (cd "$repo_root" && git pull --ff-only) \
-                || log "WARNING: git pull failed in $repo_root — using current HEAD"
+            # Stale local edits → `git pull --ff-only` rebases-but-fails; we
+            # FAIL not WARN so the install doesn't proceed against a stale
+            # tree and produce wrong-version artefacts. Override with the
+            # env var when explicitly testing a local fork.
+            if ! (cd "$repo_root" && git pull --ff-only) >/dev/null 2>&1; then
+                if [[ "${SILENTWITNESS_ALLOW_STALE_CHECKOUT:-0}" == "1" ]]; then
+                    log "WARNING: git pull failed in $repo_root — SILENTWITNESS_ALLOW_STALE_CHECKOUT=1 set, continuing"
+                else
+                    fail "git pull --ff-only failed in $repo_root; set SILENTWITNESS_ALLOW_STALE_CHECKOUT=1 to override"
+                fi
+            fi
         fi
     else
         log "using silentwitness repo at $repo_root (already on disk)"
@@ -339,8 +379,14 @@ install_silentwitness_cli() {
         install_target="silentwitness[forensics] @ file://$repo_root"
     fi
 
-    uv tool install --reinstall "$install_target" \
-        || fail "uv tool install $install_target failed"
+    # Capture stderr to a tempfile so a uv failure (network blip, missing
+    # build toolchain, dep resolution conflict) surfaces with its real cause
+    # instead of just "uv tool install failed".
+    local uv_err="$TMPDIR/uv-tool-install.err"
+    if ! uv tool install --reinstall "$install_target" 2>"$uv_err"; then
+        cat "$uv_err" >&2
+        fail "uv tool install $install_target failed (see error above)"
+    fi
 
     command -v silentwitness >/dev/null 2>&1 \
         || fail "silentwitness not on PATH after uv tool install (check ~/.local/bin)"

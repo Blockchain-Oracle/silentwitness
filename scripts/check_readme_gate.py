@@ -66,9 +66,19 @@ def check(readme_path: Path) -> int:
     if "![" not in head:
         return _fail("image_embed", "no `![alt](path)` image embed in first 100 lines")
 
-    # Rule 4: SIFT native install one-liner
-    if not re.search(r"curl[^\n]*install\.sh[^\n]*\|\s*bash", text):
-        return _fail("sift_install", "missing curl ... install.sh | bash shell line")
+    # Rule 4: SIFT native install — either curl-pipe-bash one-liner OR the
+    # git-clone-then-./install.sh pattern (PR #238 changed the recommended
+    # path to "clone then run" so the user sees the script they're about to
+    # execute; curl-pipe-bash is still accepted as an alternative).
+    has_curl_bash = re.search(r"curl[^\n]*install\.sh[^\n]*\|\s*bash", text) is not None
+    has_clone_run = (
+        re.search(r"git clone[^\n]*silentwitness[\s\S]*?\./install\.sh", text) is not None
+    )
+    if not (has_curl_bash or has_clone_run):
+        return _fail(
+            "sift_install",
+            "missing both `curl ... install.sh | bash` and `git clone ... && ./install.sh`",
+        )
 
     # Rule 5: Docker Compose path
     if "docker compose up" not in text:
