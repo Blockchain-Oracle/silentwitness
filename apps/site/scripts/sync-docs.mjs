@@ -12,7 +12,7 @@
  * preserved — sync only writes files in the canonical allow-list.
  */
 
-import { readFile, writeFile, mkdir, readdir } from "node:fs/promises";
+import { readFile, writeFile, mkdir, readdir, copyFile, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -23,6 +23,8 @@ const SITE_ROOT = path.resolve(__dirname, "..");
 const REPO_ROOT = path.resolve(SITE_ROOT, "..", "..");
 const SRC = path.join(REPO_ROOT, "docs");
 const DST = path.join(SITE_ROOT, "content", "docs");
+const DIAGRAMS_SRC = path.join(SRC, "diagrams");
+const DIAGRAMS_DST = path.join(SITE_ROOT, "public", "diagrams");
 
 // Files we mirror from repo docs/*.md → content/docs/*.mdx. Kept explicit so
 // internal sprint docs (CICD_SPEC, BRAINSTORM, stories/) never accidentally
@@ -36,6 +38,17 @@ const CANONICAL = {
   "TRY_IT_OUT.md": "try-it-out.mdx",
   "architecture.md": "architecture-deep-dive.mdx",
 };
+
+const DOC_ROUTES = new Map([
+  ["SETUP_GUIDE.md", "/docs/setup-guide"],
+  ["ACCURACY_REPORT.md", "/docs/accuracy-report"],
+  ["THREE_CLAIM_TRACE.md", "/docs/three-claim-trace"],
+  ["DATASETS.md", "/docs/datasets"],
+  ["TRY_IT_OUT.md", "/docs/try-it-out"],
+  ["architecture.md", "/docs/architecture-deep-dive"],
+]);
+
+const GITHUB_DOCS_ROOT = "https://github.com/Blockchain-Oracle/silentwitness";
 
 // JSX components we expect to find in real MDX prose (after migration).
 // Any `<Name>` token starting with a capital letter is treated as JSX and
@@ -127,8 +140,83 @@ function applyMdxSafety(body) {
   return out.join("\n");
 }
 
+function _githubPath(kind, relPath) {
+  return `${GITHUB_DOCS_ROOT}/${kind}/main/${relPath}`;
+}
+
+function _rewriteHref(href) {
+  if (
+    href.startsWith("http://") ||
+    href.startsWith("https://") ||
+    href.startsWith("mailto:") ||
+    href.startsWith("#") ||
+    href.startsWith("/")
+  ) {
+    return href;
+  }
+
+  const [pathPart, anchor = ""] = href.split("#", 2);
+  const anchorSuffix = anchor ? `#${anchor}` : "";
+  const normalized = pathPart.replace(/^\.?\//, "").replace(/^docs\//, "");
+  const route = DOC_ROUTES.get(normalized);
+  if (route) return `${route}${anchorSuffix}`;
+
+  if (normalized === "../LICENSE" || normalized === "LICENSE") {
+    return _githubPath("blob", "LICENSE");
+  }
+  if (normalized === "../NOTICES.md" || normalized === "NOTICES.md") {
+    return _githubPath("blob", "NOTICES.md");
+  }
+
+  if (normalized.startsWith("diagrams/")) {
+    return `/${normalized}`;
+  }
+
+  if (
+    normalized.startsWith("execution_logs/") ||
+    normalized.startsWith("EXAMPLE_EXECUTION_LOGS/")
+  ) {
+    const kind = /\.[A-Za-z0-9]+$/.test(normalized) ? "blob" : "tree";
+    return _githubPath(kind, `docs/${normalized}`);
+  }
+
+  return href;
+}
+
+function rewriteSiteLinks(body) {
+  const lines = body.split("\n");
+  const fenceRe = /^(```|~~~)/;
+  let inFence = false;
+  const out = [];
+  for (const line of lines) {
+    if (fenceRe.test(line)) {
+      inFence = !inFence;
+      out.push(line);
+      continue;
+    }
+    if (inFence) {
+      out.push(line);
+      continue;
+    }
+    out.push(line.replace(/\]\(([^)]+)\)/g, (_, href) => `](${_rewriteHref(href)})`));
+  }
+  return out.join("\n");
+}
+
 async function main() {
   if (!existsSync(DST)) await mkdir(DST, { recursive: true });
+  if (!existsSync(DIAGRAMS_DST)) await mkdir(DIAGRAMS_DST, { recursive: true });
+
+  if (existsSync(DIAGRAMS_SRC)) {
+    for (const entry of await readdir(DIAGRAMS_DST)) {
+      await unlink(path.join(DIAGRAMS_DST, entry));
+    }
+    for (const entry of await readdir(DIAGRAMS_SRC)) {
+      const srcPath = path.join(DIAGRAMS_SRC, entry);
+      const dstPath = path.join(DIAGRAMS_DST, entry);
+      await copyFile(srcPath, dstPath);
+    }
+  }
 
   const missing = [];
   let mirrored = 0;
@@ -147,7 +235,7 @@ async function main() {
       h1Index >= 0
         ? bodyLines.slice(h1Index + 1).join("\n").replace(/^\s+/, "")
         : content;
-    body = applyMdxSafety(body);
+    body = rewriteSiteLinks(applyMdxSafety(body));
     await writeFile(path.join(DST, dst), fm + body, "utf-8");
     mirrored++;
   }
@@ -174,7 +262,7 @@ async function main() {
 }
 
 // Exported for testing — see tests/unit/site/test_sync_docs.test.mjs.
-export { applyMdxSafety, extractFrontmatter, _escapeYamlString };
+export { applyMdxSafety, extractFrontmatter, rewriteSiteLinks, _escapeYamlString };
 
 // Run when invoked directly (not when imported by a test).
 if (import.meta.url === `file://${process.argv[1]}`) {

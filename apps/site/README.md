@@ -31,7 +31,7 @@ Pushes to `main` trigger Vercel automatically — see `vercel.json` at the repo 
 |---|---|---|
 | `content/docs/index.mdx` | hand-curated | Landing page (canonical) |
 | `content/docs/quickstart.mdx` | hand-curated | Five-minute install + investigate |
-| `content/docs/architecture.mdx` | hand-curated | High-level boundaries + mermaid |
+| `content/docs/architecture.mdx` | hand-curated | High-level boundaries + SVG architecture visual |
 | `content/docs/*.mdx` (rest) | mirrored from `docs/*.md` via `scripts/sync-docs.mjs` | The canonical docs/ tree is the source of truth; this site is a renderer. |
 
 Only judge-facing docs are mirrored — see the `CANONICAL` allow-list in `scripts/sync-docs.mjs`.

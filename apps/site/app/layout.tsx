@@ -18,6 +18,24 @@ export const metadata: Metadata = {
       "Open-source DFIR agent with architectural guardrails: entity gate, citation gate, hash-chained audit. 1838 tests, 88.39% coverage.",
     url: "https://silentwitness.vercel.app",
     siteName: "SilentWitness",
+    images: [
+      {
+        url: "/brand/social-card.png",
+        width: 924,
+        height: 540,
+        alt: "SilentWitness: prove every claim",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SilentWitness — hypothesis-first DFIR investigator",
+    description:
+      "A Custom MCP Server submission for SANS Find Evil! 2026. Every claim is locked to the tool execution that produced it.",
+    images: ["/brand/social-card.png"],
+  },
+  icons: {
+    icon: "/brand/logo.svg",
   },
 };
 

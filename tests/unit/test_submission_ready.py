@@ -27,17 +27,21 @@ def _make_minimal_fixture(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
     (root / "LICENSE").write_text("MIT License\n\nCopyright (c) 2026\n")
-    # README with real YouTube URL, mermaid block, no placeholder
+    # README with real YouTube URL, architecture asset, no placeholder
     (root / "README.md").write_text(
         "# SilentWitness\n\n"
         "Demo: https://youtu.be/abcdefghijk\n\n"
-        "```mermaid\nflowchart TB\nA --> B\n```\n"
+        "![Architecture](docs/diagrams/architecture.svg)\n"
     )
     docs = root / "docs"
     docs.mkdir()
-    (docs / "architecture.md").write_text("# Architecture\n```mermaid\nflowchart\n```\n")
+    (docs / "architecture.md").write_text(
+        "# Architecture\n![Architecture](diagrams/architecture.svg)\n"
+    )
     (docs / "diagrams").mkdir()
-    (docs / "diagrams" / "architecture.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    (docs / "diagrams" / "architecture.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>x</title><desc>y</desc></svg>\n'
+    )
     (docs / "DEVPOST.md").write_text(
         "# SilentWitness\n## One-line pitch\n## What it does\n## Built with\npython\n"
     )

@@ -65,6 +65,19 @@ that, but we do not claim a stable 100%.
   refuses to finalize until every Key Question has a supporting observation — is what prevents
   this.
 
+### False positives
+
+The scorer separates **false positives** from hallucinations. A hallucination is a cited artifact
+that cannot be found in the mounted evidence. A false positive is grounded in a real artifact but
+does not match the hand-crafted ground-truth finding set.
+
+Known false-positive risk in the ROCBA runs is over-broad interpretation, not fabricated artifacts:
+for example, cloud-sync and logon observations can be evidence-present while still too broad until
+the critic narrows them to the specific cited records. The headline run includes that challenge and
+revision loop for O-004/O-007 in `docs/execution_logs/gpt55_100pct_run/critic.jsonl` and
+`findings.jsonl`. We treat those as noisy claims that must be narrowed, not as proof the raw
+artifact was invented.
+
 ---
 
 ## 4. Hallucination controls — what we catch (and how)

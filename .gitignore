@@ -69,6 +69,7 @@ apps/**/.source/
 apps/**/.vercel/
 apps/**/*.tsbuildinfo
 apps/**/public/pagefind/
+apps/**/public/diagrams/
 .pnpm-store/
 
 # Sub-agent research scratch
@@ -87,3 +88,6 @@ tests/fixtures/.harness-*.log
 # context/ and research/ corpora that informed them) lives in archive/ on
 # disk for the author's records, out of git.
 archive/
+AGENTS.md
+.private/
+*.original.md

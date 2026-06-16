@@ -15,7 +15,7 @@ You give SilentWitness a Windows forensic image (a disk and/or memory capture). 
 1. **Parses** the evidence once into a fast searchable index.
 2. **Investigates** it like a senior analyst — forming hypotheses, searching for evidence,
    and writing down findings that **quote the actual evidence**.
-3. **Checks itself** — it cannot make a claim it can't prove, and it won't stop until it has
+3. **Checks itself** — it can't make a claim it can't prove, and it won't stop until it has
    answered all five investigative questions (who/what/where/how/when).
 4. Produces a **report** you can read, plus **logs** that trace every finding back to the exact
    search that produced it.
@@ -159,7 +159,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 ## 8. For judges
 
 - **Fastest path:** you do **not** need to run it — the [Accuracy Report](ACCURACY_REPORT.md),
-  [Architecture](architecture.md) + [diagram](diagrams/architecture.png), and the
+  [Architecture](architecture.md) + [diagram](diagrams/architecture.svg), and the
   [execution logs](execution_logs/) contain everything scored. If you do run it, follow §3–§5
   with your own API key.
 - **Three-claim trace:** [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) walks three findings from
@@ -180,7 +180,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 
 | You want… | Look here |
 |---|---|
-| How it's built | [`docs/architecture.md`](architecture.md) + [`docs/diagrams/architecture.png`](diagrams/architecture.png) |
+| How it's built | [`docs/architecture.md`](architecture.md) + [`docs/diagrams/architecture.svg`](diagrams/architecture.svg) |
 | How accurate it is (honest) | [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) |
 | What data it was tested on | [`docs/DATASETS.md`](DATASETS.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |

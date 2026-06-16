@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <mask id="sw-cut">
+    <rect width="24" height="24" fill="white"></rect>
+    <rect x="8.5" y="8.6" width="5.0" height="6.8" rx="2.5" fill="black"></rect>
+  </mask>
+  <rect x="2.6" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="currentColor" stroke-width="2.3" mask="url(#sw-cut)"></rect>
+  <rect x="9.8" y="6.6" width="11.6" height="10.8" rx="4.3" stroke="currentColor" stroke-width="2.3"></rect>
+</svg>

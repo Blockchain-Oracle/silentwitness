@@ -12,7 +12,7 @@ from pathlib import Path
 
 # README is capped at 400 lines to stay scannable on one Devpost screen.
 _MAX_LINES = 400
-# First-screen checks (demo, image, mermaid labels) scope to the first 100 lines.
+# First-screen checks (demo, image, architecture asset) scope to the first 100 lines.
 _HEAD_LINES = 100
 _DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|<!--\s*DEMO_VIDEO_URL\s*-->")
 _MIT_RE = re.compile(r"\bMIT\b")
@@ -41,8 +41,8 @@ def _fail(rule: str, detail: str = "") -> int:
 
 def check(readme_path: Path) -> int:
     try:
-        # Normalize CRLF → LF so the mermaid regex (which requires `\n` after the
-        # ```mermaid fence) does not silently fail on CRLF-saved Windows files.
+        # Normalize CRLF → LF so the head-scoped regex checks behave the same on
+        # Windows-saved files and Unix-saved files.
         text = readme_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     except OSError as exc:
         return _fail("readable", f"cannot read {readme_path}: {exc}")
@@ -84,23 +84,12 @@ def check(readme_path: Path) -> int:
     if "docker compose up" not in text:
         return _fail("docker_compose", "missing `docker compose up` shell line")
 
-    # Rule 6: mermaid fence
-    if "```mermaid" not in text:
-        return _fail("mermaid_fence", "missing ```mermaid``` code fence")
-
-    # Rule 7: mermaid block has (architectural) and (prompt-based markers
-    mermaid_match = re.search(r"```mermaid\n(.*?)```", text, re.DOTALL)
-    if mermaid_match is None:
-        return _fail("mermaid_block", "mermaid fence opened but no closing fence")
-    mermaid = mermaid_match.group(1)
-    arch_count = mermaid.count("(architectural)")
-    if arch_count < 6:
+    # Rule 6: tracked architecture diagram reference
+    if "docs/diagrams/architecture.svg" not in text:
         return _fail(
-            "mermaid_architectural",
-            f"≥6 `(architectural)` labels required, found {arch_count}",
+            "architecture_diagram",
+            "missing README reference to `docs/diagrams/architecture.svg`",
         )
-    if "(prompt-based" not in mermaid:
-        return _fail("mermaid_prompt_based", "missing `(prompt-based` label inside mermaid block")
 
     # Rule 8: literal `MIT` (word-bounded — must not match `transMIT`, `commit`, etc.)
     if not _MIT_RE.search(text):

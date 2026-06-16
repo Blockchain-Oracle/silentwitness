@@ -10,7 +10,7 @@ Built for the SANS [Find Evil!](https://findevil.devpost.com/) hackathon (2026).
 written so anyone (not just developers) can go from a blank SIFT VM to a finished report.
 
 **Result on the real SANS ROCBA case:** with the enforced coverage gate and a capable model,
-SilentWitness recalled **10 of 10** ground-truth findings — see the honest measurement (and the
+SilentWitness recalled **10 of 10** ground-truth findings. See the honest measurement (and the
 failure modes we found and fixed) in the [Accuracy Report](./docs/ACCURACY_REPORT.md), and trace
 any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_TRACE.md).
 
@@ -80,6 +80,8 @@ After install + at least one LLM API key exported:
 ```bash
 silentwitness init mr-evil-001 --examiner "$USER"
 silentwitness register-evidence mr-evil-001 /evidence/hacking-case
+silentwitness prepare mr-evil-001
+silentwitness index mr-evil-001
 silentwitness investigate mr-evil-001
 silentwitness review mr-evil-001                    # materialise findings
 silentwitness verify --audit-chain mr-evil-001      # tamper-evident audit trail
@@ -88,45 +90,13 @@ silentwitness export mr-evil-001 --format markdown
 
 ## Architecture
 
-```mermaid
-flowchart TB
-  subgraph CLI[silentwitness CLI (architectural)]
-    INIT[init / register-evidence / investigate]
-  end
-  subgraph AGENT[Pydantic AI investigator (architectural)]
-    ORCH[Hypothesis-first orchestrator]
-    CRITIC[Critic + entity gate + citation gate (architectural)]
-  end
-  subgraph MCP[Custom FastMCP server (architectural)]
-    MEMSPEC[Memory specialist (architectural)]
-    DISK[Disk specialist (architectural)]
-    LOG[Log specialist (architectural)]
-    NETSPEC[Network specialist (architectural)]
-  end
-  subgraph EVIDENCE[Read-only evidence mount (architectural)]
-    MOUNT[/evidence ro,noexec,nosuid (architectural)]
-  end
-  subgraph AUDIT[Audit JSONL ledger (architectural)]
-    LEDGER[verify-links + HMAC chain (architectural)]
-  end
-  subgraph PROMPTS[System prompts (prompt-based — supplementary, not load-bearing)]
-    AGENT_PROMPT[Investigator system prompt (prompt-based — supplementary, not load-bearing)]
-    CRITIC_PROMPT[Critic agreement prompt (prompt-based — supplementary, not load-bearing)]
-  end
-  CLI --> AGENT
-  AGENT --> MCP
-  MCP --> EVIDENCE
-  AGENT --> AUDIT
-  MCP --> AUDIT
-  AGENT_PROMPT -.-> AGENT
-  CRITIC_PROMPT -.-> CRITIC
-```
+![SilentWitness architecture diagram showing read-only evidence, offline ingest, typed MCP tools, and the audited report path](./docs/diagrams/architecture.svg)
 
-**Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but does not unlock hallucinations against unmounted artifacts.
+**Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but doesn't unlock hallucinations against unmounted artifacts.
 
 ## What's novel
 
-SilentWitness is the first hypothesis-first DFIR agent to ship the *architectural* guardrails the IR community has been asking prompt-based agents to fake. The investigator cannot claim against an artifact the entity gate cannot resolve; the report cannot include a finding the citation gate cannot link to a real audit-JSONL line. Every Δ vs vanilla Protocol SIFT in the [accuracy report](./docs/ACCURACY_REPORT.md) is **measured, not estimated** — `silentwitness baseline-comparison <case-id>` reruns the comparison on demand.
+SilentWitness is the first hypothesis-first DFIR agent to ship the *architectural* guardrails the IR community has been asking prompt-based agents to fake. The investigator can't claim against an artifact the entity gate can't resolve. The report can't include a finding the citation gate can't link to a real audit-JSONL line. Every Δ vs vanilla Protocol SIFT in the [accuracy report](./docs/ACCURACY_REPORT.md) is **measured, not estimated** — `silentwitness baseline-comparison <case-id>` reruns the comparison on demand.
 
 ## Try it out
 
@@ -146,7 +116,8 @@ Real audit JSONL output from past runs: see [`docs/EXAMPLE_EXECUTION_LOGS/`](./d
 
 ## Architecture deep-dive
 
-Component architecture, the 27-tool MCP catalog, and 10 ADRs: see [`docs/architecture.md`](./docs/architecture.md).
+Component architecture, the 12-tool agent-visible MCP surface, offline ingest spine, and ADRs:
+see [`docs/architecture.md`](./docs/architecture.md).
 
 ## Test coverage
 

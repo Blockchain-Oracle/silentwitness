@@ -22,7 +22,7 @@ Every entry below is committed. Each carries a 1–2 sentence rationale and the 
 | Coverage | `coverage[toml]` | `>=7.6` | TOML-config; per-module floors enforced by `scripts/coverage_gate.py`. |
 | MCP server | `mcp` (FastMCP) | `>=1.23.0,<2.0` | Official Anthropic SDK; Pydantic-native; native stdio + Streamable HTTP transports. **Pin floor closes CVE-2025-66416 (DNS-rebinding protection default-off before 1.23.0 — our "127.0.0.1-only is enough" defense collapses on pre-1.23) + CVE-2025-53366 (DoS, fixed 1.9.4).** Ceiling avoids v2's `FastMCP→MCPServer` breaking rename. Verified against latest stable mcp 1.27.2 (2026-05-29). |
 | Agent loop | **`pydantic-ai`** | `>=1.105.0,<2.0.0` | MIT-licensed; MCP-native via `MCPServerStdio` / `MCPServerStreamableHTTP` toolsets (NOTE: `MCPServerHTTP` does NOT exist; `mcp_servers=` kwarg is DEPRECATED — use `toolsets=[...]`); provider-agnostic model strings; first-class `Hooks` capability registered via `Agent(capabilities=[hooks])` (NOT `Agent(hooks=[...])`); agent-delegation primitive for specialists. v1 has had zero breaking changes since v1.0 (Sep 2025); ceiling pin avoids v2 silent semantic changes. |
-| Provider extras | `pydantic-ai[anthropic,openai,google-gla,ollama]` | matching | Single install, all four providers as first-class model strings. |
+| Provider packaging | `pydantic-ai` | `>=1.105.0,<2.0.0` | The top-level package already installs the core framework plus the provider integrations documented by Pydantic AI. Use `pydantic-ai-slim[...]` only when you intentionally want a reduced dependency set. |
 | I/O typing | Pydantic v2 | `>=2.9` | Ecosystem fit with `mcp` and `pydantic-ai`; strict validation; streaming-aware. |
 | Crypto | stdlib `hmac` + `hashlib.pbkdf2_hmac` | (stdlib) | No extra deps. PBKDF2-SHA256 at 600,000 iterations matches the Valhuntir pattern (Valhuntir comparative analysis §2 L2, citing `verification.py:33`). |
 | Structured logging | direct Pydantic `model_dump_json()` | (stdlib + Pydantic) | **`structlog` DROPPED per audit Decision A** — direct `model_dump_json()` on Pydantic models is right for our write rate; one fewer dep + simpler audit-logger module. |
@@ -58,77 +58,12 @@ Each rejection cites the survey doc + a one-sentence reason.
 
 ---
 
-## 2. System component diagram (Mermaid)
+## 2. System component diagram
 
 Top-level shape of the system. The three artifacts (`silentwitness-mcp`, `silentwitness-agent`, `silentwitness-claude-code`) are independently usable. Trust boundaries are annotated.
 
 <!-- canonical-architecture-diagram -->
-```mermaid
-%% SilentWitness architecture (Custom MCP Server pattern).
-%% (architectural) = enforced in code. (prompt-based ...) = supplementary, not load-bearing.
-flowchart TB
-    subgraph examiner["Examiner — SANS SIFT 2026 workstation"]
-        cli["silentwitness CLI (Typer)<br/>register-evidence -> prepare -> index -><br/>investigate -> review -> export"]
-    end
-
-    subgraph evidence["/evidence  (read-only, noexec, nosuid)  — TRUST BOUNDARY  (architectural)"]
-        e01[("ROCBA E01 disk image<br/>+ memory capture")]
-    end
-
-    subgraph ingest["Offline ingest spine (one-time, parallel)  (architectural)"]
-        prepare["prepare: dfVFS extract_artifacts<br/>$MFT $UsnJrnl, EVTX, registry hives,<br/>SRUM, Amcache, Prefetch, LNK,<br/>jumplists, PowerShell transcripts"]
-        feeders["targeted parsers (feeders_*)<br/>evtx / mft / registry / srum / usnjrnl /<br/>lnk / jumplist / prefetch / pstranscript"]
-        sigma["Sigma detection engine<br/>pysigma + community SigmaHQ pack<br/>(staged as sigma:&lt;level&gt; rows)"]
-        idx[("per-case FTS5 evidence index.db<br/>every row carries audit_id + sha256")]
-    end
-
-    subgraph mcp["silentwitness-mcp — Custom MCP Server (THE PRODUCT)  (architectural)"]
-        query["index query tools (the agent's ONLY discovery surface)<br/>search_evidence / timeline / get_record / list_detections"]
-        sanit["adversarial sanitizer<br/>(strip prompt-injection from evidence text)"]
-        cit["citation gate  (architectural)<br/>verbatim span MUST be a substring of the cited record"]
-        ent["entity gate (spaCy NER)<br/>every IOC/PERSON/ORG must appear in cited evidence"]
-        audit["audit logger — hash-chained JSONL<br/>(finding -> audit_id -> tool execution)"]
-        hmac["HMAC-signed approval ledger"]
-    end
-
-    subgraph agent["silentwitness-agent — Pydantic AI reference agent  (architectural)"]
-        inv["investigator — hypothesis loop<br/>(form / pivot / confirm / abandon)"]
-        cov["coverage gate — output_validator  (architectural)<br/>REFUSES to finalize until all 5 Key Questions<br/>have a supporting cited observation"]
-        critic["live critic (separate agent, fresh context)<br/>+ contradiction detectors"]
-        report["report — Markdown source of truth"]
-    end
-
-    subgraph cccfg["claude-code drop-in config  (prompt-based, supplementary)"]
-        ccmd["CLAUDE.md + settings.json (MCP registration, allow/deny)"]
-    end
-
-    llm{{"LLM provider — model-agnostic  (prompt-based, supplementary)<br/>anthropic | openai | google | ollama"}}
-
-    cli --> prepare
-    e01 -. read-only .-> prepare
-    prepare --> feeders --> idx
-    feeders --> sigma --> idx
-    cli --> inv
-    inv -- MCP stdio --> query
-    query --> idx
-    query --> sanit --> cit
-    cit --> ent
-    inv --> cov
-    cov -. "ModelRetry: question N uncovered" .-> inv
-    inv -. periodic .-> critic
-    critic -. "CHALLENGE -> revise/pivot" .-> inv
-    inv --> report
-    inv <-- model API --> llm
-    critic <-- model API --> llm
-    ccmd -.-> inv
-    query --> audit
-    cit --> audit
-    ent --> audit
-    report -. "examiner approves via CLI" .-> hmac
-
-    classDef boundary stroke-dasharray:6 4,stroke-width:2px;
-    class evidence boundary;
-```
+![SilentWitness system architecture](diagrams/architecture.svg)
 
 ### Trust boundaries (annotated)
 
@@ -217,7 +152,7 @@ silentwitness/
 │   ├── DATASETS.md
 │   ├── THREE_CLAIM_TRACE.md
 │   ├── EXAMPLE_EXECUTION_LOGS/            # synthetic demo case
-│   └── diagrams/                          # mermaid sources + PNG exports
+│   └── diagrams/                          # tracked SVG diagrams for README + judge docs
 ├── apps/site/                             # Fumadocs documentation site
 ├── .github/workflows/                     # CI pipeline
 ├── .pre-commit-config.yaml
@@ -241,43 +176,40 @@ This is the artifact judges score on Constraint Implementation and Audit Trail Q
 
 ### 4.1 What the MCP server is
 
-A FastMCP-based Python server exposing ~22 typed forensic tools to any MCP client (Claude Code, Claude Desktop, the bundled Pydantic AI reference agent, Cherry Studio, LibreChat, Continue, or a custom integration). The server enforces the architectural guarantees that make hallucinated claims impossible to land in the report. The protocol layer is plain MCP per the 2025-11-25 revision (MCP protocol spec §A4–A8). Transports are stdio (default for Claude Code) and Streamable HTTP on `localhost:4508` (matching Valhuntir's gateway port for ecosystem consistency; not a security-relevant choice).
+A FastMCP-based Python server exposing the case-bound investigation surface to any MCP client
+(Claude Code, Claude Desktop, the bundled Pydantic AI reference agent, Cherry Studio, LibreChat,
+Continue, or a custom integration). The server enforces the architectural guarantees that make
+hallucinated claims impossible to land in the report. The protocol layer is plain MCP per the
+2025-11-25 revision. Transports are stdio (default for Claude Code) and Streamable HTTP on
+`localhost:4508`.
 
-### 4.2 Tool catalog
+The important design change from the early raw-tool plan: memory, disk, log, and network parsers
+run behind the offline ingest spine. The agent does not receive `vol_*`, `zeek`, `suricata`, or
+EZ Tools wrappers as free-reading tools. It searches parsed, citable records instead.
 
-The full catalog is 22 production tools across six families plus three meta-tools, plus two evidence-registry tools — 27 entries total. Each tool has typed Pydantic input + output and wraps exactly one CLI invocation pattern. No generic `execute_shell()` is exposed. Estimated LOC per tool is the per-wrapper budget under the 400-LOC ceiling for `tools/<family>.py`.
+### 4.2 Live agent-visible tool surface
 
-| Name (snake_case) | Family | Input model | Output model | Wraps | File | Est. LOC |
-|---|---|---|---|---|---|---|
-| `vol_pslist` | memory | `VolPlistInput(evidence_path: Path, kdbg: str \| None)` | `ProcessListOutput` | `vol -f <img> windows.pslist.PsList` | `tools/memory.py` | 35 |
-| `vol_pstree` | memory | `VolPstreeInput(evidence_path)` | `ProcessTreeOutput` | `vol -f <img> windows.pstree.PsTree` | `tools/memory.py` | 35 |
-| `vol_psscan` | memory | `VolPsscanInput(evidence_path)` | `ProcessScanOutput` | `vol -f <img> windows.psscan.PsScan` | `tools/memory.py` | 35 |
-| `vol_malfind` | memory | `VolMalfindInput(evidence_path, pid: int \| None)` | `MalfindOutput` | `vol -f <img> windows.malware.malfind.Malfind` (NOT `windows.malfind.Malfind` — that path is a deprecation stub with `removal_date="2026-06-07"`; the real plugin lives under `windows.malware.*`) | `tools/memory.py` | 40 |
-| `vol_netscan` | memory | `VolNetscanInput(evidence_path)` | `NetscanOutput` | `vol -f <img> windows.netscan.NetScan` | `tools/memory.py` | 35 |
-| `vol_cmdline` | memory | `VolCmdlineInput(evidence_path, pid: int \| None)` | `CmdlineOutput` | `vol -f <img> windows.cmdline.CmdLine` | `tools/memory.py` | 35 |
-| `vol_dlllist` | memory | `VolDlllistInput(evidence_path, pid: int \| None)` | `DllListOutput` | `vol -f <img> windows.dlllist.DllList` | `tools/memory.py` | 35 |
-| `vol_handles` | memory | `VolHandlesInput(evidence_path, pid: int \| None)` | `HandlesOutput` | `vol -f <img> windows.handles.Handles` | `tools/memory.py` | 35 |
-| `vol_lsadump` | memory | `VolLsadumpInput(evidence_path)` | `LsaDumpOutput` (entry fields snake_case: `key: str`, `hex_value: str`, `secret: str \| None` — wire aliases `Key`/`Hex`/`Secret`) | `vol -f <img> windows.registry.lsadump.Lsadump` (NOT `windows.lsadump.Lsadump` — deprecation stub `removal_date="2026-09-25"`) | `tools/memory_extras.py` | 35 |
-| `parse_mft` | disk | `MftInput(evidence_path, csv_out: Path)` | `MftOutput` | `MFTECmd --csv <out> -f <mft>` | `tools/disk.py` | 40 |
-| `parse_amcache` | disk | `AmcacheInput(evidence_path, csv_out)` | `AmcacheOutput` | `AmcacheParser --csv <out> -f <hive>` | `tools/disk.py` | 40 |
-| `parse_shimcache` | disk | `ShimcacheInput(evidence_path, csv_out)` | `ShimcacheOutput` | `AppCompatCacheParser --csv <out> -f <hive>` | `tools/disk.py` | 40 |
-| `parse_prefetch` | disk | `PrefetchInput(directory, csv_out)` | `PrefetchOutput` | `PECmd --csv <out> -d <dir>` (installed by `install.sh` per SIFT 2026 tool-catalog research) | `tools/disk.py` | 40 |
-| `parse_shellbags` | disk | `ShellbagsInput(hive_path, csv_out)` | `ShellbagsOutput` | `SBECmd --csv <out> -f <hive>` | `tools/disk.py` | 40 |
-| `parse_evtx` | log | `EvtxInput(evtx_path, channel: str \| None, csv_out)` | `EvtxOutput` | `EvtxECmd --csv <out> -f <evtx>` | `tools/log.py` | 45 |
-| `hayabusa_csv_timeline` | log | `HayabusaInput(evtx_dir, csv_out)` | `HayabusaOutput` | `/opt/hayabusa/hayabusa csv-timeline -d <dir> -o <out>` | `tools/log.py` | 45 |
-| `chainsaw_hunt` | log | `ChainsawInput(evtx_dir, csv_out, rule_dir)` | `ChainsawOutput` | `/opt/chainsaw/chainsaw hunt <dir> -r <rules> --csv <out>` | `tools/log.py` | 45 |
-| `zeek_run` | network | `ZeekInput(pcap_path, out_dir)` | `ZeekOutput` | `zeek -r <pcap> -C` (Zeek log dir parsed into structured rows) | `tools/network.py` | 50 |
-| `suricata_run` | network | `SuricataInput(pcap_path, eve_out, rules)` | `SuricataOutput` | `suricata -r <pcap> -l <out> -S <rules>` | `tools/network.py` | 50 |
-| `regripper_run` | registry | `RegripperInput(hive_path, plugin: str)` | `RegripperOutput` | `rip.pl -r <hive> -p <plugin>` | `tools/registry.py` | 45 |
-| `record_observation` | findings | `ObservationInput(text: str, cited_spans: list[CitedSpan], audit_ids: list[str])` | `ObservationResult` | (internal: gates + JSONL) | `findings/observation.py` | 100 |
-| `record_interpretation` | findings | `InterpretationInput(observation_id: str, text: str, confidence: Confidence)` | `InterpretationResult` | (internal) | `findings/interpretation.py` | 80 |
-| `record_pivot` | findings | `PivotInput(from_hypothesis_id: str, to_statement: str, reason: str)` | `PivotResult` | (internal: emit to hypothesis.jsonl) | `findings/observation.py` | 30 |
-| `record_narrative` | findings | `NarrativeInput(section: ReportSection, text: str)` | `NarrativeResult` | (internal: append to report.md) | `findings/narrative.py` | 80 |
-| `approve_finding` | findings | `ApproveInput(finding_id: str)` | `ApproveResult` | (internal: HMAC ledger write — examiner-only path, requires password) | `audit/ledger.py` | (see §5.7) |
-| `register_evidence` | evidence | `RegisterEvidenceInput(path: Path, type: EvidenceType)` | `RegisterEvidenceResult` | (internal: SHA256 + manifest write) | `evidence/registry.py` | 60 |
-| `verify_evidence_hash` | evidence | `VerifyEvidenceInput(path: Path)` | `VerifyResult` | (internal: re-hash + compare) | `evidence/registry.py` | 30 |
+The live FastMCP surface is 12 tools: 11 wired implementations plus one examiner approval stub.
+No generic `execute_shell()` is exposed.
 
-Aggregate LOC budget per module (with imports + helpers): `tools/memory.py` ~320 LOC, `tools/disk.py` ~250, `tools/log.py` ~240, `tools/network.py` ~180, `tools/registry.py` ~140, `findings/observation.py` ~280, `findings/interpretation.py` ~200, `findings/narrative.py` ~200, `evidence/registry.py` ~150. All comfortably under 400.
+| Name | Family | Purpose | Implementation |
+|---|---|---|---|
+| `register_evidence` | evidence | Hash and register an evidence file. | `src/silentwitness_mcp/_tool_impls.py` |
+| `verify_evidence_hash` | evidence | Re-hash registered evidence and compare to the manifest. | `src/silentwitness_mcp/_tool_impls.py` |
+| `search_evidence` | index | Full-text search over parsed evidence records. | `src/silentwitness_mcp/_tool_impls_index.py` |
+| `get_record` | index | Re-fetch one evidence-index record by `record_id`. | `src/silentwitness_mcp/_tool_impls_index.py` |
+| `timeline` | index | Return index records newest-first, optionally filtered. | `src/silentwitness_mcp/_tool_impls_index.py` |
+| `list_detections` | index | Summarize staged Sigma detections and return citable samples. | `src/silentwitness_mcp/_tool_impls_index.py` |
+| `read_tool_output` | audit | Read bounded context from stored tool-output blobs under the case directory. | `src/silentwitness_mcp/_tool_impls.py` |
+| `record_observation` | findings | Record a citation-gated and entity-gated observation. | `src/silentwitness_mcp/_tool_impls_findings.py` |
+| `record_interpretation` | findings | Link analyst interpretation to a recorded observation. | `src/silentwitness_mcp/_tool_impls_findings.py` |
+| `record_pivot` | findings | Record a hypothesis pivot with abandoning evidence. | `src/silentwitness_mcp/_tool_impls_findings.py` |
+| `record_narrative` | findings | Append a structured report section. | `src/silentwitness_mcp/_tool_impls_findings.py` |
+| `approve_finding` | findings | Examiner-only HMAC approval path; currently registered as a stub. | `src/silentwitness_mcp/_tool_stubs.py` |
+
+The demoted forensic parsers still matter. They populate the per-case FTS5 index during
+`prepare` / `index` using dfVFS extraction, targeted feeders, and Sigma staging. That split is the
+first firewall layer: the model can request citable records, not raw evidence scans.
 
 ### 4.3 Response envelope — Pydantic model
 
@@ -472,7 +404,7 @@ Pydantic AI `Agent` instance configured at runtime from environment.
   - `google-gla:gemini-2.5-pro`
   - `ollama:llama-3.3-70b` (local, zero-cost option)
   - `vllm:<base_url>` via `OpenAIModel(base_url=...)` (custom self-hosted)
-  Per Pydantic AI model-string convention (Pydantic AI library research §2). Provider extras installed via `pydantic-ai[anthropic,openai,google-gla,ollama]`.
+  Per Pydantic AI model-string convention (Pydantic AI library research §2). The repo installs the full `pydantic-ai` package; `pydantic-ai-slim[...]` is the extras-driven alternative when you want a narrower install.
 - **Toolset.** `MCPServerStdio("python", ["-m", "silentwitness_mcp"], sampling_model=model)` bound at agent construction via `Agent(toolsets=[mcp_server])`. Note: pass `sampling_model=` at the `MCPServerStdio(...)` constructor — there is NO `agent.set_mcp_sampling_model(model)` method. Note: `mcp_servers=` kwarg is DEPRECATED on `Agent`; use `toolsets=[...]`. For Streamable HTTP, use `MCPServerStreamableHTTP` (NOT `MCPServerHTTP` — that class does not exist).
 - **Hooks** (registered via `Agent(capabilities=[hooks])` — **not** `Agent(hooks=[...])`; `hooks` is not a real kwarg per Pydantic AI v1.105 source):
   - `@hooks.on.before_tool_execute` — emit a pre-tool JSONL entry; capture the model's tool selection rationale (if streamed).
@@ -538,17 +470,7 @@ class Hypothesis:
 
 **Transitions:**
 
-```mermaid
-stateDiagram-v2
-    [*] --> ACTIVE: form()
-    ACTIVE --> ACTIVE: dispatch() (specialist runs)
-    ACTIVE --> CONFIRMED: confirm(evidence)
-    ACTIVE --> PIVOTED: pivot(new_statement, reason)
-    ACTIVE --> ABANDONED: abandon(reason) [or budget exceeded]
-    PIVOTED --> [*]: child hypothesis formed
-    CONFIRMED --> [*]: report updated, next hypothesis formed
-    ABANDONED --> [*]: noted in Gaps section
-```
+![Hypothesis state transitions](diagrams/hypothesis-state.svg)
 
 **Budgets:**
 - Default per-hypothesis token budget: 5,000 tokens (configurable via `SILENTWITNESS_HYPOTHESIS_TOKEN_BUDGET`).
@@ -766,144 +688,25 @@ The Compose file mounts `/evidence:ro,noexec,nosuid` (the mount validator catche
 
 ---
 
-## 8. Sequence diagrams
+## 8. Interaction diagrams
 
-Four sequence diagrams matching the four critical interactions.
+Four public-facing interaction diagrams matching the four critical flows judges need to understand fast.
 
 ### 8.1 Investigator → hypothesis form → specialist dispatch → tool call → citation gate → observation staged → report updated
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant E as Examiner (CLI)
-    participant I as Investigator (Pydantic AI Agent)
-    participant H as HypothesisStack
-    participant S as Memory Specialist
-    participant M as MCP Server
-    participant T as Vol3 (/opt/volatility3/bin/vol)
-    participant A as audit/*.jsonl
-    participant R as report.md
-
-    E->>I: silentwitness investigate case-001
-    I->>H: form("if compromised, expect anomalous parent in pstree", MEMORY)
-    H-->>I: H-001 ACTIVE
-    H->>A: HypothesisEvent(form, H-001)
-    I->>S: delegate(hypothesis=H-001)
-    S->>M: vol_pstree(evidence_path=/evidence/mem.raw)
-    M->>M: assert_registered(evidence_path) ✓
-    M->>M: mount_check(/evidence) ro,noexec,nosuid ✓
-    M->>T: vol -f /evidence/mem.raw windows.pstree
-    T-->>M: stdout (raw, 12K lines)
-    M->>M: sanitize → normalize → SHA256
-    M->>A: audit entry sift-aj-20260613-007
-    M-->>S: ToolResponse(success=True, audit_id, data_provenance)
-    S->>M: record_observation(text="svchost.exe at PID 1208 has parent cmd.exe at PID 4172", cited_spans=[...], audit_ids=["sift-aj-20260613-007"])
-    M->>M: citation_gate: load stored output, verify SHA256 ✓, verify span_text in lines[42:48] ✓
-    M->>M: entity_gate: extract entities (svchost.exe, cmd.exe, 1208, 4172) → all present in cited span ✓
-    M->>A: audit entry sift-aj-20260613-008
-    M-->>S: ObservationResult(observation_id="O-014")
-    S-->>I: SpecialistFinding(observation_id="O-014", interpretation="anomalous parent chain")
-    I->>M: record_interpretation(observation_id="O-014", text="...", confidence=HIGH)
-    M->>A: audit entry sift-aj-20260613-009
-    I->>R: render_finding(F-001, [verify:F-001/sift-aj-20260613-007])
-    R-->>R: atomic rename report.md.tmp → report.md
-    I->>H: confirm(H-001, evidence_observed=["sift-aj-20260613-007"])
-    H->>A: HypothesisEvent(confirm, H-001)
-    I->>H: form("if persistence, expect Run key entry", DISK)
-    H-->>I: H-002 ACTIVE
-    I->>S: (next iteration: dispatch disk specialist)
-```
+![Investigator to cited finding flow](diagrams/investigation-flow.svg)
 
 ### 8.2 Examiner approves a finding — HMAC ledger interaction
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant E as Examiner
-    participant CLI as silentwitness approve
-    participant L as audit/ledger.py
-    participant LF as /var/lib/silentwitness/verification/<case>.jsonl
-    participant F as findings.json
-    participant R as report.md
-
-    E->>CLI: silentwitness approve case-001 --finding F-001
-    CLI->>F: load F-001 substantive text
-    F-->>CLI: observation_text, interpretation_text, audit_ids
-    CLI->>E: prompt for examiner password (echo off)
-    E-->>CLI: <password>
-    CLI->>L: derive_hmac_key(password, salt_from_CASE.yaml)
-    L-->>CLI: derived_key (held in process memory)
-    CLI->>L: compute_hmac(derived_key, observation_text + "\x00" + interpretation_text)
-    L-->>CLI: hmac_hex
-    CLI->>LF: append {ts, item_id: F-001, content_hash, hmac, examiner}
-    LF-->>CLI: fsync OK
-    CLI->>F: mark F-001 status=APPROVED
-    CLI->>R: re-render report.md (APPROVED filter changes section)
-    CLI->>L: zero derived_key
-    CLI-->>E: "F-001 approved. Ledger entry sealed."
-```
+![Approval ledger flow](diagrams/approval-flow.svg)
 
 ### 8.3 Critic fires → re-reads findings → CHALLENGE on interpretation
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant I as Investigator
-    participant T as critic timer / count trigger
-    participant C as Critic (fresh-context Agent)
-    participant M as MCP Server (read-only paths)
-    participant F as findings.json
-    participant B as audit/blobs/
-    participant CL as audit/critic.jsonl
-
-    T->>C: trigger (5 findings staged OR 10 min elapsed)
-    C->>F: read staged findings (no investigator reasoning context)
-    F-->>C: F-001..F-005
-    loop per finding
-        C->>M: load audit entries for cited audit_ids
-        C->>B: load stored output blobs
-    end
-    C->>C: model call: evaluate each finding against its evidence ONLY
-    C-->>C: verdicts: [F-001 AGREE, F-002 CHALLENGE, F-003 AGREE, F-004 REJECT, F-005 AGREE]
-    C->>CL: append per-finding verdicts with reasons
-    C->>I: return CHALLENGE on F-002 (reason: "interpretation 'actively exfiltrating' requires intercepted-traffic evidence; only tool installation shown")
-    I->>I: re-plan: dispatch network specialist to corroborate
-    I->>M: record_interpretation(observation_id=O-014, text="<revised, downgraded confidence>", confidence=MEDIUM)
-    M->>F: stage revised interpretation
-    C->>F: archive F-004 (REJECTED) to findings.archived.json
-```
+![Critic challenge flow](diagrams/critic-flow.svg)
 
 ### 8.4 Citation gate rejects a hallucinated observation
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant I as Investigator
-    participant M as MCP Server
-    participant CG as citation_gate
-    participant EG as entity_gate
-    participant A as audit/*.jsonl
-    participant SO as audit/blobs/
-
-    I->>M: record_observation(<br/>text="Ethereal.exe was installed at C:\Tools\Ethereal\",<br/>cited_spans=[{audit_id: sift-aj-20260613-021, line_start: 88, line_end: 92, span_text: "Ethereal.exe at C:\Program Files\Ethereal\"}],<br/>audit_ids=["sift-aj-20260613-021"])
-    M->>A: lookup audit entry sift-aj-20260613-021
-    A-->>M: stdout_path=/cases/.../blobs/sift-aj-20260613-021.txt, result_sha256=<X>
-    M->>SO: load blob
-    SO-->>M: normalized output bytes
-    M->>CG: verify sha256(blob) == cited sha256 ✓
-    M->>CG: verify span_text in lines[88:92] ✓ (the cited span IS in the stored output)
-    M->>EG: extract entities from observation text → ["Ethereal.exe", "C:\Tools\Ethereal\"]
-    EG->>EG: substring check in cited spans: "Ethereal.exe" ✓ (in "Ethereal.exe at C:\Program Files\Ethereal\")
-    EG->>EG: substring check: "C:\Tools\Ethereal\" ✗ NOT IN any cited span
-    M->>A: audit entry: record_observation REJECTED
-    M-->>I: ObservationResult(success=False, reason="HALLUCINATED_ENTITIES", hallucinated=["C:\Tools\Ethereal\"], suggested="The cited span contains C:\Program Files\Ethereal\ — use that path verbatim")
-    I->>I: re-read stored output via verify_claim
-    I->>M: record_observation(<br/>text="Ethereal.exe was installed at C:\Program Files\Ethereal\",<br/>cited_spans=[<same>],<br/>audit_ids=["sift-aj-20260613-021"])
-    M->>CG: ✓
-    M->>EG: ✓
-    M->>A: audit entry: record_observation ACCEPTED
-    M-->>I: ObservationResult(success=True, observation_id="O-027")
-```
+![Citation gate rejection flow](diagrams/citation-rejection.svg)
 
 This is the killer demo moment — the 3:30–4:00 citation-gate beat.
 
@@ -1012,7 +815,7 @@ Every dep is added explicitly. Reuse existing libraries; do not reinvent.
 
 ```bash
 # Core runtime + framework (audit-corrected pins — closes CVE-2025-66416 + CVE-2025-53366)
-uv add 'mcp>=1.23.0,<2.0' 'pydantic>=2.9' 'pydantic-ai[anthropic,openai,google,ollama,mcp,fastmcp]>=1.105.0,<2.0.0'
+uv add 'mcp>=1.23.0,<2.0' 'pydantic>=2.9' 'pydantic-ai>=1.105.0,<2.0.0'
 
 # CLI + terminal UI (structlog DROPPED per audit Decision A — use Pydantic model_dump_json() directly)
 uv add 'typer>=0.15' 'rich>=14.1,<16'
@@ -1098,7 +901,7 @@ Implementing agents must not weaken any of these gates without an ADR.
 ## 15. Submission checklist gates
 
 - **No mocks in production code.** All MCP tool wrappers must invoke real CLIs. Mocks live in `tests/` only.
-- **README shape:** project name + pitch + demo video + 3-command run + Mermaid architecture diagram + MIT badge — in that order, above the fold.
+- **README shape:** project name + pitch + demo video + 3-command run + architecture SVG + MIT badge — in that order, above the fold.
 - **CLI structure:** all commands listed in §5.6 must be implemented by submission.
 - **CI green on main.** Final main commit prior to submission must have all CI jobs green including the property-test slow profile.
 - **8 mandatory deliverables** produced and linked from README: repo, video, architecture diagram, write-up, dataset doc, accuracy report, setup instructions, agent execution logs (sample case shipped at `docs/EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/`).
@@ -1122,7 +925,7 @@ Decisions surfaced but not made here. To be resolved in implementation phase or 
 ## 18. Spec metadata
 
 - **Project name:** SilentWitness (verbatim, never paraphrased).
-- **Contributes to judging criteria:** all six. Primary: Constraint Implementation, Audit Trail Quality, Usability. Secondary: Autonomous Execution Quality (the hypothesis-pivot loop IS this), IR Accuracy (architectural gates make hallucinated claims impossible), Breadth and Depth (~27 typed tools across 5 forensic families).
+- **Contributes to judging criteria:** all six. Primary: Constraint Implementation, Audit Trail Quality, Usability. Secondary: Autonomous Execution Quality (the hypothesis-pivot loop IS this), IR Accuracy (architectural gates reject unsupported claims), Breadth and Depth (offline ingest across memory, disk, log, network, and registry evidence; 12 agent-visible MCP tools over the parsed index and findings workflow).
 - **Vocabulary discipline:** never "court-admissible" (use "defensible audit trail"). Never "Ralph Wiggum Loop" (describe the behavior — hypothesis-form / dispatch / observe / confirm-or-pivot). Never "autonomous SOC" / "replaces L1" / "eliminates hallucinations."
 
 ---

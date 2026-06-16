@@ -57,6 +57,8 @@ export SILENTWITNESS_MODEL=openai:gpt-5.2   # or anthropic:claude-opus-4-7
 ```bash
 silentwitness init mr-evil-001 --examiner "$USER"
 silentwitness register-evidence mr-evil-001 /evidence/hacking-case
+silentwitness prepare mr-evil-001
+silentwitness index mr-evil-001
 silentwitness investigate mr-evil-001
 silentwitness review mr-evil-001                  # materialise findings
 silentwitness verify --audit-chain mr-evil-001    # tamper check

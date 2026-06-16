@@ -4,8 +4,11 @@
   "private": true,
   "scripts": {
     "sync-docs": "node scripts/sync-docs.mjs",
-    "predev": "pnpm run sync-docs",
-    "prebuild": "pnpm run sync-docs",
+    "source": "fumadocs-mdx",
+    "prepare-docs": "pnpm run sync-docs && pnpm run source",
+    "predev": "pnpm run prepare-docs",
+    "prebuild": "pnpm run prepare-docs",
+    "pretypecheck": "pnpm run prepare-docs",
     "dev": "next dev",
     "build": "next build && pnpm run build:pagefind",
     "build:pagefind": "pagefind --site .next/server/app --output-path public/pagefind --glob \"docs/**/*.html\"",

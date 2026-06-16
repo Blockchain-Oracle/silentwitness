@@ -1,6 +1,6 @@
 # Try SilentWitness
 
-Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native (3 commands)** for judges with a SANS Protocol SIFT 2026 VM, and **(b) Docker Compose (2 commands)** for developers on macOS/Linux/Windows-WSL2. The README's `## Quick start` callout (`README.md` §3) summarizes both; this document is the long-form walkthrough with troubleshooting + a step-by-step Nitroba smoke test.
+Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native** for judges with a SANS Protocol SIFT 2026 VM, and **(b) Docker Compose** for developers on macOS/Linux/Windows-WSL2. The README's `## Quick start` callout summarizes both; this document is the long-form walkthrough with troubleshooting + a step-by-step Nitroba smoke test.
 
 > **Time budgets below are estimated (not yet measured end-to-end on this branch).** The demo-session run during `story-devpost-submission` produces the first measured numbers; until then, treat the ~15 min SIFT / ~10 min Docker targets as the design budget, not a stopwatch promise.
 
@@ -12,7 +12,7 @@ Two paths from clean machine to a finished investigation: **(a) SIFT 2026 native
 | Docker Compose | Docker 24+, Docker Compose v2, 16 GB RAM, 80 GB disk, internet access, `ANTHROPIC_API_KEY` (or `OPENAI_API_KEY` / `OPENROUTER_API_KEY` for model-agnostic switching) |
 | Either path | A verified evidence binary — Nitroba pcap is the recommended smoke test; download per [`DATASETS.md`](./DATASETS.md) and verify SHA256 against `harness/datasets/nitroba.manifest.json` |
 
-## Path A — SIFT 2026 native (3 commands)
+## Path A — SIFT 2026 native
 
 ```bash
 # 1) Install (one-liner — bootstraps uv, registers .claude/ Code drop-in, installs the MCP server)
@@ -22,7 +22,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchai
 silentwitness init nitroba-smoke-001 --examiner $USER
 silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap
 
-# 3) Investigate
+# 3) Prepare + index the registered evidence
+silentwitness prepare nitroba-smoke-001
+silentwitness index nitroba-smoke-001
+
+# 4) Investigate
 silentwitness investigate nitroba-smoke-001
 ```
 
@@ -56,16 +60,19 @@ cat cases/nitroba-smoke-001/audit/hypothesis.jsonl | jq '.transition'
 # Expect: form → dispatch → confirm → pivot → confirm
 ```
 
-## Path B — Docker Compose (2 commands)
+## Path B — Docker Compose
 
 ```bash
 # 1) Build + boot the stack (local image silentwitness:local; mounts /evidence + ./cases)
 docker compose up -d --build
 
-# 2) Run an investigation — same init + register-evidence + investigate sequence as Path A,
+# 2) Run an investigation — same init + register-evidence + prepare + index + investigate
+#    sequence as Path A,
 #    executed inside the container so the host needs no SIFT install.
 docker compose exec silentwitness silentwitness init nitroba-smoke-001 --examiner $USER
 docker compose exec silentwitness silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap
+docker compose exec silentwitness silentwitness prepare nitroba-smoke-001
+docker compose exec silentwitness silentwitness index nitroba-smoke-001
 docker compose exec silentwitness silentwitness investigate nitroba-smoke-001
 ```
 

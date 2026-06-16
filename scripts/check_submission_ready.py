@@ -103,16 +103,16 @@ def _check_deliverables(root: Path) -> list[Check]:
             chk.fail("no YouTube URL in first 100 lines")
     checks.append(chk)
 
-    # Deliverable 3: Architecture diagram + Mermaid block in README
-    chk = Check("Deliverable 3: Architecture diagram + README Mermaid")
+    # Deliverable 3: Architecture diagram asset + README reference
+    chk = Check("Deliverable 3: Architecture diagram asset + README reference")
     arch_md = root / "docs" / "architecture.md"
-    arch_png = root / "docs" / "diagrams" / "architecture.png"
+    arch_svg = root / "docs" / "diagrams" / "architecture.svg"
     if not arch_md.exists():
         chk.fail("docs/architecture.md missing")
-    elif not arch_png.exists():
-        chk.fail("docs/diagrams/architecture.png missing")
-    elif "```mermaid" not in readme.read_text(encoding="utf-8"):
-        chk.fail("README has no ```mermaid block")
+    elif not arch_svg.exists():
+        chk.fail("docs/diagrams/architecture.svg missing")
+    elif "docs/diagrams/architecture.svg" not in readme.read_text(encoding="utf-8"):
+        chk.fail("README does not reference docs/diagrams/architecture.svg")
     checks.append(chk)
 
     # Deliverable 4: Devpost write-up

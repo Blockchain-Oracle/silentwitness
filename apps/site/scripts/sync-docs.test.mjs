@@ -16,7 +16,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { applyMdxSafety, extractFrontmatter, _escapeYamlString } from "./sync-docs.mjs";
+import {
+  applyMdxSafety,
+  extractFrontmatter,
+  rewriteSiteLinks,
+  _escapeYamlString,
+} from "./sync-docs.mjs";
 
 // ---------------------------------------------------------------------------
 // applyMdxSafety — fence tracking
@@ -91,6 +96,38 @@ test("tilde-fence is also tracked", () => {
   assert.ok(output.includes("curl <https://x>"));
   // After fence: stripped.
   assert.ok(output.includes("then https://y"));
+});
+
+// ---------------------------------------------------------------------------
+// rewriteSiteLinks — site routes vs repo-only artifacts
+// ---------------------------------------------------------------------------
+
+test("rewriteSiteLinks maps canonical docs to site routes", () => {
+  const input = "See [Accuracy](ACCURACY_REPORT.md) and [Datasets](./DATASETS.md#nitroba).";
+  const output = rewriteSiteLinks(input);
+  assert.equal(output, "See [Accuracy](/docs/accuracy-report) and [Datasets](/docs/datasets#nitroba).");
+});
+
+test("rewriteSiteLinks maps repo-only logs to GitHub", () => {
+  const input = "Open [critic](execution_logs/gpt55_100pct_run/critic.jsonl).";
+  const output = rewriteSiteLinks(input);
+  assert.equal(
+    output,
+    "Open [critic](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/execution_logs/gpt55_100pct_run/critic.jsonl).",
+  );
+});
+
+test("rewriteSiteLinks maps diagram assets to the local site public path", () => {
+  const input = "See ![Architecture](diagrams/architecture.svg).";
+  const output = rewriteSiteLinks(input);
+  assert.equal(output, "See ![Architecture](/diagrams/architecture.svg).");
+});
+
+test("rewriteSiteLinks leaves fenced links untouched", () => {
+  const input = "```md\n[Accuracy](ACCURACY_REPORT.md)\n```\n[Accuracy](ACCURACY_REPORT.md)";
+  const output = rewriteSiteLinks(input);
+  assert.ok(output.includes("```md\n[Accuracy](ACCURACY_REPORT.md)\n```"));
+  assert.ok(output.includes("[Accuracy](/docs/accuracy-report)"));
 });
 
 // ---------------------------------------------------------------------------

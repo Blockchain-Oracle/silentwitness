@@ -3,33 +3,7 @@ title: "Architecture"
 description: "Eight boundaries, six of them architectural. The guardrails that make hallucinations against unmounted artifacts impossible."
 ---
 
-```mermaid
-flowchart TB
-  subgraph CLI["silentwitness CLI"]
-    INIT["init / register-evidence / investigate"]
-  end
-  subgraph AGENT["Pydantic AI investigator"]
-    ORCH["Hypothesis-first orchestrator"]
-    CRITIC["Live critic + entity gate + citation gate"]
-  end
-  subgraph MCP["Custom FastMCP server"]
-    MEMSPEC["Memory specialist"]
-    DISK["Disk specialist"]
-    LOG["Log specialist"]
-    NETSPEC["Network specialist"]
-  end
-  subgraph EVIDENCE["Read-only evidence mount"]
-    MOUNT["/evidence ro,noexec,nosuid"]
-  end
-  subgraph AUDIT["Audit JSONL ledger"]
-    LEDGER["hash-chain + HMAC ledger"]
-  end
-  CLI --> AGENT
-  AGENT --> MCP
-  MCP --> EVIDENCE
-  AGENT --> AUDIT
-  MCP --> AUDIT
-```
+![SilentWitness architecture overview](/diagrams/architecture.svg)
 
 ## Eight boundaries — six in code, two supplementary
 
@@ -56,10 +30,10 @@ hallucinations against unmounted artifacts**. That's the whole point.
 
 ## Per-component reference
 
-- **MCP server** — [`src/silentwitness_mcp/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_mcp). 27 tools across 4 specialists.
+- **MCP server** — [`src/silentwitness_mcp/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_mcp). 12 agent-visible tools over parsed evidence records, findings, and audit output.
 - **Agent + critic** — [`src/silentwitness_agent/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_agent). Pydantic AI 1.105+, `request_limit=None`.
 - **Audit chain** — [`src/silentwitness_mcp/audit/chain.py`](https://github.com/Blockchain-Oracle/silentwitness/blob/main/src/silentwitness_mcp/audit/chain.py). Per-path lock (threading + fcntl) + cross-process cache invalidation.
 - **Verification gates** — [`src/silentwitness_mcp/verification/`](https://github.com/Blockchain-Oracle/silentwitness/tree/main/src/silentwitness_mcp/verification/). Entity gate, citation gate, sanitizer.
 
-For the full deep-dive (10 ADRs + 27-tool MCP catalog + pin justifications):
+For the full deep-dive (tool surface, offline ingest spine, ADRs, and pin justifications):
 see [`docs/architecture.md`](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/architecture.md).

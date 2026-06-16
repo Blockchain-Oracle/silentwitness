@@ -2,19 +2,22 @@
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 
-/* SilentWitness brand tokens — indigo for trust, forest-green for evidence,
- * warm-beige as the ground tone. Mirrors the designer's cdr-kit palette
- * vendored under `design/` (see plan track F4). OKLCh values give us
- * predictable contrast in both light and dark mode without per-mode tuning.
- */
 :root {
+  --color-brand-night: oklch(0.18 0.025 158);
   --color-brand-indigo: oklch(0.42 0.18 264);
   --color-brand-indigo-soft: oklch(0.72 0.12 264);
   --color-brand-forest: oklch(0.45 0.13 158);
   --color-brand-forest-soft: oklch(0.78 0.09 158);
+  --color-brand-mint: oklch(0.78 0.11 158);
+  --color-brand-mint-soft: oklch(0.93 0.04 158);
+  --color-brand-rust: oklch(0.48 0.12 34);
+  --color-brand-paper: oklch(0.99 0.004 95);
+  --color-brand-cream: oklch(0.96 0.018 95);
   --color-brand-beige: oklch(0.95 0.025 78);
   --color-brand-beige-soft: oklch(0.98 0.012 78);
   --color-brand-ink: oklch(0.18 0.025 264);
+  --color-brand-muted: oklch(0.46 0.025 264);
+  --color-brand-line: oklch(0.88 0.012 95);
 }
 
 .dark {
@@ -33,6 +36,42 @@
 }
 
 body {
-  background: var(--color-brand-beige-soft);
+  background: var(--color-brand-paper);
   color: var(--color-brand-ink);
+}
+
+.sw-button {
+  display: inline-flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  padding: 0.625rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.25rem;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.sw-button-primary {
+  background: var(--color-brand-mint);
+  color: var(--color-brand-night);
+}
+
+.sw-button-primary:hover {
+  opacity: 0.9;
+}
+
+.sw-button-secondary {
+  border: 1px solid color-mix(in oklch, var(--color-brand-paper), transparent 72%);
+  color: var(--color-brand-paper);
+}
+
+.sw-button-secondary:hover {
+  background: color-mix(in oklch, var(--color-brand-paper), transparent 90%);
 }
