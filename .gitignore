@@ -91,3 +91,4 @@ archive/
 AGENTS.md
 .private/
 *.original.md
+.vercel
