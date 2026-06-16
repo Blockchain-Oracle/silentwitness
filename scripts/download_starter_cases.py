@@ -1,19 +1,24 @@
 #!/usr/bin/env python3
-"""Download SANS Find Evil! 2026 starter datasets from the Egnyte public share.
+"""Compatibility driver for official Find Evil dataset downloads.
 
 The share at https://sansorg.egnyte.com/fl/HhH7crTYT4JK holds three cases:
 "Standard Forensic Case" (ROCBA / Mr. Evil — single host), "Standard Forensics
 Case 2", and "Compromised APT Attack Scenarios" (multi-host APT). No Egnyte
-account needed — the script speaks the share-link API directly. See
-``scripts/egnyte_share.py`` for the API client + quality-contract docstring;
-this file is just the argparse driver around it.
+account needed.
+
+Prefer the packaged CLI:
 
 Usage::
 
-    python scripts/download_starter_cases.py list
-    python scripts/download_starter_cases.py list "Standard Forensic Case"
+    silentwitness datasets catalog
+    silentwitness datasets catalog "Standard Forensic Case"
+    silentwitness datasets download "Standard Forensic Case" /tmp/rocba
+    silentwitness datasets download "Standard Forensic Case" /tmp/rocba --dry-run
+
+This script remains for older automation. Its preferred verbs mirror the CLI:
+
+    python scripts/download_starter_cases.py catalog
     python scripts/download_starter_cases.py download "Standard Forensic Case" /tmp/rocba
-    python scripts/download_starter_cases.py download "Standard Forensic Case" /tmp/rocba --dry-run
 """
 
 from __future__ import annotations
@@ -34,7 +39,7 @@ from egnyte_share import (
 )
 
 
-def cmd_list(args: argparse.Namespace) -> int:
+def cmd_catalog(args: argparse.Namespace) -> int:
     client = open_session()
     try:
         root = resolve_case_root(client, args.case)
@@ -108,14 +113,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_list = sub.add_parser("list", help="enumerate cases or files in a case")
-    p_list.add_argument(
+    p_catalog = sub.add_parser("catalog", help="enumerate cases or files in a case")
+    p_catalog.add_argument(
         "case",
         nargs="?",
         default=None,
         help="case folder name (omit to summarise all cases at the root)",
     )
-    p_list.set_defaults(func=cmd_list)
+    p_catalog.set_defaults(func=cmd_catalog)
 
     p_dl = sub.add_parser("download", help="download a case to a local directory")
     p_dl.add_argument("case", help="case folder name (e.g. 'Standard Forensic Case')")
