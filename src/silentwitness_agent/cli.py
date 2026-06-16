@@ -28,13 +28,6 @@ app.add_typer(
     name="starter-cases",
     help="Catalog and download official starter cases.",
 )
-app.add_typer(
-    starter_cases_app,
-    name="datasets",
-    help="Deprecated alias for starter-cases.",
-    hidden=True,
-    deprecated=True,
-)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

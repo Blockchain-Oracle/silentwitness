@@ -165,13 +165,11 @@ def test_starter_cases_download_streams_files_to_target(monkeypatch, tmp_path: P
     assert "Done: 1 files" in result.output
 
 
-def test_datasets_alias_is_hidden_but_still_works() -> None:
+def test_legacy_datasets_alias_is_not_registered() -> None:
     root_help = runner.invoke(app, ["--help"], catch_exceptions=False)
     assert root_help.exit_code == 0
     assert "starter-cases" in root_help.output
     assert "datasets" not in root_help.output
 
     alias_help = runner.invoke(app, ["datasets", "--help"], catch_exceptions=False)
-    assert alias_help.exit_code == 0
-    assert "Deprecated" in alias_help.output or "deprecated" in alias_help.output
-    assert "catalog" in alias_help.output
+    assert alias_help.exit_code != 0
