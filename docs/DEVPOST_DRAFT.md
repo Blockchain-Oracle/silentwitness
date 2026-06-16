@@ -99,7 +99,7 @@ SANS SIFT Workstation · OpenAI / Anthropic / Google / Ollama (model-agnostic).
 ## Links (fill in)
 
 - **Repo:** <https://github.com/Blockchain-Oracle/silentwitness>
-- **Demo video:** _<add YouTube/Vimeo link>_
+- **Demo video:** _<https://vimeo.com/1201573890>_
 - **Accuracy report:** [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) ·
   **Architecture:** [`docs/architecture.md`](architecture.md) ·
   **Three-claim trace:** [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md)

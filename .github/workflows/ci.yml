@@ -8,18 +8,16 @@
 #
 #   2. `test` job adds a "Per-module coverage floors" step calling
 #      scripts/coverage_gate.py between `pytest with coverage` and the artifact
-#      upload. §4.1's verbatim block omits this step but §8.2 mandates it
-#      ("coverage_gate.py called by CI test job"). coverage.py has no native
-#      per-directory floor support; the script is the single source of truth.
+#      upload. coverage.py has no native per-directory floor support; the
+#      script is the single source of truth for per-module floors.
 #
 #   3. The `dataset-hash-verify` step's inline comment says "Full NIST 2GB
-#      image is NOT pulled in CI" while §4.1 says 20GB. The 2GB figure is the
-#      actual size of the NIST PC E01 image per DEEP_AUDIT_REPORT F-DS-2 —
-#      §4.1's "20GB" is the spec typo this PR silently corrects.
+#      image is NOT pulled in CI." 2 GB is the actual size of the NIST PC
+#      E01 image.
 #
-#   4. The `docker-build` job's `needs:` list adds `dataset-hash-verify` to
-#      the §4.1 list. The verify job is a stub today and gating docker-build
-#      on a no-op stub costs nothing now and ensures Epic 14's real verifier
+#   4. The `docker-build` job's `needs:` list includes `dataset-hash-verify`.
+#      The verify job is a stub today and gating docker-build on a no-op
+#      stub costs nothing now and ensures the real verifier (once it
 #      automatically becomes a docker-build prerequisite when it lands.
 #
 #   5. `test` jobs install `just` via taiki-e/install-action@v2. story-justfile-

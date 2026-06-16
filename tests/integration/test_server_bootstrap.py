@@ -100,7 +100,7 @@ def test_create_server_http_with_token_succeeds(
 def test_create_server_http_rejects_non_loopback_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """0.0.0.0 / external IPs MUST raise — DNS-rebinding defense per MCP spec §A3.2."""
+    """0.0.0.0 / external IPs MUST raise — DNS-rebinding defense."""
     monkeypatch.setenv(GATEWAY_TOKEN_ENV, "test-token-9d2f1a")
     with pytest.raises(ServerConfigurationError, match="DNS-rebinding"):
         create_server(Transport.HTTP, host="0.0.0.0")  # noqa: S104

@@ -336,11 +336,13 @@ class LedgerEntry(BaseModel):
 
 
 class AuditEntry(BaseModel):
-    """One line of audit/<backend>.jsonl with Phase 6b hash-chain fields.
-    ``prev_record_hash`` is ``None`` for the first
-    row of a chain; ``record_hash`` is mandatory once chaining is enabled and
-    None on the legacy plain-JSONL fallback path. The chain is verified by
-    :func:`silentwitness_mcp.audit.chain.verify_chain_lines`."""
+    """One line of audit/<backend>.jsonl — canonical schema for the audit row.
+
+    Consumers MUST NOT extend or relax this model (``extra='forbid'``,
+    ``frozen=True``). ``prev_record_hash`` is ``None`` for the first row of
+    a chain; ``record_hash`` is mandatory once chaining is enabled and
+    ``None`` on the legacy plain-JSONL fallback path. The chain is verified
+    by :func:`silentwitness_mcp.audit.chain.verify_chain_lines`."""
 
     model_config = _BASE_CONFIG
 

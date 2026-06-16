@@ -18,16 +18,14 @@ Skips (SKIP_PATTERNS):
 Implementation notes
 ------------------------------------------------------------------------------
 1. ``count_lines`` catches ``FileNotFoundError`` (not the broader ``OSError``).
-   The verbatim version's ``except OSError`` silently swallows
-   ``PermissionError`` / ``IsADirectoryError`` / disk-read failures — a 5000-
-   LOC file chmod 000 would exit clean. The docstring's stated intent is
-   ONLY "deleted-in-this-commit (rename)," which ``FileNotFoundError``
-   covers exactly. PR-89 silent-failure review flagged this.
+   A naive ``except OSError`` would silently swallow ``PermissionError`` /
+   ``IsADirectoryError`` / disk-read failures — a 5000-LOC file chmod 000
+   would exit clean. The intent is ONLY to skip files that vanished mid-run
+   (rename), which ``FileNotFoundError`` covers exactly.
 
 2. ``main()`` warns to stderr when a passed path doesn't exist (instead of
    silently skipping). Pre-commit + ``git ls-files`` only emit existing
-   paths, so this fires only when an upstream caller has a bug. Story 2's
-   version had this warning; the §6.1 rewrite lost it.
+   paths, so this fires only when an upstream caller has a bug.
 
 Exit codes:
   0 — no offenders

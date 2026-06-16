@@ -5,7 +5,7 @@ abandoning_evidence non-empty → from_hypothesis_id exists in
 ``hypothesis.jsonl`` (``to_hypothesis_id`` shape is constructor-enforced
 by :class:`PivotInput`) → allocate ``P-NNN`` → append :class:`_PivotEvent`
 to ``audit/hypothesis.jsonl`` → audit row to ``audit/findings.jsonl``
-REGARDLESS of accept/reject (rejections are evidence — §4.4).
+REGARDLESS of accept/reject (rejections are evidence in their own right).
 
 Pivot-count secondary metric: ``grep -c '"type":"pivot"' hypothesis.jsonl``.
 

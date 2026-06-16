@@ -425,7 +425,7 @@ Per the Valhuntir pattern (HMAC ledger + bidirectional reconciliation).
 }
 ```
 
-**Verification.** `silentwitness verify <case_id>` re-derives the key from the prompted password (no persistence; aborts on wrong password), recomputes HMAC for each ledger entry's substantive text (loaded from `findings.json` / `report.md`), and compares using `hmac.compare_digest` (constant-time — Valhuntir comparative analysis §2 L2). Mismatches surface as `DESCRIPTION_MISMATCH`, missing ledger entries as `APPROVED_NO_VERIFICATION`, ledger-without-finding as `VERIFICATION_NO_FINDING`. Output matches Valhuntir's bidirectional reconciliation vocabulary (§competitive/11 §2 L6) so judges already familiar with the floor recognize the shape.
+**Verification.** `silentwitness verify <case_id>` re-derives the key from the prompted password (no persistence; aborts on wrong password), recomputes HMAC for each ledger entry's substantive text (loaded from `findings.json` / `report.md`), and compares using `hmac.compare_digest` (constant-time — Valhuntir comparative analysis §2 L2). Mismatches surface as `DESCRIPTION_MISMATCH`, missing ledger entries as `APPROVED_NO_VERIFICATION`, ledger-without-finding as `VERIFICATION_NO_FINDING`. Output matches Valhuntir's bidirectional reconciliation vocabulary (Valhuntir comparative analysis §2 L6) so judges already familiar with the floor recognize the shape.
 
 ### 4.10 Evidence registry
 
