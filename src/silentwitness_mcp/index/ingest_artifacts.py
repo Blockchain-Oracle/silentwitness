@@ -29,6 +29,8 @@ import contextlib
 import io
 import logging
 import os
+import signal
+from collections.abc import Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,6 +52,7 @@ from silentwitness_mcp.index.feeders_usnjrnl import usnjrnl_records
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
+_DEFAULT_PARSER_TIMEOUT_SEC = 300.0
 
 # Marker dir written by `prepare`; citations are stored relative to it so they're
 # stable regardless of where the case tree lives (dev box vs VPS vs OVA).
@@ -163,6 +166,43 @@ def _feeder_for(kind: Kind) -> Feeder:
     return feeders[kind]
 
 
+def _parser_timeout_seconds() -> float | None:
+    """Return the per-artifact parser timeout; <=0 disables it for deep forensics."""
+    raw = os.environ.get("SILENTWITNESS_PARSER_TIMEOUT_SEC")
+    if raw is None:
+        return _DEFAULT_PARSER_TIMEOUT_SEC
+    try:
+        value = float(raw)
+    except ValueError:
+        return _DEFAULT_PARSER_TIMEOUT_SEC
+    return value if value > 0 else None
+
+
+@contextlib.contextmanager
+def _parser_deadline(seconds: float | None) -> Iterator[None]:
+    """Raise TimeoutError if one artifact parser exceeds ``seconds``.
+
+    The timeout uses SIGALRM, so on platforms without interval timers it becomes a
+    no-op. The shipped forensic path is Linux/SIFT where SIGALRM is available.
+    """
+    if seconds is None or not hasattr(signal, "setitimer"):
+        yield
+        return
+
+    previous_handler = signal.getsignal(signal.SIGALRM)
+
+    def _raise_timeout(_signum: int, _frame: object) -> None:
+        raise TimeoutError(f"parser exceeded {seconds:g}s per-artifact timeout")
+
+    signal.signal(signal.SIGALRM, _raise_timeout)
+    signal.setitimer(signal.ITIMER_REAL, seconds)
+    try:
+        yield
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, previous_handler)
+
+
 def _parse_artifact(
     kind: Kind, path_str: str, cite: str, audit_id: str, host: str
 ) -> tuple[list[IndexRecord], dict[str, int]]:
@@ -172,7 +212,11 @@ def _parse_artifact(
     boundary and reach :class:`IngestResult.diagnostics`."""
     stats = FeederStats()
     feeder = _feeder_for(kind)
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+    with (
+        _parser_deadline(_parser_timeout_seconds()),
+        contextlib.redirect_stdout(io.StringIO()),
+        contextlib.redirect_stderr(io.StringIO()),
+    ):
         rows = list(
             feeder(Path(path_str), audit_id=audit_id, host=host, source_path=cite, stats=stats)
         )
@@ -242,7 +286,11 @@ def _ingest_one(
     shipped behaviour."""
     stats = FeederStats()
     try:
-        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        with (
+            _parser_deadline(_parser_timeout_seconds()),
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
             written = index.bulk_ingest(
                 _feeder_for(kind)(path, audit_id=audit_id, host=host, source_path=cite, stats=stats)
             )

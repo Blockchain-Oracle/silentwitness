@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -204,6 +205,32 @@ def test_feeder_stdout_stderr_noise_is_suppressed(
     assert result.counts == {"evtx": 1}
     assert "raw parser" not in captured.out
     assert "raw parser" not in captured.err
+
+
+def test_slow_feeder_times_out_and_is_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def slow_feeder(
+        path: Path,
+        *,
+        audit_id: str,
+        host: str = "",
+        source_path: str | None = None,
+        stats: Any = None,
+    ) -> Iterator[IndexRecord]:
+        time.sleep(0.2)
+        yield IndexRecord(text="late", source_tool="evtx:Security", audit_id=audit_id)
+
+    monkeypatch.setenv("SILENTWITNESS_PARSER_TIMEOUT_SEC", "0.05")
+    monkeypatch.setattr(ingest_artifacts, "evtx_file_records", slow_feeder)
+    registry = _FakeRegistry([_Rec(EvidenceType.EVTX, Path("/c/prepared/img/evtx/slow.evtx"))])
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        result = ingest_prepared_artifacts(registry, idx, audit_id="a", host="", max_workers=1)
+
+    assert result.counts == {}
+    assert len(result.failures) == 1
+    assert result.failures[0][1] == "slow.evtx"
+    assert "timeout" in result.failures[0][2]
 
 
 # ---------------------------------------------------------------------------
