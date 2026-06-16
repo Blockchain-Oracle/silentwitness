@@ -118,8 +118,13 @@ silentwitness index rocba
 
 *What it does:* runs the forensic parsers + the Sigma detection engine over the extracted
 artifacts and builds a fast searchable index. This is the heavy step (~10–15 min for a large
-image); it only happens once.
-*What you'll see:* a summary like `indexed 2,673,733 records`.
+image); it only happens once. If you registered a memory image, Volatility runs one plugin at a
+time (`pslist`, `cmdline`, `netscan`, `psscan`, then `malfind`) and prints each plugin's progress.
+Slow plugins are bounded by `SILENTWITNESS_VOL3_TIMEOUT_SEC` (default: 300 seconds) and become
+audit advisories instead of making the terminal look stuck. For a deep memory-only run, set a
+plugin override such as `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0`.
+*What you'll see:* a summary like `indexed 2,673,733 records`, plus any memory-plugin advisory
+that needs review.
 
 ### Step 5 - Investigate
 
@@ -194,6 +199,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | Investigation stops with `request_limit` | The model needs more steps | Re-run with `silentwitness investigate rocba --max-iterations 120`. |
 | `authentication` / 401 error | API key not set or out of credit | Re-check Step 4; confirm your provider account has credit. |
 | `indexed 0 records` | `prepare` extracted nothing | Confirm the image path is correct and is a Windows disk image. |
+| `vol3 malfind timed out` | The memory malware scan exceeded the bounded per-plugin timeout | The disk/log index is still usable. Re-run with `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0 silentwitness index rocba` if you want an unbounded deep memory sweep. |
 | Recall varies between runs | The AI is non-deterministic | Expected — see the [Accuracy Report](ACCURACY_REPORT.md) §3; a stronger model gives higher, steadier recall. |
 
 ---

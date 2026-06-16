@@ -75,6 +75,7 @@ docker compose exec silentwitness silentwitness investigate mr-evil-001
 | `CRITIC_MODEL` | (inherits) | Live critic model — usually a faster/cheaper sibling of the investigator. |
 | `MAX_ITERS` | unlimited | Hard cap on agent iterations. Unlimited by default (PR #236); three self-termination signals — structured output, token budget, coverage-gate retry exhaustion — still stop the run. |
 | `CASES_DIR` | `./cases` | Where investigations are written. |
+| `SILENTWITNESS_VOL3_TIMEOUT_SEC` | `300` | Per-Volatility-plugin timeout during `index` when memory evidence is registered. Set `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0` to disable the bound for a deep `malfind` run. |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
 
 ## Quick start
@@ -99,7 +100,7 @@ silentwitness export mr-evil-001 --md
 | `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
 | `register-evidence` | Records an evidence file or starter-case folder, classifies artifact types, computes hashes, and refuses unsafe writable evidence mounts. |
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
-| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. |
+| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If memory evidence is present, Volatility plugins run one by one with visible progress and bounded timeout advisories. |
 | `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |
 | `review` | Lets the examiner inspect staged findings before they become accepted report material. |
 | `verify --audit-chain` | Recomputes every audit JSONL hash chain and reports tampering or missing audit links. |

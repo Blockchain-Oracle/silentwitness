@@ -149,6 +149,7 @@ def test_driver_records_plugin_timeout_as_failure(
     assert result.counts == {}
     assert len(result.failures) == 1
     assert result.failures[0][0] == "windows.pslist.PsList"
+    assert "timed out after 300s" in result.failures[0][1]
 
 
 def test_driver_records_malformed_json_as_failure(

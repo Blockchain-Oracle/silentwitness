@@ -166,6 +166,17 @@ def test_mappers_and_plugins_stay_in_sync() -> None:
     assert set(fm.MAPPERS.keys()) == set(fm.PLUGINS)
 
 
+def test_expensive_memory_plugins_run_after_basic_inventory() -> None:
+    """Keep process/network inventory ahead of expensive malware scans."""
+    assert fm.PLUGINS == (
+        "windows.pslist.PsList",
+        "windows.cmdline.CmdLine",
+        "windows.netscan.NetScan",
+        "windows.psscan.PsScan",
+        "windows.malware.malfind.Malfind",
+    )
+
+
 def test_make_record_truncates_at_max_text() -> None:
     from silentwitness_mcp.index._feeder_util import MAX_TEXT
 

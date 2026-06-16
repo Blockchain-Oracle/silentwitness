@@ -40,14 +40,14 @@ class Mapper(Protocol):
     ) -> Iterator[IndexRecord]: ...
 
 
-# The plugins we ingest. Order is irrelevant for correctness (each is an independent
-# subprocess); kept stable for reproducible audit-summary output.
+# The plugins we ingest. Keep cheap/high-signal plugins before expensive scanners so a
+# slow malware sweep cannot delay basic process/network memory rows.
 PLUGINS: Final[tuple[str, ...]] = (
     "windows.pslist.PsList",
     "windows.cmdline.CmdLine",
     "windows.netscan.NetScan",
-    "windows.malware.malfind.Malfind",
     "windows.psscan.PsScan",
+    "windows.malware.malfind.Malfind",
 )
 
 

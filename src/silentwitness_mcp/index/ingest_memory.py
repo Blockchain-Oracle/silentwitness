@@ -25,13 +25,15 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import shutil
 import sqlite3
 import subprocess
-from collections.abc import Iterable
+import time
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Final, Protocol
+from typing import Any, Final, Literal, Protocol
 
 from silentwitness_mcp.index._feeder_util import sha256_file
 from silentwitness_mcp.index.feeders_memory import MAPPERS, PLUGINS, _short_plugin
@@ -42,6 +44,8 @@ _LOG = logging.getLogger(__name__)
 # CLAUDE.md pins this as the canonical SIFT/OVA install path; the driver accepts a
 # `vol_bin=` override so tests and non-SIFT installs can point at their own venv.
 _VOL_BIN: Final[str] = "/opt/silentwitness/vol3-venv/bin/vol"
+_DEFAULT_VOL3_TIMEOUT_SEC: Final[int] = 300
+_TIMEOUT_ENV: Final[str] = "SILENTWITNESS_VOL3_TIMEOUT_SEC"
 
 
 @dataclass
@@ -58,13 +62,29 @@ class MemoryIngestResult:
     image_sha256: str = ""
 
 
+@dataclass(frozen=True)
+class MemoryPluginEvent:
+    """Progress event for one Volatility plugin run."""
+
+    status: Literal["start", "ok", "failed"]
+    plugin: str
+    short_name: str
+    timeout_seconds: float | None
+    elapsed_seconds: float = 0.0
+    rows: int | None = None
+    message: str = ""
+
+
+MemoryProgress = Callable[[MemoryPluginEvent], None]
+
+
 # ---------------------------------------------------------------------------
 # vol3 subprocess
 # ---------------------------------------------------------------------------
 
 
 def _run_vol_json(
-    image: Path, plugin: str, *, timeout: int, vol_bin: str = _VOL_BIN
+    image: Path, plugin: str, *, timeout: float | None, vol_bin: str = _VOL_BIN
 ) -> list[dict[str, Any]]:
     """Run ``vol -r json -f <image> <plugin>`` and return its parsed JSON rows.
 
@@ -94,15 +114,48 @@ def _run_vol_json(
     return [row for row in parsed if isinstance(row, dict)]
 
 
+def _format_seconds(seconds: float | None) -> str:
+    return "disabled" if seconds is None else f"{seconds:g}s"
+
+
+def _timeout_for_plugin(plugin: str, default_timeout: int) -> float | None:
+    """Resolve timeout for a plugin.
+
+    ``SILENTWITNESS_VOL3_TIMEOUT_SEC`` overrides all plugins. A plugin-specific env var
+    such as ``SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC`` wins for that plugin. Values
+    ``<=0`` disable the timeout for deep forensic runs.
+    """
+    short = _short_plugin(plugin).upper()
+    plugin_key = f"SILENTWITNESS_VOL3_TIMEOUT_{short}_SEC"
+    raw = os.environ.get(plugin_key, os.environ.get(_TIMEOUT_ENV))
+    if raw is None:
+        return float(default_timeout)
+    try:
+        value = float(raw)
+    except ValueError:
+        return float(default_timeout)
+    return value if value > 0 else None
+
+
+def _emit(progress: MemoryProgress | None, event: MemoryPluginEvent) -> None:
+    if progress is not None:
+        progress(event)
+
+
+def _timeout_message(plugin: str, timeout: float | None) -> str:
+    return f"timed out after {_format_seconds(timeout)} while running {plugin}"
+
+
 def _record_subprocess_failure(
     result: MemoryIngestResult, plugin: str, exc: subprocess.CalledProcessError
-) -> None:
+) -> str:
     """Fold vol3's stderr tail into the failure message — ``str(exc)`` alone only
     shows the exit code, dropping the actual diagnostic."""
     stderr_tail = (exc.stderr or b"").decode("utf-8", errors="replace").strip()[-500:]
     message = f"{exc} | stderr: {stderr_tail}" if stderr_tail else str(exc)
     _LOG.warning("vol3 %s failed: %s", plugin, message)
     result.failures.append((plugin, message))
+    return message
 
 
 # ---------------------------------------------------------------------------
@@ -124,8 +177,9 @@ def ingest_memory_image(
     artifact_path: str | None = None,
     host: str = "",
     plugins: tuple[str, ...] = PLUGINS,
-    timeout_seconds: int = 3600,
+    timeout_seconds: int = _DEFAULT_VOL3_TIMEOUT_SEC,
     vol_bin: str = _VOL_BIN,
+    progress: MemoryProgress | None = None,
 ) -> MemoryIngestResult:
     """Run each ``plugins`` plugin against ``image``, ingest rows, return the result.
 
@@ -144,23 +198,82 @@ def ingest_memory_image(
     cite = artifact_path if artifact_path is not None else image.name
 
     for plugin in plugins:
+        timeout = _timeout_for_plugin(plugin, timeout_seconds)
+        short = _short_plugin(plugin)
+        started = time.monotonic()
+        _emit(
+            progress,
+            MemoryPluginEvent(
+                status="start", plugin=plugin, short_name=short, timeout_seconds=timeout
+            ),
+        )
         mapper = MAPPERS.get(plugin)
         if mapper is None:
-            result.failures.append((plugin, "no mapper registered"))
+            message = "no mapper registered"
+            result.failures.append((plugin, message))
+            _emit(
+                progress,
+                MemoryPluginEvent(
+                    status="failed",
+                    plugin=plugin,
+                    short_name=short,
+                    timeout_seconds=timeout,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=message,
+                ),
+            )
             continue
         try:
-            rows = _run_vol_json(image, plugin, timeout=timeout_seconds, vol_bin=vol_bin)
+            rows = _run_vol_json(image, plugin, timeout=timeout, vol_bin=vol_bin)
         except subprocess.CalledProcessError as exc:
-            _record_subprocess_failure(result, plugin, exc)
+            message = _record_subprocess_failure(result, plugin, exc)
+            _emit(
+                progress,
+                MemoryPluginEvent(
+                    status="failed",
+                    plugin=plugin,
+                    short_name=short,
+                    timeout_seconds=timeout,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=message,
+                ),
+            )
+            continue
+        except subprocess.TimeoutExpired:
+            message = _timeout_message(plugin, timeout)
+            _LOG.warning("vol3 %s failed: %s", plugin, message)
+            result.failures.append((plugin, message))
+            _emit(
+                progress,
+                MemoryPluginEvent(
+                    status="failed",
+                    plugin=plugin,
+                    short_name=short,
+                    timeout_seconds=timeout,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=message,
+                ),
+            )
             continue
         except (
-            subprocess.TimeoutExpired,
             FileNotFoundError,
             json.JSONDecodeError,
             ValueError,
         ) as exc:
-            _LOG.warning("vol3 %s failed: %s", plugin, exc)
-            result.failures.append((plugin, str(exc)))
+            message = str(exc)
+            _LOG.warning("vol3 %s failed: %s", plugin, message)
+            result.failures.append((plugin, message))
+            _emit(
+                progress,
+                MemoryPluginEvent(
+                    status="failed",
+                    plugin=plugin,
+                    short_name=short,
+                    timeout_seconds=timeout,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=message,
+                ),
+            )
             continue
         records = list(
             mapper(
@@ -174,11 +287,34 @@ def ingest_memory_image(
         try:
             written = index.bulk_ingest(records)
         except sqlite3.Error as exc:  # documented store failure mode — record, don't abort
+            message = f"bulk_ingest: {exc}"
             _LOG.warning("bulk ingest failed for %s: %s", plugin, exc)
-            result.failures.append((plugin, f"bulk_ingest: {exc}"))
+            result.failures.append((plugin, message))
+            _emit(
+                progress,
+                MemoryPluginEvent(
+                    status="failed",
+                    plugin=plugin,
+                    short_name=short,
+                    timeout_seconds=timeout,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=message,
+                ),
+            )
             continue
-        result.counts[_short_plugin(plugin)] = written
+        result.counts[short] = written
+        _emit(
+            progress,
+            MemoryPluginEvent(
+                status="ok",
+                plugin=plugin,
+                short_name=short,
+                timeout_seconds=timeout,
+                elapsed_seconds=time.monotonic() - started,
+                rows=written,
+            ),
+        )
     return result
 
 
-__all__ = ["PLUGINS", "MemoryIngestResult", "ingest_memory_image"]
+__all__ = ["PLUGINS", "MemoryIngestResult", "MemoryPluginEvent", "ingest_memory_image"]

@@ -211,6 +211,14 @@ The demoted forensic parsers still matter. They populate the per-case FTS5 index
 `prepare` / `index` using dfVFS extraction, targeted feeders, and Sigma staging. That split is the
 first firewall layer: the model can request citable records, not raw evidence scans.
 
+Memory indexing stays inside that same offline spine. When a registered memory image is present,
+`silentwitness index` runs Volatility 3 plugins individually and ingests each plugin's rows into
+the case index. The order is cheap/high-signal inventory first (`pslist`, `cmdline`, `netscan`,
+`psscan`) and expensive malware scanning last (`malfind`). Each plugin has visible CLI progress and
+a bounded timeout (`SILENTWITNESS_VOL3_TIMEOUT_SEC`, default 300 seconds, with plugin-specific
+overrides such as `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC`). A slow or failed plugin becomes an
+audit advisory while successful memory rows remain searchable.
+
 ### 4.3 Response envelope — Pydantic model
 
 Every tool returns a `ToolResponse` envelope matching the Valhuntir pattern (Valhuntir comparative analysis §2 — Forensic Knowledge enrichment) adapted to our scope. Source-cited in code comments:

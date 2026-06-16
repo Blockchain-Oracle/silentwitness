@@ -77,6 +77,13 @@ def _print_skip_summary(
     )
 
 
+def _brief(message: str, *, limit: int = 220) -> str:
+    compact = " ".join(message.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "…"
+
+
 def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color: bool) -> int:
     """Run the targeted parsers (+ best-effort plaso) over prepared artifacts.
 
@@ -98,7 +105,7 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
     from silentwitness_mcp.index.ingest import IngestError, ingest_image_timeline
     from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
-    from silentwitness_mcp.index.ingest_memory import ingest_memory_image
+    from silentwitness_mcp.index.ingest_memory import MemoryPluginEvent, ingest_memory_image
 
     audit = AuditLogger(case_dir, examiner)
     t0 = time.monotonic()
@@ -147,25 +154,46 @@ def run(case_dir: Path, case_id: str, *, examiner: str, host: str = "", no_color
             memory_images = [r for r in artifacts if r.type == EvidenceType.MEMORY_DUMP]
             for rec in memory_images:
                 out.print(
-                    f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name} "
-                    "(pslist/cmdline/netscan/malfind/psscan; can take 30+ min)",
+                    f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name}",
                     highlight=False,
                 )
+
+                def _memory_progress(event: MemoryPluginEvent) -> None:
+                    if event.status == "start":
+                        timeout = (
+                            "timeout disabled"
+                            if event.timeout_seconds is None
+                            else f"timeout {event.timeout_seconds:g}s"
+                        )
+                        out.print(
+                            f"[cyan]…[/cyan] vol3 {event.short_name} ({timeout})",
+                            highlight=False,
+                        )
+                    elif event.status == "ok":
+                        rows = event.rows if event.rows is not None else 0
+                        out.print(
+                            f"[green]✓[/green] vol3 {event.short_name}: {rows} row(s) "
+                            f"in {event.elapsed_seconds:.1f}s",
+                            highlight=False,
+                        )
+                    else:
+                        err.print(
+                            f"[yellow]⚠[/yellow] vol3 {event.short_name}: {_brief(event.message)}",
+                            highlight=False,
+                        )
+
                 mem = ingest_memory_image(
                     rec.path,
                     idx,
                     audit_id=audit_id,
                     artifact_path=str(rec.path.name),
                     host=host,
+                    progress=_memory_progress,
                 )
                 for plugin, written in mem.counts.items():
                     memory_counts[plugin] = memory_counts.get(plugin, 0) + written
                 for plugin, message in mem.failures:
                     advisories.append(f"vol3 {plugin} failed on {rec.path.name}: {message}")
-                    err.print(
-                        f"[yellow]⚠[/yellow] vol3 {plugin} failed on {rec.path.name}: {message}",
-                        highlight=False,
-                    )
             out.print("[cyan]…[/cyan] building the full-text search index", highlight=False)
             idx.rebuild_fts()
         memory_total = sum(memory_counts.values())
