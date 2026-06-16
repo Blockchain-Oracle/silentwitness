@@ -36,7 +36,8 @@ const { spawnSync } = require("child_process");
  * Return true iff the given command resolves on PATH.
  *
  * Returns `false` only for "binary not present" (the `command -v` exit
- * status is 1 on miss). Any other failure mode — child process couldn't
+ * status is shell-dependent: 1 on some systems, 127 on GitHub's runner).
+ * Any other failure mode — child process couldn't
  * spawn (ENOENT on /bin/sh, EACCES, OOM, killed by signal) — re-throws
  * with a clear classification so the user sees what actually went wrong
  * instead of the install-help message that doesn't apply.
@@ -62,11 +63,11 @@ function isOnPath(cmd) {
       `silentwitness wrapper: PATH probe for '${cmd}' was killed by signal ${result.signal}`,
     );
   }
-  // exit 0 → present; exit 1 → missing; anything else is unexpected.
+  // exit 0 → present; exit 1/127 → missing; anything else is unexpected.
   if (result.status === 0) return true;
-  if (result.status === 1) return false;
+  if (result.status === 1 || result.status === 127) return false;
   throw new Error(
-    `silentwitness wrapper: PATH probe for '${cmd}' exited ${result.status} (expected 0 or 1)`,
+    `silentwitness wrapper: PATH probe for '${cmd}' exited ${result.status} (expected 0, 1, or 127)`,
   );
 }
 
