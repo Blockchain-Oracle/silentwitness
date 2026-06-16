@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""README gate (story-readme-polish): verify PRD §11 + §14 invariants.
+"""README gate: verify README shape + banned-vocab invariants.
 
 Exit 0 on pass; exit 1 with the failing rule name on stderr.
 """
@@ -10,11 +10,14 @@ import re
 import sys
 from pathlib import Path
 
-# PRD §11 caps README at 400 lines to stay scannable on one Devpost screen.
+# README is capped at 400 lines to stay scannable on one Devpost screen.
 _MAX_LINES = 400
-# First-screen checks (demo, image, mermaid labels) scope to the first 100 lines.
+# First-screen checks (demo, image, architecture asset) scope to the first 100 lines.
 _HEAD_LINES = 100
-_DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|<!--\s*DEMO_VIDEO_URL\s*-->")
+_DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|vimeo\.com/\d+|<!--\s*DEMO_VIDEO_URL\s*-->")
+_ARCHITECTURE_RE = re.compile(
+    r"docs/diagrams/architecture\.svg|assets/brand/diagram-A-architecture\.png"
+)
 _MIT_RE = re.compile(r"\bMIT\b")
 _H1_RE = re.compile(r"^# SilentWitness\b")
 _BANNED = (
@@ -25,7 +28,7 @@ _BANNED = (
     "eliminates hallucinations",
 )
 # "Find Evil!" (with trailing `!`) — the literal hackathon name — is allowed anywhere.
-# The marketing phrase "find evil" without `!` is banned per PRD §14.
+# The marketing phrase "find evil" without `!` is banned by vocab discipline.
 # Implementation: first strip the markdown link form `[Find Evil!](url)` in check()
 # (line 96), then this regex catches bare "find evil" without `!`.
 _FIND_EVIL_MARKETING = re.compile(r"\bfind evil(?!!)", re.IGNORECASE)
@@ -41,8 +44,8 @@ def _fail(rule: str, detail: str = "") -> int:
 
 def check(readme_path: Path) -> int:
     try:
-        # Normalize CRLF → LF so the mermaid regex (which requires `\n` after the
-        # ```mermaid fence) does not silently fail on CRLF-saved Windows files.
+        # Normalize CRLF → LF so the head-scoped regex checks behave the same on
+        # Windows-saved files and Unix-saved files.
         text = readme_path.read_text(encoding="utf-8").replace("\r\n", "\n")
     except OSError as exc:
         return _fail("readable", f"cannot read {readme_path}: {exc}")
@@ -60,46 +63,48 @@ def check(readme_path: Path) -> int:
 
     # Rule 2: demo video link or placeholder marker
     if not _DEMO_RE.search(head):
-        return _fail("demo_video", "no YouTube link or DEMO_VIDEO_URL marker in first 100 lines")
+        return _fail(
+            "demo_video",
+            "no YouTube/Vimeo link or DEMO_VIDEO_URL marker in first 100 lines",
+        )
 
     # Rule 3: image embed alt-text
     if "![" not in head:
         return _fail("image_embed", "no `![alt](path)` image embed in first 100 lines")
 
-    # Rule 4: SIFT native install one-liner
-    if not re.search(r"curl[^\n]*install\.sh[^\n]*\|\s*bash", text):
-        return _fail("sift_install", "missing curl ... install.sh | bash shell line")
+    # Rule 4: SIFT native install — either curl-pipe-bash one-liner OR the
+    # git-clone-then-./install.sh pattern (PR #238 changed the recommended
+    # path to "clone then run" so the user sees the script they're about to
+    # execute; curl-pipe-bash is still accepted as an alternative).
+    has_curl_bash = re.search(r"curl[^\n]*install\.sh[^\n]*\|\s*bash", text) is not None
+    has_clone_run = (
+        re.search(r"git clone[^\n]*silentwitness[\s\S]*?\./install\.sh", text) is not None
+    )
+    if not (has_curl_bash or has_clone_run):
+        return _fail(
+            "sift_install",
+            "missing both `curl ... install.sh | bash` and `git clone ... && ./install.sh`",
+        )
 
     # Rule 5: Docker Compose path
     if "docker compose up" not in text:
         return _fail("docker_compose", "missing `docker compose up` shell line")
 
-    # Rule 6: mermaid fence
-    if "```mermaid" not in text:
-        return _fail("mermaid_fence", "missing ```mermaid``` code fence")
-
-    # Rule 7: mermaid block has (architectural) and (prompt-based markers
-    mermaid_match = re.search(r"```mermaid\n(.*?)```", text, re.DOTALL)
-    if mermaid_match is None:
-        return _fail("mermaid_block", "mermaid fence opened but no closing fence")
-    mermaid = mermaid_match.group(1)
-    arch_count = mermaid.count("(architectural)")
-    if arch_count < 6:
+    # Rule 6: tracked architecture diagram reference
+    if not _ARCHITECTURE_RE.search(text):
         return _fail(
-            "mermaid_architectural",
-            f"≥6 `(architectural)` labels required, found {arch_count}",
+            "architecture_diagram",
+            "missing README reference to a tracked architecture diagram",
         )
-    if "(prompt-based" not in mermaid:
-        return _fail("mermaid_prompt_based", "missing `(prompt-based` label inside mermaid block")
 
     # Rule 8: literal `MIT` (word-bounded — must not match `transMIT`, `commit`, etc.)
     if not _MIT_RE.search(text):
         return _fail("mit_license", "missing literal `MIT` license reference")
 
-    # Rule 10: banned vocab list (CI grep gate, PRD §14)
+    # Rule 10: banned vocab list (CI grep gate)
     for phrase in _BANNED:
         if phrase.lower() in text.lower():
-            return _fail("banned_vocab", f"phrase {phrase!r} present (PRD §14)")
+            return _fail("banned_vocab", f"phrase {phrase!r} present")
     # "find evil" as marketing (not the hackathon link form)
     # Strip the hackathon link `[Find Evil!](https://...)` then scan
     text_no_link = re.sub(r"\[\s*find\s*evil\s*!?\s*\]\([^)]+\)", "", text, flags=re.IGNORECASE)

@@ -9,8 +9,8 @@ One ``AuditLogger`` instance per case directory — enforced at runtime via an
      lock so two concurrent callers never collide.
   2. Constructs an :class:`silentwitness_common.types.AuditEntry`, validating
      the shape via Pydantic (extra='forbid', frozen=True).
-  3. Serialises via ``model_dump_json`` (Decision A — drop structlog, use
-     Pydantic directly per DEEP_AUDIT_REPORT) and appends to
+  3. Serialises via ``model_dump_json`` (drop structlog, use Pydantic
+     directly) and appends to
      ``case_dir/audit/<backend>.jsonl`` via
      :func:`silentwitness_common.atomic_io.append_jsonl_line`.
 

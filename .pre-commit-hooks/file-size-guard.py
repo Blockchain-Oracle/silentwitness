@@ -1,34 +1,31 @@
 #!/usr/bin/env python3
 """file-size-guard.py — enforce the ≤400-LOC-per-.py invariant.
 
-The 400-LOC cap (architecture.md §14 — CI gates; rationale in BRAINSTORM
-Decisions 6 + 7) keeps modules auditable for the judges: small enough that a
+The 400-LOC cap keeps modules auditable for the judges: small enough that a
 reviewer can hold every branch of a verification gate or tool wrapper in
 their head at once.
 
 Counts ALL physical lines (blanks + comments included). Encourages splitting
 at natural module boundaries rather than hiding bulk in whitespace.
 
-Skips (CICD_SPEC §6.1 SKIP_PATTERNS):
+Skips (SKIP_PATTERNS):
   - ``uv.lock`` and other auto-generated files
   - ``tests/<anything>/fixtures/*`` (forensic fixture blobs may be large)
   - ``vendored/*`` (third-party drop-ins)
   - ``.pre-commit-hooks/*`` (this hook is tooling, not product code)
 
 ------------------------------------------------------------------------------
-Two deviations from CICD_SPEC §6.1 verbatim
+Implementation notes
 ------------------------------------------------------------------------------
 1. ``count_lines`` catches ``FileNotFoundError`` (not the broader ``OSError``).
-   The verbatim version's ``except OSError`` silently swallows
-   ``PermissionError`` / ``IsADirectoryError`` / disk-read failures — a 5000-
-   LOC file chmod 000 would exit clean. The docstring's stated intent is
-   ONLY "deleted-in-this-commit (rename)," which ``FileNotFoundError``
-   covers exactly. PR-89 silent-failure review flagged this.
+   A naive ``except OSError`` would silently swallow ``PermissionError`` /
+   ``IsADirectoryError`` / disk-read failures — a 5000-LOC file chmod 000
+   would exit clean. The intent is ONLY to skip files that vanished mid-run
+   (rename), which ``FileNotFoundError`` covers exactly.
 
 2. ``main()`` warns to stderr when a passed path doesn't exist (instead of
    silently skipping). Pre-commit + ``git ls-files`` only emit existing
-   paths, so this fires only when an upstream caller has a bug. Story 2's
-   version had this warning; the §6.1 rewrite lost it.
+   paths, so this fires only when an upstream caller has a bug.
 
 Exit codes:
   0 — no offenders
@@ -53,7 +50,7 @@ SKIP_PATTERNS = (
     ".pre-commit-hooks/*",
     # Typer command registry — every CLI command registers on a single `app =
     # typer.Typer(...)` module-level object. Splitting requires typer.add_typer
-    # sub-apps which changes the public CLI surface (docs/ux-spec §2 contract).
+    # sub-apps which changes the public CLI surface (ergonomic contract).
     "src/silentwitness_agent/cli.py",
 )
 

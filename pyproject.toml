@@ -96,10 +96,9 @@ dev = [
     "pre-commit>=4",
     "detect-secrets>=1.5",
     # The PyPI package is `cyclonedx-bom` (the SBOM generator); it installs a
-    # console script named `cyclonedx-py` which CI invokes. architecture.md §1,
-    # CICD_SPEC.md §2 and BRAINSTORM.md §3.5 each refer to the *package* as
-    # `cyclonedx-py>=4` — that's the spec slip; the unrelated `cyclonedx-py`
-    # package on PyPI tops out at 1.0.x and is not the SBOM generator.
+    # console script named `cyclonedx-py` which CI invokes. The unrelated
+    # `cyclonedx-py` package on PyPI tops out at 1.0.x and is not the SBOM
+    # generator — do not confuse the two when bumping pins.
     "cyclonedx-bom>=7",
     "pip-licenses>=5",
     "python-semantic-release>=9",
@@ -136,7 +135,7 @@ required-version = "==0.11.18"
 # standalone file remains the single source of truth.
 
 # ----------------------------------------------------------------------
-# Coverage — gates per CICD_SPEC §8
+# Coverage — per-package floors enforced in CI by scripts/coverage_gate.py
 # ----------------------------------------------------------------------
 [tool.coverage.run]
 source = ["src/silentwitness_mcp", "src/silentwitness_agent", "src/silentwitness_common", "harness/datasets", "harness/ground_truth"]
@@ -145,8 +144,8 @@ parallel = true
 data_file = ".coverage"
 # CLI entry-point and PDF renderer are smoke-tested via integration only —
 # excluding them prevents the 85% gate from being pulled down by code paths
-# that integration covers (see CICD_SPEC §8.1 / §8.2). Paths are tolerated by
-# coverage.py even before the files exist.
+# that integration covers. Paths are tolerated by coverage.py even before
+# the files exist.
 omit = [
     "src/silentwitness_agent/cli.py",
     "src/silentwitness_agent/report/pdf.py",
@@ -188,7 +187,7 @@ exclude_lines = [
 fail_under = 85
 
 # ----------------------------------------------------------------------
-# python-semantic-release — verbatim per CICD_SPEC §7.3
+# python-semantic-release — version bump + changelog on conventional commits
 # ----------------------------------------------------------------------
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]

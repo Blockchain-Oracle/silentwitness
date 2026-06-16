@@ -6,18 +6,17 @@ row; the manual rows ("video plays in incognito", "form fields match the
 mapping") are documented so a teammate audit can re-run them in <5 minutes.
 
 > The `## Banned-vocab references below` section at the bottom intentionally
-> mentions the §14 banned terms (court-admissible, autonomous SOC,
-> Ralph Wiggum) because this file IS the documentation of the gate. The
-> §14 vocab scanner carves out this file by path so the meta-discussion
-> doesn't trip the gate on itself.
+> mentions the banned terms (court-admissible, autonomous SOC, Ralph Wiggum)
+> because this file IS the documentation of the gate. The vocab scanner carves
+> out this file by path so the meta-discussion doesn't trip the gate on itself.
 
 ## Machine-verifiable
 
 - [ ] CI green on `main` — `gh run list --branch main --limit 1 --json status,conclusion --jq '.[0]'` reports `{"status":"completed","conclusion":"success"}`
-- [ ] All 8 PRD §10 deliverables present — `uv run python scripts/check_submission_ready.py --mode deliverables` exits 0
-- [ ] No `mock` / `fake` / `dummy` / `hardcoded` in `src/` — `git grep -iE '(mock|fake|dummy|hardcoded)' src/ | grep -vE '(test|\\bMockType\\b)' | wc -l` reports 0 (CICD_SPEC §14 gate; legitimate `Mock` type imports in tests are carved out)
+- [ ] All 8 submission deliverables present — `uv run python scripts/check_submission_ready.py --mode deliverables` exits 0
+- [ ] No `mock` / `fake` / `dummy` / `hardcoded` in `src/` — `git grep -iE '(mock|fake|dummy|hardcoded)' src/ | grep -vE '(test|\\bMockType\\b)' | wc -l` reports 0 (legitimate `Mock` type imports in tests are carved out)
 - [ ] LICENSE file is MIT — `uv run python scripts/check_submission_ready.py --mode license` exits 0
-- [ ] No PRD §14 banned vocab anywhere in committed `src/` + `docs/` — `uv run python scripts/check_submission_ready.py --mode vocab` exits 0 (carve-out: this file, PRD.md, CICD_SPEC.md)
+- [ ] No banned vocab anywhere in committed `src/` + `docs/` — `uv run python scripts/check_submission_ready.py --mode vocab` exits 0 (carve-out: this file)
 - [ ] README's `<!-- DEMO_VIDEO_URL -->` placeholder has been swapped for a real URL — `uv run python scripts/check_submission_ready.py --mode placeholder-swap` exits 0
 - [ ] `docs/EXAMPLE_EXECUTION_LOGS/` deterministic regeneration test passes — `uv run pytest tests/integration/test_example_execution_logs.py` exits 0
 - [ ] `NOTICES.md` present at repo root with required H2 sections — `test -s NOTICES.md && uv run pytest tests/unit/test_build_notices.py` exits 0
@@ -27,14 +26,14 @@ mapping") are documented so a teammate audit can re-run them in <5 minutes.
 
 - [ ] Demo video plays in incognito Chrome + incognito Firefox + Safari private window
 - [ ] All `docs/*.md` links resolve (no broken `./X.md` references): `grep -rEo '\\./[A-Z_]+\\.md' docs/ | sort -u` — each path must exist
-- [ ] Gallery preview on Devpost (pre-submit preview button) shows: title `SilentWitness`, tagline = PRD §1 one-liner, project story = `docs/DEVPOST.md` content rendered correctly, video thumbnail visible
+- [ ] Gallery preview on Devpost (pre-submit preview button) shows: title `SilentWitness`, tagline = the one-liner from README, project story = `docs/DEVPOST.md` content rendered correctly, video thumbnail visible
 
 ## Devpost form field mapping (copy from `docs/DEVPOST.md`)
 
 | Devpost field | Source |
 |---|---|
 | Project title | `SilentWitness` (exact, no taglines) |
-| Tagline | PRD §1 verbatim one-liner |
+| Tagline | Verbatim one-liner from README |
 | Project story | `docs/DEVPOST.md` body verbatim (the Markdown renders) |
 | Built-with tags | `docs/DEVPOST.md` §"Built with" comma list |
 | Demo video URL | YouTube Unlisted URL from the demo-recording session |
@@ -54,9 +53,9 @@ mapping") are documented so a teammate audit can re-run them in <5 minutes.
 
 ## Banned-vocab references (carve-out documentation)
 
-This file's `scripts/check_submission_ready.py` gate excludes itself, `docs/PRD.md`, `docs/CICD_SPEC.md`, and the per-doc gate scripts from the banned-vocab scan. The reason: each of those files documents the banned list itself (the PRD §14 row, the CICD §14 gate, the per-doc tuples). The list itself, for reader reference:
+This file's `scripts/check_submission_ready.py` gate excludes itself and the per-doc gate scripts from the banned-vocab scan. The reason: each of those files documents the banned list itself. The list itself, for reader reference:
 
-> Banned per PRD §14: "court-admissible", "autonomous SOC", "Ralph Wiggum",
+> Banned vocab: "court-admissible", "autonomous SOC", "Ralph Wiggum",
 > "replaces L1", "eliminates hallucinations". Banned per CLAUDE.md non-negotiable:
 > the same five plus "find evil" as marketing copy (the literal hackathon
 > name "Find Evil!" with the `[](link)` form is carved out).

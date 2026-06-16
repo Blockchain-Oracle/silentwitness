@@ -15,7 +15,7 @@ You give SilentWitness a Windows forensic image (a disk and/or memory capture). 
 1. **Parses** the evidence once into a fast searchable index.
 2. **Investigates** it like a senior analyst — forming hypotheses, searching for evidence,
    and writing down findings that **quote the actual evidence**.
-3. **Checks itself** — it cannot make a claim it can't prove, and it won't stop until it has
+3. **Checks itself** — it can't make a claim it can't prove, and it won't stop until it has
    answered all five investigative questions (who/what/where/how/when).
 4. Produces a **report** you can read, plus **logs** that trace every finding back to the exact
    search that produced it.
@@ -74,50 +74,91 @@ export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"
 
 ---
 
-## 5. Run an investigation — the five steps
+## 5. Run an investigation - the workflow
 
 Each command is one line. We'll use a case named `rocba` and an image at `~/evidence/rocba.E01`
 (change the path to your image).
 
-### Step 1 — Register the evidence (records what you're investigating)
+### Step 1 - Create the case workspace
+
+```bash
+silentwitness init rocba --examiner "$USER"
+```
+
+*What it does:* creates `cases/rocba/`, the empty report, audit directory, evidence registry,
+case metadata, and per-case verification salt. This is the project folder for one investigation.
+
+### Step 2 - Register the evidence
+
 ```bash
 silentwitness register-evidence rocba ~/evidence/rocba.E01
 ```
-*What you'll see:* a confirmation with the image's SHA-256 hash. This proves the evidence is
-recorded read-only and un-tampered.
 
-### Step 2 — Prepare (extract the artifacts, read-only)
+*What it does:* records what you are investigating, classifies the artifact type, computes hashes,
+and refuses unsafe writable evidence mounts. The original evidence is not modified.
+
+*What you'll see:* a confirmation with the image's SHA-256 hash.
+
+### Step 3 - Prepare the artifacts
+
 ```bash
 silentwitness prepare rocba
 ```
+
 *What it does:* opens the disk image **read-only** and copies out the high-value Windows
 artifacts (event logs, registry, file table, shortcuts, prefetch, etc.). Takes a few minutes.
 *The original image is never modified.*
 
-### Step 3 — Index (parse everything into a searchable database)
+### Step 4 - Build the evidence index
+
 ```bash
 silentwitness index rocba
 ```
+
 *What it does:* runs the forensic parsers + the Sigma detection engine over the extracted
 artifacts and builds a fast searchable index. This is the heavy step (~10–15 min for a large
 image); it only happens once.
 *What you'll see:* a summary like `indexed 2,673,733 records`.
 
-### Step 4 — Investigate (the AI does the analysis)
+### Step 5 - Investigate
+
 ```bash
 silentwitness investigate rocba
 ```
+
 *What it does:* the agent investigates — starting from the staged detections, forming
 hypotheses, searching the index, and recording cited findings. It will **refuse to finish**
 until it has addressed all five Key Questions. Takes a few minutes.
 *What you'll see:* a live stream of hypotheses being formed, confirmed, and (when needed) pivoted
 or challenged by its own critic.
 
-### Step 5 — Read the report
+### Step 6 - Review the staged findings
+
 ```bash
 silentwitness review rocba          # see the staged findings
+```
+
+*What it does:* shows the findings the agent staged so the examiner can approve, reject, modify,
+or skip them before they become report material.
+
+### Step 7 - Verify the audit trail
+
+```bash
+silentwitness verify --audit-chain rocba
+```
+
+*What it does:* walks every `audit/<backend>.jsonl` file and recomputes the hash chain. If an
+audit row is missing or edited, this command exits non-zero and tells you where the chain broke.
+
+### Step 8 - Export the report
+
+```bash
+silentwitness export rocba --md
 cat cases/rocba/report.md           # the full investigative narrative
 ```
+
+*What it does:* writes the final report from the reviewed findings. Use `--pdf` when you want a
+PDF report, or IOC options when you want a machine-readable indicator export.
 
 ### (Optional) Score it against known answers
 If you have a ground-truth file (we ship one for the ROCBA case):
@@ -159,7 +200,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 ## 8. For judges
 
 - **Fastest path:** you do **not** need to run it — the [Accuracy Report](ACCURACY_REPORT.md),
-  [Architecture](architecture.md) + [diagram](diagrams/architecture.png), and the
+  [Architecture](architecture.md) + [diagram](../assets/brand/diagram-A-architecture.png), and the
   [execution logs](execution_logs/) contain everything scored. If you do run it, follow §3–§5
   with your own API key.
 - **Three-claim trace:** [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) walks three findings from
@@ -172,7 +213,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 - **Guardrails (architectural, not prompt):** the citation gate, entity gate, and coverage gate
   live in `silentwitness_mcp` / the agent's `output_validator` — see
   [Architecture](architecture.md).
-- **Dataset & findings:** [`DATASET.md`](DATASET.md).
+- **Dataset & findings:** [`DATASETS.md`](DATASETS.md).
 
 ---
 
@@ -180,9 +221,9 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 
 | You want… | Look here |
 |---|---|
-| How it's built | [`docs/architecture.md`](architecture.md) + [`docs/diagrams/architecture.png`](diagrams/architecture.png) |
+| How it's built | [`docs/architecture.md`](architecture.md) + [`assets/brand/diagram-A-architecture.png`](../assets/brand/diagram-A-architecture.png) |
 | How accurate it is (honest) | [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) |
-| What data it was tested on | [`docs/DATASET.md`](DATASET.md) |
+| What data it was tested on | [`docs/DATASETS.md`](DATASETS.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |
 | Real run logs | [`docs/execution_logs/`](execution_logs/) |
 | The MCP server (the product) | `src/silentwitness_mcp/` |

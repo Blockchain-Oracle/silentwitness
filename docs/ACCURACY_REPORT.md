@@ -9,7 +9,7 @@
 ## 1. What was measured, and how
 
 - **Case:** the official SANS Find Evil! *Standard Forensic Case* — "The Fred Rocba Case"
-  (one Windows 10 host: ~22 GB E01 disk + memory capture). See [`DATASET.md`](DATASET.md).
+  (one Windows 10 host: ~22 GB E01 disk + memory capture). See [`DATASETS.md`](DATASETS.md).
 - **Ground truth:** 10 hand-crafted findings (`harness/ground_truth/rocba.handcrafted.json`)
   keyed to the case's **5 Key Questions** (projects accessed / what was taken / where it went /
   how / when). Expectations come from the SANS briefing deck — **not** from the disk the agent
@@ -64,6 +64,19 @@ that, but we do not claim a stable 100%.
   and scored *below* baseline (20%). The gate — a framework-level `output_validator` that
   refuses to finalize until every Key Question has a supporting observation — is what prevents
   this.
+
+### False positives
+
+The scorer separates **false positives** from hallucinations. A hallucination is a cited artifact
+that cannot be found in the mounted evidence. A false positive is grounded in a real artifact but
+does not match the hand-crafted ground-truth finding set.
+
+Known false-positive risk in the ROCBA runs is over-broad interpretation, not fabricated artifacts:
+for example, cloud-sync and logon observations can be evidence-present while still too broad until
+the critic narrows them to the specific cited records. The headline run includes that challenge and
+revision loop for O-004/O-007 in `docs/execution_logs/gpt55_100pct_run/critic.jsonl` and
+`findings.jsonl`. We treat those as noisy claims that must be narrowed, not as proof the raw
+artifact was invented.
 
 ---
 

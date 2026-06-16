@@ -27,17 +27,21 @@ def _make_minimal_fixture(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
     root.mkdir()
     (root / "LICENSE").write_text("MIT License\n\nCopyright (c) 2026\n")
-    # README with real YouTube URL, mermaid block, no placeholder
+    # README with real YouTube URL, architecture asset, no placeholder
     (root / "README.md").write_text(
         "# SilentWitness\n\n"
         "Demo: https://youtu.be/abcdefghijk\n\n"
-        "```mermaid\nflowchart TB\nA --> B\n```\n"
+        "![Architecture](docs/diagrams/architecture.svg)\n"
     )
     docs = root / "docs"
     docs.mkdir()
-    (docs / "architecture.md").write_text("# Architecture\n```mermaid\nflowchart\n```\n")
+    (docs / "architecture.md").write_text(
+        "# Architecture\n![Architecture](diagrams/architecture.svg)\n"
+    )
     (docs / "diagrams").mkdir()
-    (docs / "diagrams" / "architecture.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 100)
+    (docs / "diagrams" / "architecture.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg"><title>x</title><desc>y</desc></svg>\n'
+    )
     (docs / "DEVPOST.md").write_text(
         "# SilentWitness\n## One-line pitch\n## What it does\n## Built with\npython\n"
     )
@@ -87,14 +91,18 @@ class TestVideoUrl:
         )
         assert r.returncode == 0, r.stderr
 
-    def test_non_youtube_url_fails(self) -> None:
+    def test_valid_vimeo_passes(self) -> None:
+        r = _run_gate("--mode", "video-url", "--video-url", "https://vimeo.com/1201573890")
+        assert r.returncode == 0, r.stderr
+
+    def test_non_hosted_video_url_fails(self) -> None:
         r = _run_gate("--mode", "video-url", "--video-url", "https://example.com/video.mp4")
         assert r.returncode == 1
 
     def test_trailing_junk_after_id_fails(self) -> None:
-        # Anchor-mismatch regression: pre-fix, `_YT_RE` lacked end-anchor and
+        # Anchor-mismatch regression: pre-fix, the strict URL regex lacked end-anchor and
         # accepted IDs followed by arbitrary junk — divergent from the swap
-        # script's _YT_PATTERNS which correctly rejected it.
+        # script's URL patterns which correctly rejected it.
         r = _run_gate(
             "--mode",
             "video-url",
@@ -151,20 +159,14 @@ class TestVocab:
         r = _run_gate("--mode", "vocab", "--root", str(root))
         assert r.returncode == 1
 
-    def test_vocab_carve_out_for_stories_prefix(self, tmp_path: Path) -> None:
-        # docs/stories/ legitimately documents the banned vocab as part of the
-        # story-spec text; the carve-out must keep the gate green there.
+    def test_vocab_carve_out_for_archive_prefix(self, tmp_path: Path) -> None:
+        # archive/ legitimately documents banned vocab inside the archived
+        # spec set; the carve-out must keep the gate green there.
         root = _make_minimal_fixture(tmp_path)
-        (root / "docs" / "stories").mkdir()
-        (root / "docs" / "stories" / "spec.md").write_text(
-            "Banned per §14: court-admissible, autonomous SOC.\n"
+        (root / "archive").mkdir()
+        (root / "archive" / "spec.md").write_text(
+            "Banned vocab examples: court-admissible, autonomous SOC.\n"
         )
-        r = _run_gate("--mode", "vocab", "--root", str(root))
-        assert r.returncode == 0, r.stderr
-
-    def test_vocab_carve_out_for_prd_meta_doc(self, tmp_path: Path) -> None:
-        root = _make_minimal_fixture(tmp_path)
-        (root / "docs" / "PRD.md").write_text("§14 bans court-admissible.\n")
         r = _run_gate("--mode", "vocab", "--root", str(root))
         assert r.returncode == 0, r.stderr
 
@@ -196,6 +198,19 @@ class TestSwapDemoVideoUrl:
         assert "PLACEHOLDER" not in readme.read_text()
         assert "aaaaaaaaaaa" in readme.read_text()
         assert "aaaaaaaaaaa" in try_md.read_text()
+
+    def test_valid_vimeo_url_swaps(self, tmp_path: Path) -> None:
+        readme = tmp_path / "README.md"
+        readme.write_text("# X\n<!-- DEMO_VIDEO_URL --> https://youtu.be/PLACEHOLDER\n")
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location("swap", _SWAP)
+        assert spec is not None and spec.loader is not None
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        rc = mod.swap("https://vimeo.com/1201573890", targets=(readme,))
+        assert rc == 0
+        assert "vimeo.com/1201573890" in readme.read_text()
 
     def test_invalid_url_refused(self, tmp_path: Path) -> None:
         import importlib.util

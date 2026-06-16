@@ -2,7 +2,7 @@
 
 The caching helper is provider-gated: Anthropic models get prompt-caching
 settings (1h TTL on tool definitions + instructions); any non-Anthropic model
-returns ``None`` so the model-agnostic contract (PRD §5 FR3) holds.
+returns ``None`` so the model-agnostic contract holds.
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """Baseline runner: drives vanilla Protocol SIFT 2026 in plan mode against pinned evidence.
 
-Runs with --plan-mode (--dry-run fallback); model + temperature are pinned (PRD §14).
+Runs with --plan-mode (--dry-run fallback); model + temperature are pinned.
 Repin SHA256: sha256sum install.sh -> update install-script-sha256.txt.
 Exit codes: 0 ok, 2 config, 3 install, 4 timeout, 5 error.
 """

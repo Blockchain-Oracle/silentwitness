@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 760" fill="none" role="img" aria-labelledby="title desc">
+  <title id="title">Critic challenge flow</title>
+  <desc id="desc">A five-step flow showing the critic re-reading staged findings, challenging a weak interpretation, and causing the investigator to revise or widen the search.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#4256d0"/>
+    </marker>
+    <style>
+      .bg { fill: #fbfaf7; stroke: #ddd7c8; stroke-width: 2; rx: 26; }
+      .step { fill: #fff; stroke: #dad5c8; stroke-width: 2; rx: 22; }
+      .step-blue { fill: #eef1ff; stroke: #b8c0f4; stroke-width: 2; rx: 22; }
+      .step-rust { fill: #f7eee7; stroke: #d8b59c; stroke-width: 2; rx: 22; }
+      .title { fill: #131718; font: 700 40px Inter, ui-sans-serif, system-ui, sans-serif; }
+      .eyebrow { fill: #4256d0; font: 700 17px Inter, ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.06em; text-transform: uppercase; }
+      .body { fill: #4b5563; font: 500 19px Inter, ui-sans-serif, system-ui, sans-serif; }
+      .card-title { fill: #131718; font: 700 24px Inter, ui-sans-serif, system-ui, sans-serif; }
+      .num { fill: #4256d0; font: 700 28px Inter, ui-sans-serif, system-ui, sans-serif; }
+      .line { stroke: #4256d0; stroke-width: 4; stroke-linecap: round; marker-end: url(#arrow); }
+    </style>
+  </defs>
+  <rect x="24" y="24" width="1552" height="712" class="bg"/>
+  <text x="74" y="88" class="eyebrow">Interaction 8.3</text>
+  <text x="74" y="134" class="title">Critic challenge and revision loop</text>
+  <text x="74" y="170" class="body">The critic re-reads staged findings in fresh context, then forces a downgrade or wider evidence hunt when the interpretation overreaches.</text>
+
+  <rect x="82" y="270" width="278" height="150" class="step"/>
+  <text x="110" y="322" class="num">01</text>
+  <text x="110" y="358" class="card-title">Trigger the critic</text>
+  <text x="110" y="390" class="body">A timer or finding-count threshold starts a fresh read of the staged case state.</text>
+
+  <rect x="404" y="270" width="278" height="150" class="step-blue"/>
+  <text x="432" y="322" class="num">02</text>
+  <text x="432" y="358" class="card-title">Reload findings and cited records</text>
+  <text x="432" y="390" class="body">The critic only sees the evidence path already staged into the case, not hidden agent reasoning.</text>
+
+  <rect x="726" y="270" width="278" height="150" class="step-rust"/>
+  <text x="754" y="322" class="num">03</text>
+  <text x="754" y="358" class="card-title">Challenge the weak claim</text>
+  <text x="754" y="390" class="body">If the evidence only supports a lower-confidence interpretation, the critic says so.</text>
+
+  <rect x="1048" y="270" width="278" height="150" class="step-blue"/>
+  <text x="1076" y="322" class="num">04</text>
+  <text x="1076" y="358" class="card-title">Revise or widen the search</text>
+  <text x="1076" y="390" class="body">The investigator downgrades, pivots, or dispatches another specialist to corroborate.</text>
+
+  <rect x="1370" y="270" width="150" height="150" class="step"/>
+  <text x="1398" y="322" class="num">05</text>
+  <text x="1398" y="358" class="card-title">Restage</text>
+  <text x="1398" y="390" class="body">The revised finding becomes the one that survives.</text>
+
+  <line x1="360" y1="346" x2="404" y2="346" class="line"/>
+  <line x1="682" y1="346" x2="726" y2="346" class="line"/>
+  <line x1="1004" y1="346" x2="1048" y2="346" class="line"/>
+  <line x1="1326" y1="346" x2="1370" y2="346" class="line"/>
+</svg>

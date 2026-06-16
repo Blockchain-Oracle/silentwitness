@@ -1,0 +1,82 @@
+---
+title: "Quickstart"
+description: "Install SilentWitness as a global command and run your first investigation in five minutes."
+---
+
+## Prerequisites
+
+| Requirement | Why |
+|---|---|
+| Python 3.12 or 3.13 | `silentwitness` is a Python CLI |
+| LLM API key | Investigator drives an LLM — Anthropic / OpenAI / Gemini / Ollama |
+| `uv` or `pipx` | Installs the CLI globally in an isolated env |
+
+## Install (pick one)
+
+### SIFT 2026 OVA — one command
+
+```bash
+git clone https://github.com/Blockchain-Oracle/silentwitness && cd silentwitness && ./install.sh
+silentwitness --help    # global command, ready
+```
+
+`install.sh` installs `uv`, runs `uv tool install` so the CLI shim lands at
+`~/.local/bin/silentwitness`, then provisions Hayabusa / Chainsaw / Sigma rules
+/ Zeek / Suricata / dfVFS / spaCy NER. Every download SHA256-verified.
+
+### Generic — any OS
+
+```bash
+# uv tool
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# pipx
+pipx install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# npm (alias; delegates to uvx)
+npm install -g silentwitness
+```
+
+## Configure
+
+```bash
+export ANTHROPIC_API_KEY=...          # or OPENAI_API_KEY / GEMINI_API_KEY
+export SILENTWITNESS_MODEL=openai:gpt-5.2   # or anthropic:claude-opus-4-7
+```
+
+| Env var | Default | What |
+|---|---|---|
+| `SILENTWITNESS_MODEL` | `openai:gpt-5.2` | Investigator model. `provider:model`. |
+| `CRITIC_MODEL` | inherits | Live critic — usually a faster sibling. |
+| `MAX_ITERS` | unlimited | Iteration cap. Unlimited by default (PR #236). |
+| `CASES_DIR` | `./cases` | Where investigations are written. |
+
+## Investigate
+
+```bash
+silentwitness init mr-evil-001 --examiner "$USER"
+silentwitness register-evidence mr-evil-001 /evidence/hacking-case
+silentwitness prepare mr-evil-001
+silentwitness index mr-evil-001
+silentwitness investigate mr-evil-001
+silentwitness review mr-evil-001                  # materialise findings
+silentwitness verify --audit-chain mr-evil-001    # tamper check
+silentwitness export mr-evil-001 --md
+```
+
+## What Each Command Does
+
+| Command | Meaning |
+|---|---|
+| `init` | Creates `cases/<case-id>/`, the empty report, audit directory, evidence registry, and case metadata. |
+| `register-evidence` | Adds the evidence file or folder to the case, records its hash, classifies its type, and blocks unsafe writable evidence mounts. |
+| `prepare` | Extracts the artifacts SilentWitness needs from the registered evidence without modifying the original image. |
+| `index` | Parses those artifacts into a searchable SQLite/FTS evidence index. |
+| `investigate` | Runs the agent: form hypotheses, search the index, record cited observations, pivot, and stage findings. |
+| `review` | Shows staged findings for examiner approval, rejection, or edits. |
+| `verify --audit-chain` | Rechecks the audit JSONL hash chains so tampering is visible. |
+| `export` | Produces the final report output, and optional PDF or IOC files when requested. |
+
+That's the full workflow. The report drops at `cases/mr-evil-001/report.md`
+with inline `[verify:audit_id]` links resolving to JSONL audit entries.

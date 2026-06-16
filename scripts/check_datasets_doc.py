@@ -23,10 +23,10 @@ _DOC = _REPO / "docs" / "DATASETS.md"
 _MANIFEST_DIR = _REPO / "harness" / "datasets"
 _MAX_LINES = 400
 
-# Memorization-risk first SENTENCE (verbatim from PRD §9). We deliberately match
-# only the first sentence; extending the gate to the full paragraph would force
-# this script to embed prose that itself drifts. The doc still carries the full
-# paragraph; this gate proves the verbatim signature line is present.
+# Memorization-risk first SENTENCE. We deliberately match only the first
+# sentence; extending the gate to the full paragraph would force this script
+# to embed prose that itself drifts. The doc still carries the full paragraph;
+# this gate proves the verbatim signature line is present.
 _MEMO_RISK_SENTENCE = (
     "Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) "
     "appear in hundreds of indexed writeups."
@@ -91,7 +91,7 @@ def check(doc_path: Path = _DOC, manifest_dir: Path = _MANIFEST_DIR) -> int:
     next_idx = text.find("\n## ", hacking_idx + 1)
     hacking_section = text[hacking_idx : next_idx if next_idx > 0 else len(text)]
     if _MEMO_RISK_SENTENCE not in hacking_section:
-        return _fail("memorization_risk_disclosure", "verbatim PRD §9 sentence missing")
+        return _fail("memorization_risk_disclosure", "verbatim sentence missing")
 
     nitroba_path = manifest_dir / "nitroba.manifest.json"
     if not nitroba_path.exists():
@@ -115,7 +115,7 @@ def check(doc_path: Path = _DOC, manifest_dir: Path = _MANIFEST_DIR) -> int:
 
     for phrase in _BANNED_VOCAB:
         if phrase.lower() in text.lower():
-            return _fail("banned_vocab", f"phrase {phrase!r} present (PRD §14)")
+            return _fail("banned_vocab", f"phrase {phrase!r} present")
 
     return 0
 

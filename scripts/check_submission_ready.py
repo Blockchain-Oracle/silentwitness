@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Pre-submission gate: confirm all 8 PRD §10 deliverables + license + vocab + URL.
+"""Pre-submission gate: confirm all 8 deliverables + license + vocab + URL.
 
 CLI: ``--mode {all,deliverables,vocab,license,placeholder-swap,video-url}``
 (default ``all``). Each rule prints ✓/✗ to stderr; exit 0 if all pass.
 
-Carve-out: meta-docs that document the §14 banned-vocab list (this script, the
-checklist, PRD/CICD/architecture/epics specs, etc.) are excluded from the vocab
-scan. The authoritative carve-out lists are ``_VOCAB_EXCLUDE_FILES`` and
+Carve-out: meta-docs that document the banned-vocab list (this script, the
+checklist, and the per-doc gate scripts) are excluded from the vocab scan.
+The authoritative carve-out lists are ``_VOCAB_EXCLUDE_FILES`` and
 ``_VOCAB_EXCLUDE_PREFIXES`` below.
 """
 
@@ -33,33 +33,27 @@ _VOCAB_EXCLUDE_FILES = {
     "scripts/check_try_it_out.py",
     "scripts/_notices_catalog.py",
     "docs/devpost-submission-checklist.md",
-    "docs/PRD.md",
-    "docs/CICD_SPEC.md",
     "docs/architecture.md",
-    "docs/epics.md",
-    "docs/AUDIT_REPORT.md",
-    "docs/DEEP_AUDIT_REPORT.md",
-    "docs/ux-spec.md",
 }
-# Meta-doc directories that document the banned vocab as part of their content
-# (specs, audit reports, internal audit notes) are excluded from the scan; the
-# gate covers committed src/, scripts/, and the judge-facing docs/*.md leaves.
+# Directories that document the banned vocab as part of their content are
+# excluded from the scan; the gate covers committed src/, scripts/, and the
+# judge-facing docs/*.md leaves.
 _VOCAB_EXCLUDE_PREFIXES = (
-    "docs/stories/",
-    "docs/.audit/",
+    "archive/",
     "docs/EXAMPLE_EXECUTION_LOGS/",
 )
-_YT_URL_PATTERN = (
+_VIDEO_URL_PATTERN = (
     r"https://(?:youtu\.be/[A-Za-z0-9_-]{11}"
-    r"|(?:www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11})"
+    r"|(?:www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11}"
+    r"|vimeo\.com/\d+)"
 )
 # Anchored at both ends — used by --video-url for strict validation. The 11-char
 # ID upper bound (no trailing junk) matches swap_demo_video_url._YT_PATTERNS so
-# the two scripts agree on what counts as a valid YouTube URL.
-_YT_RE_STRICT = re.compile(rf"^{_YT_URL_PATTERN}$")
-# Search variant: used to detect a YouTube URL anywhere in README.md prose. The
-# trailing word-boundary stops the ID match from accepting `abcdefghijkEXTRA`.
-_YT_RE_SEARCH = re.compile(rf"{_YT_URL_PATTERN}(?=\b|$)")
+# the two scripts agree on what counts as a valid hosted video URL.
+_VIDEO_RE_STRICT = re.compile(rf"^{_VIDEO_URL_PATTERN}$")
+# Search variant: used to detect a hosted video URL anywhere in README.md prose. The
+# trailing word-boundary stops YouTube IDs from accepting `abcdefghijkEXTRA`.
+_VIDEO_RE_SEARCH = re.compile(rf"{_VIDEO_URL_PATTERN}(?=\b|$)")
 
 
 class Check:
@@ -106,20 +100,26 @@ def _check_deliverables(root: Path) -> list[Check]:
         head = "\n".join(full.splitlines()[:100])
         if "youtu.be/PLACEHOLDER" in full or "<!-- DEMO_VIDEO_URL -->" in full:
             chk.fail("README still contains demo-video placeholder marker")
-        elif not _YT_RE_SEARCH.search(head):
-            chk.fail("no YouTube URL in first 100 lines")
+        elif not _VIDEO_RE_SEARCH.search(head):
+            chk.fail("no YouTube or Vimeo URL in first 100 lines")
     checks.append(chk)
 
-    # Deliverable 3: Architecture diagram + Mermaid block in README
-    chk = Check("Deliverable 3: Architecture diagram + README Mermaid")
+    # Deliverable 3: Architecture diagram asset + README reference
+    chk = Check("Deliverable 3: Architecture diagram asset + README reference")
     arch_md = root / "docs" / "architecture.md"
-    arch_png = root / "docs" / "diagrams" / "architecture.png"
+    arch_svg = root / "docs" / "diagrams" / "architecture.svg"
+    arch_png = root / "assets" / "brand" / "diagram-A-architecture.png"
     if not arch_md.exists():
         chk.fail("docs/architecture.md missing")
-    elif not arch_png.exists():
-        chk.fail("docs/diagrams/architecture.png missing")
-    elif "```mermaid" not in readme.read_text(encoding="utf-8"):
-        chk.fail("README has no ```mermaid block")
+    elif not arch_svg.exists() and not arch_png.exists():
+        chk.fail("architecture diagram asset missing")
+    else:
+        readme_text = readme.read_text(encoding="utf-8")
+        if (
+            "docs/diagrams/architecture.svg" not in readme_text
+            and "assets/brand/diagram-A-architecture.png" not in readme_text
+        ):
+            chk.fail("README does not reference a tracked architecture diagram")
     checks.append(chk)
 
     # Deliverable 4: Devpost write-up
@@ -183,7 +183,7 @@ def _check_deliverables(root: Path) -> list[Check]:
 
 
 def _check_vocab(root: Path) -> Check:
-    chk = Check("PRD §14 banned vocab absent from committed src/docs")
+    chk = Check("banned vocab absent from committed src/docs")
     hits: list[str] = []
     for path in root.rglob("*"):
         if not path.is_file():
@@ -229,8 +229,8 @@ def _check_placeholder_swap(root: Path) -> Check:
 
 def _check_video_url(url: str) -> Check:
     chk = Check(f"Video URL well-formed: {url}")
-    if not _YT_RE_STRICT.fullmatch(url):
-        chk.fail("not a recognized youtu.be/ or youtube.com/watch URL")
+    if not _VIDEO_RE_STRICT.fullmatch(url):
+        chk.fail("not a recognized YouTube or Vimeo URL")
     return chk
 
 

@@ -1,4 +1,4 @@
-"""Pure layout builders for the 4-pane rich.live investigation HUD (ux-spec §2.3)."""
+"""Pure layout builders for the 4-pane rich.live investigation HUD."""
 
 from __future__ import annotations
 
@@ -47,7 +47,7 @@ class BudgetSnapshot:
 
 
 def build_layout() -> Layout:
-    """Build the 4-pane Layout per ux-spec §2.3 verbatim sketch."""
+    """Build the 4-pane Layout: hypothesis stack, current tool call, observations, status."""
     layout = Layout()
     layout.split_column(
         Layout(name="hypothesis_stack", size=8),

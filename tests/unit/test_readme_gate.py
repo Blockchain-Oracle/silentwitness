@@ -1,4 +1,4 @@
-"""Tests for scripts/check_readme_gate.py — PRD §11 README shape gate."""
+"""Tests for scripts/check_readme_gate.py — README shape gate."""
 
 from __future__ import annotations
 
@@ -28,9 +28,7 @@ _CASES: list[tuple[str, int, str | None]] = [
     ("no_image.md", 1, "image_embed"),
     ("no_sift_install.md", 1, "sift_install"),
     ("no_docker.md", 1, "docker_compose"),
-    ("no_mermaid.md", 1, "mermaid_fence"),
-    ("mermaid_too_few_arch.md", 1, "mermaid_architectural"),
-    ("mermaid_no_prompt.md", 1, "mermaid_prompt_based"),
+    ("no_architecture_diagram.md", 1, "architecture_diagram"),
     ("no_mit.md", 1, "mit_license"),
     ("banned_vocab.md", 1, "banned_vocab"),
     ("banned_in_code.md", 1, "banned_vocab"),
@@ -57,13 +55,9 @@ def test_mit_word_boundary_not_matched_in_substrings(tmp_path: Path) -> None:
     bad.write_text(
         # All-the-other-rules-pass shape, but the only "MIT" letters are inside `commit`.
         "# SilentWitness\n\n> pitch\n\n<!-- DEMO_VIDEO_URL -->\n\n![alt](x.png)\n\n"
+        "![Architecture](docs/diagrams/architecture.svg)\n\n"
         "```bash\ncurl https://x/install.sh | bash\n```\n\n"
         "```bash\ndocker compose up -d\n```\n\n"
-        "```mermaid\nflowchart TB\n"
-        "  A[a (architectural)] --> B[b (architectural)]\n"
-        "  C[c (architectural)] --> D[d (architectural)]\n"
-        "  E[e (architectural)] --> F[f (architectural)]\n"
-        "  P[p (prompt-based)]\n```\n\n"
         "Please commit and transMIT your changes.\n"
     )
     r = subprocess.run(

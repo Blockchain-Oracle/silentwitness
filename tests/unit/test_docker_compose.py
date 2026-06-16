@@ -44,7 +44,7 @@ def test_silentwitness_service_is_declared() -> None:
 
 
 def test_evidence_mount_carries_security_flags() -> None:
-    """`/evidence` is mounted with `ro,noexec,nosuid` per PRD §6 NFR."""
+    """`/evidence` is mounted with `ro,noexec,nosuid`."""
     svc = _silentwitness_service()
     volumes = svc.get("volumes", [])
     evidence_mounts = [v for v in volumes if isinstance(v, str) and v.startswith("/evidence:")]

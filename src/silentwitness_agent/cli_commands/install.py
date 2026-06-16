@@ -12,7 +12,7 @@ from typing import Final
 
 from rich.console import Console
 
-# SIFT 2026 pre-installed Claude Code path — context/.raw-design-research/03 line 31
+# SIFT 2026 pre-installed Claude Code path.
 _SIFT_CLAUDE_PATH: Final = Path("/usr/local/bin/claude")
 _TARGET_DIR_NAME: Final = Path(".claude") / "silentwitness"
 _CONFIG_DIR_NAME: Final = "claude-code-config"

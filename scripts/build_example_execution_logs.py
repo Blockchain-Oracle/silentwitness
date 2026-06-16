@@ -8,7 +8,7 @@ README.md. All timestamps and SHA256s are FIXED so re-running this script produc
 byte-identical output (verifiable via `git diff --exit-code`).
 
 Filenames are suffixed `_EXAMPLE` so judges cannot mistake this for a real
-investigation. PRD §14 vocabulary discipline + CICD_SPEC §14 no-mock carve-out.
+investigation (vocabulary discipline + no-mock carve-out).
 """
 
 from __future__ import annotations

@@ -1,7 +1,7 @@
 """SilentWitness harness runner: invokes the SW investigator against pinned evidence.
 
 Runs the installed `silentwitness` CLI with SILENTWITNESS_MODEL + temperature
-pinned identically to the baseline runner (PRD §14 fair-compare discipline).
+pinned identically to the baseline runner (fair-compare discipline).
 Exit codes: 0 ok, 2 config/validation, 4 timeout, 5 investigator non-zero exit or write failure.
 """
 

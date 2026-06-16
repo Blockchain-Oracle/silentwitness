@@ -20,5 +20,5 @@
   "ground_truth_status": "password_gated",
   "LLM_memorization_risk": "medium",
   "memorization_risk_note": "The Nitroba challenge is a 2010 competition dataset with published community writeups. Memorization risk is medium — the wardrive scenario is widely discussed but per-packet evidence paths require genuine forensic reasoning against the mounted pcap.",
-  "notes": "MD5 legacy (from context/evaluation §A.1): 9981827f11968773ff815e39f5458ec8. Full binary is gitignored; fetch from the DFRWS 2010 challenge archive. Stub for CI hash-verify is at stubs/nitroba-stub.pcap (nitroba-stub.manifest.json)."
+  "notes": "MD5 legacy: 9981827f11968773ff815e39f5458ec8. Full binary is gitignored; fetch from the DFRWS 2010 challenge archive. Stub for CI hash-verify is at stubs/nitroba-stub.pcap (nitroba-stub.manifest.json)."
 }

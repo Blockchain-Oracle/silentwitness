@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Swap the demo-video placeholder for the real YouTube URL at submission time.
+"""Swap the demo-video placeholder for the real hosted demo URL at submission time.
 
-Validates a YouTube Unlisted URL form, then writes each target via tempfile +
+Validates a YouTube or Vimeo URL form, then writes each target via tempfile +
 atomic ``Path.replace`` (per-file atomic, no cross-file rollback — submission
 is a single-operator one-shot, the gate catches half-swapped state on re-run).
 Refuses on a target that contains neither the marker comment nor the
@@ -20,14 +20,15 @@ _REPO = Path(__file__).resolve().parents[1]
 _TARGETS = (_REPO / "README.md", _REPO / "docs" / "TRY_IT_OUT.md")
 _PLACEHOLDER_MARKER = "<!-- DEMO_VIDEO_URL -->"
 _PLACEHOLDER_URL = "https://youtu.be/PLACEHOLDER"
-_YT_PATTERNS = (
+_VIDEO_PATTERNS = (
     re.compile(r"^https://youtu\.be/[A-Za-z0-9_-]{11}$"),
     re.compile(r"^https://(www\.)?youtube\.com/watch\?v=[A-Za-z0-9_-]{11}(&.*)?$"),
+    re.compile(r"^https://vimeo\.com/\d+$"),
 )
 
 
-def _is_valid_youtube_url(url: str) -> bool:
-    return any(p.match(url) for p in _YT_PATTERNS)
+def _is_valid_video_url(url: str) -> bool:
+    return any(p.match(url) for p in _VIDEO_PATTERNS)
 
 
 def _atomic_write(path: Path, text: str) -> None:
@@ -48,11 +49,12 @@ def _atomic_write(path: Path, text: str) -> None:
 
 
 def swap(url: str, targets: tuple[Path, ...] = _TARGETS) -> int:
-    if not _is_valid_youtube_url(url):
+    if not _is_valid_video_url(url):
         print(
-            f"ERROR: {url!r} is not a valid YouTube URL "
+            f"ERROR: {url!r} is not a valid YouTube or Vimeo URL "
             "(expected https://youtu.be/<11-char-id> or "
-            "https://www.youtube.com/watch?v=<11-char-id>)",
+            "https://www.youtube.com/watch?v=<11-char-id> or "
+            "https://vimeo.com/<numeric-id>)",
             file=sys.stderr,
         )
         return 1
@@ -96,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(description="Swap demo-video placeholder for real URL.")
-    parser.add_argument("url", help="YouTube URL (youtu.be/<id> or youtube.com/watch?v=<id>)")
+    parser.add_argument("url", help="YouTube or Vimeo URL")
     args = parser.parse_args(argv)
     return swap(args.url)
 

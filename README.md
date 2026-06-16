@@ -10,77 +10,106 @@ Built for the SANS [Find Evil!](https://findevil.devpost.com/) hackathon (2026).
 written so anyone (not just developers) can go from a blank SIFT VM to a finished report.
 
 **Result on the real SANS ROCBA case:** with the enforced coverage gate and a capable model,
-SilentWitness recalled **10 of 10** ground-truth findings — see the honest measurement (and the
+SilentWitness recalled **10 of 10** ground-truth findings. See the honest measurement (and the
 failure modes we found and fixed) in the [Accuracy Report](./docs/ACCURACY_REPORT.md), and trace
 any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_TRACE.md).
 
 ## Demo
 
-📺 **2-minute demo:** <!-- DEMO_VIDEO_URL --> [youtu.be/PLACEHOLDER](https://youtu.be/PLACEHOLDER)
+📺 **Demo video:** [vimeo.com/1201573890](https://vimeo.com/1201573890)
 
-![Markdown report with inline `[verify:audit_id]` links resolving to JSONL audit entries](./docs/assets/report-verify-links.png)
+![SilentWitness — hypothesis-first DFIR investigator for SANS Find Evil! 2026](./assets/brand/banner.png)
 
-## Quick start
+## Prerequisites
 
-### (a) SIFT 2026 native — 3 commands
+| Requirement | Why | How |
+|---|---|---|
+| **Python 3.12 or 3.13** | `silentwitness` is a Python CLI. | SIFT 2026 has 3.12 pre-installed. Other OS: [python.org](https://www.python.org) or your package manager. |
+| **LLM API key** | The investigator drives an LLM (Anthropic / OpenAI / Gemini / Ollama). Recommended: `gpt-5.2` or `claude-opus-4-7`. | Export `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` before `silentwitness investigate`. |
+| **`uv` (or `pipx`)** | Installs `silentwitness` as a global command in an isolated env. | `install.sh` installs `uv` automatically. Alt: [astral.sh/uv](https://astral.sh/uv) / [pipx](https://pipx.pypa.io). |
+| **Subprocess forensic tools** *(SIFT only)* | Hayabusa, Chainsaw, Sigma rules, Zeek, Suricata, dfVFS. | `install.sh` provisions them all — version-pinned + SHA256-verified. |
+
+## Install
+
+After any path below, **`silentwitness` is a global command** — `which silentwitness` resolves and `silentwitness --help` works from any directory.
+
+### Option A — SIFT 2026 OVA (recommended for judges, one command)
 
 ```bash
-# 1. install
-curl --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/main/install.sh | bash
-# 2. register a case + its evidence (one step, two sub-actions on a single line)
-silentwitness init mr-evil-001 --examiner $USER && silentwitness register-evidence mr-evil-001 /evidence/hacking-case
-# 3. investigate
-silentwitness investigate mr-evil-001
+git clone https://github.com/Blockchain-Oracle/silentwitness && cd silentwitness && ./install.sh
+silentwitness --help    # global command, ready
 ```
 
-### (b) Docker Compose — 2 commands
+`install.sh` is idempotent. It installs `uv`, runs `uv tool install` to put the CLI on `~/.local/bin`, then provisions Hayabusa / Chainsaw / Sigma rules / Zeek / Suricata / dfVFS apt deps / spaCy NER model. Every download is SHA256-verified.
+
+### Option B — Generic (any OS, no SIFT subprocess tools)
+
+```bash
+# Recommended (uv tool):
+curl -LsSf https://astral.sh/uv/install.sh | sh
+uv tool install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# Alternative (pipx):
+pipx install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
+# Alternative (npm — discoverability alias; delegates to uvx):
+npm install -g silentwitness
+```
+
+### Option C — Docker Compose
 
 ```bash
 docker compose up -d
 docker compose exec silentwitness silentwitness investigate mr-evil-001
 ```
 
-## Architecture
+## Configuration
 
-```mermaid
-flowchart TB
-  subgraph CLI[silentwitness CLI (architectural)]
-    INIT[init / register-evidence / investigate]
-  end
-  subgraph AGENT[Pydantic AI investigator (architectural)]
-    ORCH[Hypothesis-first orchestrator]
-    CRITIC[Critic + entity gate + citation gate (architectural)]
-  end
-  subgraph MCP[Custom FastMCP server (architectural)]
-    MEMSPEC[Memory specialist (architectural)]
-    DISK[Disk specialist (architectural)]
-    LOG[Log specialist (architectural)]
-    NETSPEC[Network specialist (architectural)]
-  end
-  subgraph EVIDENCE[Read-only evidence mount (architectural)]
-    MOUNT[/evidence ro,noexec,nosuid (architectural)]
-  end
-  subgraph AUDIT[Audit JSONL ledger (architectural)]
-    LEDGER[verify-links + HMAC chain (architectural)]
-  end
-  subgraph PROMPTS[System prompts (prompt-based — supplementary, not load-bearing)]
-    AGENT_PROMPT[Investigator system prompt (prompt-based — supplementary, not load-bearing)]
-    CRITIC_PROMPT[Critic agreement prompt (prompt-based — supplementary, not load-bearing)]
-  end
-  CLI --> AGENT
-  AGENT --> MCP
-  MCP --> EVIDENCE
-  AGENT --> AUDIT
-  MCP --> AUDIT
-  AGENT_PROMPT -.-> AGENT
-  CRITIC_PROMPT -.-> CRITIC
+| Env var | Default | What |
+|---|---|---|
+| `SILENTWITNESS_MODEL` | `openai:gpt-5.2` | Investigator model. Format: `provider:model`. |
+| `CRITIC_MODEL` | (inherits) | Live critic model — usually a faster/cheaper sibling of the investigator. |
+| `MAX_ITERS` | unlimited | Hard cap on agent iterations. Unlimited by default (PR #236); three self-termination signals — structured output, token budget, coverage-gate retry exhaustion — still stop the run. |
+| `CASES_DIR` | `./cases` | Where investigations are written. |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
+
+## Quick start
+
+After install + at least one LLM API key exported:
+
+```bash
+silentwitness init mr-evil-001 --examiner "$USER"
+silentwitness register-evidence mr-evil-001 /evidence/hacking-case
+silentwitness prepare mr-evil-001
+silentwitness index mr-evil-001
+silentwitness investigate mr-evil-001
+silentwitness review mr-evil-001                    # materialise findings
+silentwitness verify --audit-chain mr-evil-001      # tamper-evident audit trail
+silentwitness export mr-evil-001 --md
 ```
 
-**Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but does not unlock hallucinations against unmounted artifacts.
+### What those commands mean
+
+| Command | What it does |
+|---|---|
+| `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
+| `register-evidence` | Records the evidence path, classifies the artifact type, computes hashes, and refuses unsafe writable evidence mounts. |
+| `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
+| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. |
+| `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |
+| `review` | Lets the examiner inspect staged findings before they become accepted report material. |
+| `verify --audit-chain` | Recomputes every audit JSONL hash chain and reports tampering or missing audit links. |
+| `export` | Writes the finished report and optional PDF/IOC outputs from the reviewed findings. |
+
+## Architecture
+
+![SilentWitness architecture diagram showing read-only evidence, offline ingest, MCP server, Pydantic AI investigator, audit ledger, and report export](./assets/brand/diagram-A-architecture.png)
+
+**Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but doesn't unlock hallucinations against unmounted artifacts.
 
 ## What's novel
 
-SilentWitness is the first hypothesis-first DFIR agent to ship the *architectural* guardrails the IR community has been asking prompt-based agents to fake. The investigator cannot claim against an artifact the entity gate cannot resolve; the report cannot include a finding the citation gate cannot link to a real audit-JSONL line. Every Δ vs vanilla Protocol SIFT in the [accuracy report](./docs/ACCURACY_REPORT.md) is **measured, not estimated** — `silentwitness baseline-comparison <case-id>` reruns the comparison on demand.
+SilentWitness is the first hypothesis-first DFIR agent to ship the *architectural* guardrails the IR community has been asking prompt-based agents to fake. The investigator can't claim against an artifact the entity gate can't resolve. The report can't include a finding the citation gate can't link to a real audit-JSONL line. Every Δ vs vanilla Protocol SIFT in the [accuracy report](./docs/ACCURACY_REPORT.md) is **measured, not estimated** — `silentwitness baseline-comparison <case-id>` reruns the comparison on demand.
 
 ## Try it out
 
@@ -100,7 +129,24 @@ Real audit JSONL output from past runs: see [`docs/EXAMPLE_EXECUTION_LOGS/`](./d
 
 ## Architecture deep-dive
 
-Component architecture, the 27-tool MCP catalog, and 10 ADRs: see [`docs/architecture.md`](./docs/architecture.md).
+Component architecture, the 12-tool agent-visible MCP surface, offline ingest spine, and ADRs:
+see [`docs/architecture.md`](./docs/architecture.md).
+
+## Test coverage
+
+**88.39% line coverage** across 7,500+ executable lines, **1,838 tests** passing (unit + integration + property-based via [Hypothesis](https://hypothesis.readthedocs.io)). 46 modules at 100% coverage — including the hash-chained audit primitives, every verification gate, the corroboration tier engine, and the entity-gate sanitizer.
+
+![Coverage report header showing 88.39% total coverage, file-by-file breakdown](./assets/coverage-summary.png)
+
+Reproduce locally:
+
+```bash
+uv run coverage run -m pytest
+uv run coverage html
+open htmlcov/index.html
+```
+
+Tests run on every push: see [`.github/workflows/ci.yml`](./.github/workflows/ci.yml). The coverage gate is enforced per-package: `verification/` 95%, `audit/` + `findings/` 90%, everywhere else 85% — the floors that catch silent failures before merge.
 
 ## License
 

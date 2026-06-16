@@ -8,10 +8,9 @@ fail_fast: false
 repos:
   # --- Formatting + linting (ruff replaces black / isort / flake8 / pylint) ---
   # Pinned to match the ruff version the project's lockfile installs (currently
-  # 0.15.x; pyproject pins `ruff>=0.8`). PR-93 audit moment surfaced that the
-  # CICD_SPEC §3.2 verbatim pin of v0.8.4 was 7 minor versions behind, so
-  # pre-commit's ruff-format reformatted differently than `uv run ruff format`
-  # — the staged version would be stale and the commit would abort silently.
+  # 0.15.x; pyproject pins `ruff>=0.8`). A stale ruff pin causes pre-commit's
+  # ruff-format to reformat differently than `uv run ruff format` — the staged
+  # version would be stale and the commit would abort silently.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.15
     hooks:
@@ -60,7 +59,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^(uv\.lock|\.secrets\.baseline|tests/.*/fixtures/.*)$
+        exclude: ^(uv\.lock|pnpm-lock\.yaml|\.secrets\.baseline|tests/.*/fixtures/.*)$
 
   # --- Standard hygiene ---
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -82,11 +81,10 @@ repos:
         exclude: ^tests/.*/fixtures/.*$
 
   # --- Conventional Commits ---
-  # Deviation from CICD_SPEC §3.2: conventional-pre-commit v3.6.0's CLI takes
-  # commit types as POSITIONAL args (not `--types`) and `--scopes` as a single
-  # comma-separated flag value. The spec's `--types` invocation errors out at
-  # runtime ("unrecognized arguments").
-  # TODO(docs): patch CICD_SPEC §3.2 to match this invocation.
+  # conventional-pre-commit v3.6.0's CLI takes commit types as POSITIONAL args
+  # (not `--types`) and `--scopes` as a single comma-separated flag value.
+  # An older `--types` invocation would error at runtime
+  # ("unrecognized arguments").
   - repo: https://github.com/compilerla/conventional-pre-commit
     rev: v3.6.0
     hooks:

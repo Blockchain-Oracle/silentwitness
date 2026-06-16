@@ -5,9 +5,9 @@ abandoning_evidence non-empty → from_hypothesis_id exists in
 ``hypothesis.jsonl`` (``to_hypothesis_id`` shape is constructor-enforced
 by :class:`PivotInput`) → allocate ``P-NNN`` → append :class:`_PivotEvent`
 to ``audit/hypothesis.jsonl`` → audit row to ``audit/findings.jsonl``
-REGARDLESS of accept/reject (rejections are evidence — §4.4).
+REGARDLESS of accept/reject (rejections are evidence in their own right).
 
-PRD §4 secondary metric: ``grep -c '"type":"pivot"' hypothesis.jsonl``.
+Pivot-count secondary metric: ``grep -c '"type":"pivot"' hypothesis.jsonl``.
 
 This tool refines the architecture's
 ``(from_hypothesis_id, to_statement, reason)`` triple. The agent-side

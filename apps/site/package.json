@@ -1,0 +1,39 @@
+{
+  "name": "@silentwitness/site",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "sync-docs": "node scripts/sync-docs.mjs",
+    "source": "fumadocs-mdx",
+    "prepare-docs": "pnpm run sync-docs && pnpm run source",
+    "predev": "pnpm run prepare-docs",
+    "prebuild": "pnpm run prepare-docs",
+    "pretypecheck": "pnpm run prepare-docs",
+    "dev": "next dev",
+    "build": "next build && pnpm run build:pagefind",
+    "build:pagefind": "pagefind --site .next/server/app --output-path public/pagefind --glob \"docs/**/*.html\"",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "next typegen && tsc --noEmit"
+  },
+  "dependencies": {
+    "fumadocs-core": "^16.9.3",
+    "fumadocs-mdx": "^15.0.10",
+    "fumadocs-ui": "^16.9.3",
+    "lucide-react": "^0.469.0",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/mdx": "^2.0.13",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "pagefind": "^1.5.2",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5"
+  }
+}

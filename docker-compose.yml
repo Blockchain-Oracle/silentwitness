@@ -12,7 +12,7 @@ services:
     image: silentwitness:local
     user: "silentwitness"
     restart: unless-stopped
-    # /evidence intent: ro,noexec,nosuid per PRD §6 NFR.
+    # /evidence intent: ro,noexec,nosuid.
     #
     # IMPORTANT — partial enforcement at this PR's merge state:
     #   - `ro` IS enforced by Docker (bind-mount short-form respects it).

@@ -1,6 +1,6 @@
 # Datasets — SilentWitness evidence corpus
 
-This catalog documents every evidence dataset SilentWitness is tested against (PRD §4 accuracy harness; PRD §9 memorization-risk disclosure). For each dataset: source URL, canonical SHA256 (lifted verbatim from `harness/datasets/<id>.manifest.json`), what we tested, what we found, what we missed, the memorization-risk band, and a reproducibility recipe judges can follow step by step.
+This catalog documents every evidence dataset SilentWitness is tested against (accuracy harness + memorization-risk disclosure). For each dataset: source URL, canonical SHA256 (lifted verbatim from `harness/datasets/<id>.manifest.json`), what we tested, what we found, what we missed, the memorization-risk band, and a reproducibility recipe judges can follow step by step.
 
 ## At a glance
 
@@ -10,6 +10,36 @@ This catalog documents every evidence dataset SilentWitness is tested against (P
 | NIST CFReDS Data Leakage Case | ~20 GB E01 + media | Active — broad-coverage Windows IR | Medium per-artifact / High scenario-summary | active |
 | NIST CFReDS Hacking Case (Mr. Evil) | ~6 GB E01 | Active — verify entity-gate behavior under high-memorization pressure | **High** (canonical answers in hundreds of writeups) | active |
 | case-trapdoor (synthetic adversary pair) | n/a | Optional / Epic 15 | None (synthetic, no public answers) | optional (skipped until Epic 15 ships) |
+
+## Official SANS Find Evil! 2026 datasets (Egnyte share)
+
+The hackathon's official cases live behind a public Egnyte share — no account, no API key, just `python scripts/download_starter_cases.py`. The script speaks the Egnyte share-link API directly (the same one their web UI uses), paginates folder listings, and streams files in 1 MiB chunks with on-the-fly SHA256.
+
+```bash
+# Enumerate every case at the share root (counts + sizes)
+python scripts/download_starter_cases.py list
+
+# Output (as of 2026-06-15):
+#   Compromised APT Attack Scenarios: 33 files, 177.44 GiB
+#   Standard Forensic Case:            3 files,  27.38 GiB
+#   Standard Forensics Case 2:         2 files,  40.73 GiB
+
+# Drill into one case
+python scripts/download_starter_cases.py list "Standard Forensic Case"
+#       38.3 MiB  /HACKATHON-2026/Standard Forensic Case/ROCBA-BACKGROUND.pptx
+#      22.05 GiB  /HACKATHON-2026/Standard Forensic Case/rocba-cdrive.e01
+#       5.29 GiB  /HACKATHON-2026/Standard Forensic Case/Rocba-Memory.zip
+
+# Dry-run a download (no GETs, just prints what it would do)
+python scripts/download_starter_cases.py download "Standard Forensic Case" /evidence/rocba --dry-run
+
+# Real download — idempotent, resumable (skips files already at expected size)
+python scripts/download_starter_cases.py download "Standard Forensic Case" /evidence/rocba
+```
+
+Verified locally on 2026-06-15: `ROCBA-BACKGROUND.pptx` (38.3 MiB) downloads cleanly with SHA256 `44a12c54d1324339…`. The large E01 + memory archives weren't downloaded during scaffolding; their size matches the Egnyte UI to the byte.
+
+**Multi-host scope.** SilentWitness's submission demonstrates the single-host spine end-to-end on the ROCBA case (Standard Forensic Case). The downloader works for ALL three cases — including the 177 GiB multi-host APT bundle — but full cross-host investigation correlation is tracked as Phase 10 follow-up (out of scope for the v1.0.0-hackathon-2026 tag). The 33-file APT case is downloadable + per-host indexable today; the cross-host hypothesis linker lands later.
 
 ## Reproducibility recipe
 
@@ -75,7 +105,7 @@ open harness/results/<dataset>/delta.png   # or xdg-open on Linux / start on Win
 
 ## NIST CFReDS Hacking Case (Greg Schardt / Mr. Evil)
 
-> **Memorization-risk disclosure (PRD §9, verbatim):** Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) appear in hundreds of indexed writeups. A passing finding here is not evidence of working forensic capability — it is evidence the model has seen the writeups. The citation + entity gate forces every claim to ground in evidence-present spans rather than regurgitated memory; this dataset demonstrates the gates work, not latent capability.
+> **Memorization-risk disclosure (verbatim):** Greg Schardt / Mr. Evil canonical answers (MAC, IP, hostname, email) appear in hundreds of indexed writeups. A passing finding here is not evidence of working forensic capability — it is evidence the model has seen the writeups. The citation + entity gate forces every claim to ground in evidence-present spans rather than regurgitated memory; this dataset demonstrates the gates work, not latent capability.
 
 - **Source URL:** `https://cfreds-archive.nist.gov/Hacking_Case.html` (canonical single reassembled EnCase E01 at `images/4Dell Latitude CPi.E01`)
 - **Size:** ~6 GB E01 (reassembled from the 7 segmented files NIST originally distributed)
@@ -120,5 +150,5 @@ Anyone can independently verify a manifest by running `sha256sum <binary> | grep
 
 - Per-dataset binary hashes + ground-truth parser pointers: `harness/datasets/<id>.manifest.json`.
 - Scoring + delta artifacts (regenerated by the recipe above): `harness/results/<id>/`.
-- Accuracy report (cross-dataset summary): `ACCURACY_REPORT.md` (pending — ships with `story-accuracy-report-writeup`).
-- Memorization-risk discipline: PRD §9 (verbatim Mr. Evil paragraph quoted above).
+- Accuracy report (cross-dataset summary): `ACCURACY_REPORT.md`.
+- Memorization-risk discipline: verbatim Mr. Evil paragraph quoted above.

@@ -165,7 +165,7 @@ def test_debug_prints_model_default(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
 
 # ---------------------------------------------------------------------------
-# 11. stdout tree shape matches ux-spec §2.2 verbatim patterns
+# 11. stdout tree shape matches the documented CLI patterns
 # ---------------------------------------------------------------------------
 
 

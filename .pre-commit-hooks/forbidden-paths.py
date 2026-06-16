@@ -9,13 +9,13 @@ the repo. Catching this at pre-commit prevents:
   - accidentally committing the HMAC ledger
 
 Allowed exception: ``tests/integration/fixtures/`` may contain synthetic
-case fixtures shipped for integration testing (CICD_SPEC §6.2).
+case fixtures shipped for integration testing.
 
 ------------------------------------------------------------------------------
-Deviations from CICD_SPEC §6.2 verbatim
+Implementation notes — prefix matching, not fnmatch
 ------------------------------------------------------------------------------
-§6.2 uses ``fnmatch`` against patterns like ``cases/*/audit/*.jsonl``.
-``fnmatch`` does NOT cross ``/`` boundaries, so a path like
+``fnmatch`` against patterns like ``cases/*/audit/*.jsonl`` does NOT cross
+``/`` boundaries, so a path like
 ``cases/case-001/notes/x.md`` evades EVERY ``cases/*`` pattern silently.
 That's the primary attack-surface bypass on the exact PII/PHI leak this hook
 exists to defend.
@@ -40,8 +40,6 @@ What ``_normalise`` does NOT do — by design:
   - Convert Windows drive letters (``C:\\``). Pre-commit on Windows
      emits POSIX-style paths; if someone passes ``C:\\...`` manually the
      leading-``/`` reject above catches it after backslash conversion.
-
-CICD_SPEC §6.2 text should be updated to reflect the prefix-matching impl.
 
 Exit codes:
   0 — clean

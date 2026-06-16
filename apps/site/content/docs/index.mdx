@@ -1,0 +1,40 @@
+---
+title: "SilentWitness"
+description: "Hypothesis-first DFIR investigator with architectural guardrails — entity gate, citation gate, hash-chained audit."
+---
+
+SilentWitness is a hypothesis-first DFIR investigator whose report writes itself,
+with every claim locked to the tool that produced it. It pairs a Custom **MCP
+server** (FastMCP) with a **Pydantic AI** agent and runs the investigation
+inside a stack of architectural guardrails — _not_ in the prompts.
+
+## What's novel
+
+- **Entity gate** — the agent cannot stage an observation referencing an entity
+  the index did not produce. The gate runs in code, against `index.db`, before
+  the row is written.
+- **Citation gate** — every finding must carry at least one `cited_span` resolving
+  to an audit JSONL row. No citation → no finding.
+- **Corroboration tier** — `CONFIRMED` / `INFERRED` / `UNVERIFIED` decided by
+  `source_tool` category diversity, not LLM self-report.
+- **Hash-chained audit** — every row carries `record_hash` + `prev_record_hash`.
+  `silentwitness verify --audit-chain` walks every backend file and reports any
+  break with file:line precision.
+- **5-Key-Questions coverage gate** — output validator raises `ModelRetry` until
+  WHO / WHAT / WHEN / WHERE / HOW are all answered. The agent cannot quietly
+  call it done.
+
+## Result on the real ROCBA case
+
+**10 of 10** ground-truth findings recalled. Honest measurement (and the failure
+modes we found + fixed) lives in [Accuracy Report](/docs/accuracy-report). Trace
+any finding to its tool execution in [Three-Claim Trace](/docs/three-claim-trace).
+
+## Get started
+
+- **[Quickstart →](/docs/quickstart)** — install + first investigation in five
+  minutes.
+- **[Architecture →](/docs/architecture)** — what runs where, and which
+  guardrails are architectural vs prompt-based.
+- **[Try it out →](/docs/try-it-out)** — per-dataset walkthroughs (Nitroba, NIST
+  Hacking Case, NIST Data Leakage).

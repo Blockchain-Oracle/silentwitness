@@ -61,6 +61,16 @@ Thumbs.db
 node_modules/
 package-lock.json
 yarn.lock
+# pnpm-lock.yaml IS committed (supply-chain pin; CI uses --frozen-lockfile)
+
+# Node / Next.js / Fumadocs site under apps/site/
+apps/**/.next/
+apps/**/.source/
+apps/**/.vercel/
+apps/**/*.tsbuildinfo
+apps/**/public/pagefind/
+apps/**/public/diagrams/
+.pnpm-store/
 
 # Sub-agent research scratch
 /tmp/
@@ -68,3 +78,17 @@ yarn.lock
 *,cover
 docs/EVIDENCE_INVENTORY.md
 tests/fixtures/.harness-*.log
+
+# Browser-driver capture artifacts (Playwright MCP)
+.playwright-mcp/
+
+# AI-orchestration spec residue — moved into archive/ locally, never committed.
+# The repo holds only the judge-facing artifacts; orchestrator scaffolding
+# (PRD, BRAINSTORM, CICD_SPEC, epics, stories, ux-spec, etc., plus the
+# context/ and research/ corpora that informed them) lives in archive/ on
+# disk for the author's records, out of git.
+archive/
+AGENTS.md
+.private/
+*.original.md
+.vercel

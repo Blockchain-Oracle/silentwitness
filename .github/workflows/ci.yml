@@ -1,27 +1,23 @@
-# .github/workflows/ci.yml — verbatim from CICD_SPEC §4.1 except for the
-# audit-driven deviations enumerated below.
+# .github/workflows/ci.yml — CI pipeline.
 #
-# Audit-driven deviations from spec text — each fix is documented in
-# DEEP_AUDIT_REPORT.md and pinned to a single root cause:
+# Pin / config notes:
 #
-#   1. UV_VERSION is "0.11.18" instead of the spec's "0.5.11" (audit B-PY-2).
+#   1. UV_VERSION is "0.11.18".
 #      pyproject.toml pins [tool.uv].required-version = "==0.11.18"; uv refuses
 #      to run on any other version, so the workflow must mirror the lockfile.
 #
 #   2. `test` job adds a "Per-module coverage floors" step calling
 #      scripts/coverage_gate.py between `pytest with coverage` and the artifact
-#      upload. §4.1's verbatim block omits this step but §8.2 mandates it
-#      ("coverage_gate.py called by CI test job"). coverage.py has no native
-#      per-directory floor support; the script is the single source of truth.
+#      upload. coverage.py has no native per-directory floor support; the
+#      script is the single source of truth for per-module floors.
 #
 #   3. The `dataset-hash-verify` step's inline comment says "Full NIST 2GB
-#      image is NOT pulled in CI" while §4.1 says 20GB. The 2GB figure is the
-#      actual size of the NIST PC E01 image per DEEP_AUDIT_REPORT F-DS-2 —
-#      §4.1's "20GB" is the spec typo this PR silently corrects.
+#      image is NOT pulled in CI." 2 GB is the actual size of the NIST PC
+#      E01 image.
 #
-#   4. The `docker-build` job's `needs:` list adds `dataset-hash-verify` to
-#      the §4.1 list. The verify job is a stub today and gating docker-build
-#      on a no-op stub costs nothing now and ensures Epic 14's real verifier
+#   4. The `docker-build` job's `needs:` list includes `dataset-hash-verify`.
+#      The verify job is a stub today and gating docker-build on a no-op
+#      stub costs nothing now and ensures the real verifier (once it
 #      automatically becomes a docker-build prerequisite when it lands.
 #
 #   5. `test` jobs install `just` via taiki-e/install-action@v2. story-justfile-
@@ -43,8 +39,8 @@
 #      written rationale in the allowlist file.
 #
 # The eight gated jobs below are required-status-checks for branch protection
-# on `main` (CICD_SPEC §5.1). Renaming any job here will break protection until
-# the protection rule is updated to match.
+# on `main`. Renaming any job here will break protection until the protection
+# rule is updated to match.
 
 name: ci
 
@@ -133,7 +129,7 @@ jobs:
           uv run coverage report --fail-under=85
       - name: Per-module coverage floors (verification 95 / audit 90)
         # coverage.py only enforces a single global floor; per-directory floors
-        # are enforced by scripts/coverage_gate.py per CICD_SPEC §8.2.
+        # are enforced by scripts/coverage_gate.py.
         run: uv run python scripts/coverage_gate.py coverage.xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
@@ -308,9 +304,8 @@ jobs:
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.licenses=MIT
       - name: Run trivy scan on built image
-        # CICD_SPEC §4.1 deviations:
-        #   - Tag is `v0.36.0` (the spec's `0.28.0` doesn't exist; tags are
-        #     v-prefixed per `git ls-remote`).
+        # Pinning notes:
+        #   - Tag is `v0.36.0` (tags are v-prefixed per `git ls-remote`).
         #   - `exit-code: '0'` (was '1'). Local reproduction with
         #     `docker build -t silentwitness:audit . && trivy image
         #     silentwitness:audit --severity HIGH,CRITICAL --exit-code 1`
@@ -335,3 +330,84 @@ jobs:
           name: trivy-sarif
           path: trivy-results.sarif
           retention-days: 30
+
+  shellcheck-install:
+    # PR #238 review: install.sh ships 350+ LOC of Bash that gates the entire
+    # judge-onboarding flow. Catching a `set -e` / quoting bug locally before
+    # push beats catching it on a fresh OVA at submission time. `bash -n` is
+    # syntax-only; shellcheck adds semantic checks.
+    name: shellcheck install.sh
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Syntax check
+        run: bash -n install.sh
+      - name: shellcheck
+        # shellcheck-action pins a known release; SC2086 (word-splitting) is
+        # disabled because install.sh deliberately splits some paths.
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          severity: warning
+          scandir: '.'
+          additional_files: 'install.sh'
+
+  apps-site-build:
+    # PR #238 review: apps/site/ is the docs surface deployed to Vercel; if
+    # MDX renders break on a PR we catch them here, not on the deployment.
+    # Mirrors the production build (sync-docs → next build → pagefind).
+    name: apps/site build (Fumadocs + Pagefind)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+      - name: pnpm install (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Run sync-docs unit tests
+        # 16 tests covering MDX-safety transforms (in-fence tracking,
+        # autolink, HTML comments, `<` escape) and frontmatter extraction.
+        # These pin the silent-corruption regressions from PR #238 review.
+        run: node --test apps/site/scripts/sync-docs.test.mjs
+      - name: Build apps/site
+        run: pnpm --filter @silentwitness/site build
+      - name: Verify Pagefind index produced
+        # Pagefind silently produces an empty index if the build dir glob
+        # misses; assert it indexed something so a future config drift fails
+        # loudly instead of shipping a broken search box.
+        run: |
+          test -f apps/site/public/pagefind/pagefind.js \
+            || (echo "::error::pagefind.js missing from build output" && exit 1)
+          test -s apps/site/public/pagefind/pagefind-entry.json \
+            || (echo "::error::pagefind-entry.json empty or missing" && exit 1)
+
+  npm-wrapper-syntax:
+    # PR #238 review: the npm/silentwitness wrapper is shipped to npmjs.org;
+    # a syntax error would be caught by `npm publish` but only after we'd
+    # already merged. `node --check` is the cheapest possible gate.
+    name: npm wrapper syntax check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: node --check
+        run: node --check npm/silentwitness/bin/silentwitness.js
+      - name: Smoke (prints help when Python CLI absent)
+        # On a CI runner with no Python silentwitness installed, the wrapper
+        # should print the install-help and exit 127. Anything else (crash,
+        # silent success) is a regression.
+        run: |
+          set +e
+          node npm/silentwitness/bin/silentwitness.js --help
+          status=$?
+          set -e
+          # 127 = neither silentwitness nor uvx on PATH (expected on fresh runner)
+          # 0   = uvx happened to be present and ran the real CLI (also fine)
+          if [ "$status" -ne 127 ] && [ "$status" -ne 0 ]; then
+            echo "::error::npm wrapper exited $status (expected 0 or 127)"
+            exit 1
+          fi

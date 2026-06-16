@@ -1,0 +1,11 @@
+{
+  "name": "silentwitness-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "build:site": "pnpm --filter @silentwitness/site build"
+  },
+  "devDependencies": {
+    "next": "16.2.6"
+  }
+}

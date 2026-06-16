@@ -3,16 +3,16 @@
 Invoked from .github/workflows/ci.yml `license-check` job after pip-licenses
 emits licenses.json. The deny list is:
 
-  * AGPL-3.0 variants (hackathon-rules ban — see CICD_SPEC §2 and §4.3)
-  * GPL-3.0 variants  (hackathon-rules ban — same)
+  * AGPL-3.0 variants (hackathon-rules ban)
+  * GPL-3.0 variants  (hackathon-rules ban)
   * UNKNOWN            (deny-by-default: pip-licenses emits this for deps with
                        unparseable metadata; treating unparseable as ALLOW would
-                       be a silent supply-chain hole — see CICD_SPEC §1173 runbook)
+                       be a silent supply-chain hole)
   * Proprietary        (same rationale — closed-source bundled deps would not
                        satisfy the MIT/Apache submission rules)
 
 LGPL is allowed for runtime-linked deps only; Python dynamic linking means we
-never trip the LGPL static-link clause (CICD_SPEC §2 + §4.3).
+never trip the LGPL static-link clause.
 
 An optional ``--allowlist <path>`` argument points at a JSON file with
 per-package overrides for deps that have upstream-packaging gaps but whose
@@ -321,7 +321,7 @@ def main(argv: list[str]) -> int:
             print(f"  - {name}: {lic.upper()}", file=sys.stderr)
         print(
             "Hackathon rules require MIT / Apache-2.0 / BSD-style; "
-            "AGPL and GPL-3.0 are release blockers (CICD_SPEC §2 + §4.3).",
+            "AGPL and GPL-3.0 are release blockers.",
             file=sys.stderr,
         )
         return 1

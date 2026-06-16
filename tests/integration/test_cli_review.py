@@ -160,7 +160,7 @@ def test_review_list_status_approved(tmp_path: Path, monkeypatch: pytest.MonkeyP
 
 
 def test_review_detail_full_block(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Given --finding-id, output matches ux-spec §2.2 block shape."""
+    """Given --finding-id, output matches the documented review block shape."""
     case_dir = init_case(tmp_path, "mr-detail-001", monkeypatch)
     _with_finding(case_dir)
     result = runner.invoke(

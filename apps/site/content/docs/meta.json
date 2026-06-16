@@ -1,0 +1,17 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "quickstart",
+    "architecture",
+    "---",
+    "Investigation",
+    "three-claim-trace",
+    "accuracy-report",
+    "datasets",
+    "try-it-out",
+    "---",
+    "Reference",
+    "setup-guide"
+  ]
+}

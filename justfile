@@ -67,10 +67,6 @@ clean:
 build:
     docker build -t silentwitness:local .
 
-# Render docs/diagrams/*.mmd to PNG via mmdc. Run `./install.sh --diagrams` first.
-diagrams:
-    ./scripts/render_diagrams.sh
-
 # Run the full accuracy harness (baseline + silentwitness + scorer + delta) for a dataset.
 # Usage: just harness DATASET=nitroba
 harness DATASET:

@@ -227,7 +227,7 @@ class TestSchemaSanity:
         assert "/evidence/sample_EXAMPLE.bin" in rec["path"]
 
     def test_index_readme_has_six_required_sections(self) -> None:
-        """README.md must carry the 6 PRD §11 sections (intro + 5 H2 headings)."""
+        """README.md must carry the 6 documented sections (intro + 5 H2 headings)."""
         text = (_COMMITTED / "README.md").read_text()
         for heading in (
             "## What this contains",
