@@ -50,6 +50,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 uv tool install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
 
+# Linux forensic preparation without the full SIFT installer:
+uv tool install --reinstall "silentwitness[forensics] @ git+https://github.com/Blockchain-Oracle/silentwitness@main"
+
 # Alternative (pipx):
 pipx install "git+https://github.com/Blockchain-Oracle/silentwitness@main"
 

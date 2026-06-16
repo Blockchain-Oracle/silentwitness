@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
+from typing import Any
 
 from rich.console import Console
 
@@ -49,6 +50,13 @@ def _artifact_evidence_type(label: str) -> EvidenceType:
     if label in _HIVE_LABELS:
         return EvidenceType.HIVE
     return EvidenceType.OTHER  # $MFT, $UsnJrnl, SRUM, Prefetch, etc.
+
+
+def _load_access() -> Any:
+    """Load the optional dfVFS-backed evidence-access module lazily."""
+    from silentwitness_mcp.evidence import access
+
+    return access
 
 
 def run(case_dir: Path, case_id: str, *, examiner: str, no_color: bool) -> int:
@@ -90,7 +98,23 @@ def run(case_dir: Path, case_id: str, *, examiner: str, no_color: bool) -> int:
 
     # Lazy: only import the dfVFS-backed mechanics once there is real work, so
     # this module imports on machines lacking the forensic C-extension stack.
-    from silentwitness_mcp.evidence import access
+    try:
+        access = _load_access()
+    except ModuleNotFoundError as exc:
+        missing = exc.name or "forensic dependency"
+        err.print(
+            f"[red]✗[/red] forensic evidence dependencies are unavailable (missing {missing}).",
+            highlight=False,
+        )
+        err.print(
+            "Install on SIFT/Linux with ./install.sh, or reinstall the CLI with "
+            "`uv tool install --reinstall "
+            '"silentwitness[forensics] @ git+https://github.com/'
+            'Blockchain-Oracle/silentwitness@main"`.',
+            highlight=False,
+            markup=False,
+        )
+        return 2
 
     workroot = case_dir / _PREPARED_SUBDIR
     audit = AuditLogger(case_dir, examiner)
