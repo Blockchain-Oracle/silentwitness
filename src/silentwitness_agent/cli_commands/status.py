@@ -96,7 +96,8 @@ def _case_status(events: list[dict[str, Any]]) -> str:
         return "IDLE"
     for ev in reversed(events):
         if ev.get("type") == "finish" or ev.get("event") == "on_finish":
-            return "COMPLETED"
+            state = ev.get("final_state")
+            return str(state).upper() if state else "COMPLETED"
         if ev.get("event") == "sigint_checkpoint":
             return "ABORTED"
     return "INVESTIGATING"

@@ -289,7 +289,7 @@ def test_emit_oserror_propagates_and_leaves_state_unchanged(
     def _raise(*_a: object, **_kw: object) -> None:
         raise OSError("disk full")
 
-    monkeypatch.setattr(_jmod, "append_jsonl_line", _raise)
+    monkeypatch.setattr(_jmod, "append_chained_jsonl", _raise)
 
     with pytest.raises(OSError, match="disk full"):
         s.confirm(h.id, ["sift-aj-001"])

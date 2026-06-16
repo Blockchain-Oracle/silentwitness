@@ -15,7 +15,7 @@ JSONL event shapes (one JSON object per line):
                  on error: result_sha256=null, audit_id=null, plus error_type, error_message
   step        : {ts, type, step_index, input_tokens, output_tokens, active_hypothesis_id}
   finish      : {ts, type, final_state, stack_snapshot, model_used, total_tokens_consumed,
-                 audit_append_failures}
+                 audit_append_failures, finalized_open_hypotheses_abandoned}
 """
 
 from __future__ import annotations
@@ -37,12 +37,13 @@ from pydantic_ai.tools import ToolDefinition
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
 from silentwitness_agent.investigator import InvestigatorDeps
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 
 _LOG = logging.getLogger(__name__)
 
 # Mirrors architecture §4.4 result_summary truncation: full args are in MCP-side JSONL.
 _ARGS_SUMMARY_LIMIT = 1024
+_FINALIZE_ABANDON_REASON = "RUN_FINALIZED_WITH_OPEN_QUESTIONS"
 
 
 # ---------------------------------------------------------------------------
@@ -69,14 +70,30 @@ def _hyp_id(stack: HypothesisStack) -> str | None:
     return snap.active.id if snap.active else None
 
 
-def _append_agent_jsonl(case_dir: Path, payload: dict[str, Any]) -> None:
-    """Append one audit event to ``audit/agent.jsonl`` using atomic fsync-append.
+def _close_open_hypotheses(stack: HypothesisStack) -> int:
+    """Abandon active and queued hypotheses before writing a completed finish line."""
+    closed = 0
+    while True:
+        active = stack.snapshot().active
+        if active is None:
+            return closed
+        try:
+            stack.abandon(active.id, _FINALIZE_ABANDON_REASON)
+        except Exception:
+            _LOG.exception("hooks: failed to finalize open hypothesis %s", active.id)
+            return closed
+        closed += 1
 
-    Delegates to ``atomic_io.append_jsonl_line`` which fsyncs after each write and
-    validates for forbidden line-terminator characters (LF, CR, Unicode line separators).
+
+def _append_agent_jsonl(case_dir: Path, payload: dict[str, Any]) -> None:
+    """Append one hash-chained audit event to ``audit/agent.jsonl``.
+
+    The MCP ``AuditLogger`` cannot be reused here because it owns per-case
+    audit-id sequencing and a singleton lock. Agent lifecycle events are a
+    separate stream, but still need the same tamper-evident chain.
     """
     path = case_dir / "audit" / "agent.jsonl"
-    append_jsonl_line(path, json.dumps(payload, default=str))
+    append_chained_jsonl(path, json.loads(json.dumps(payload, default=str)))
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +297,7 @@ def build_investigator_hooks(
         *,
         result: Any,
     ) -> Any:
+        finalized_count = _close_open_hypotheses(stack)
         snap = stack.snapshot()
         model_used: str | None = getattr(result.output, "model_used", None)
         total_tokens: int = getattr(result.usage, "total_tokens", 0) or 0
@@ -291,6 +309,7 @@ def build_investigator_hooks(
             "model_used": model_used,
             "total_tokens_consumed": total_tokens,
             "audit_append_failures": _append_failures[0],
+            "finalized_open_hypotheses_abandoned": finalized_count,
         }
         _safe_append(payload, "finish")
         if _append_failures[0] > 0:

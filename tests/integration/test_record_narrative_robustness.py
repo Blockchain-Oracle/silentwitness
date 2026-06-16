@@ -311,7 +311,7 @@ def test_audit_write_failure_preserves_original_rejection(
     _seed_observations(case_dir, ("O-001",))
 
     monkeypatch.setattr(
-        "silentwitness_mcp.findings.narrative.append_jsonl_line",
+        "silentwitness_mcp.findings.narrative.append_chained_jsonl",
         lambda *_a, **_kw: (_ for _ in ()).throw(OSError("audit fail")),
     )
     payload = _valid_payload(section=ReportSection.RECOMMENDATIONS)

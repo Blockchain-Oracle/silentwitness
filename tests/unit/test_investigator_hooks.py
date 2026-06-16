@@ -317,6 +317,34 @@ async def test_after_run_emits_finish_line(tmp_path: Path) -> None:
     assert "history" in snap
 
 
+@pytest.mark.anyio
+async def test_after_run_abandons_open_hypotheses_before_finish_snapshot(tmp_path: Path) -> None:
+    stack = HypothesisStack(case_dir=tmp_path, examiner="aj")
+    budget = BudgetEnforcer()
+    hooks = build_investigator_hooks(tmp_path, "aj", stack, budget)
+    stack.form("If beaconing exists, expect suspicious external C2", SpecialistName.NETWORK)
+    stack.form("If staging exists, expect archive creation traces", SpecialistName.DISK)
+    ctx = _make_ctx(_make_deps(tmp_path, stack, budget))
+
+    mock_result = MagicMock()
+    mock_result.output.model_used = "test-model"
+    mock_result.usage.total_tokens = 500
+
+    await hooks._registry["after_run"][0].func(ctx, result=mock_result)
+
+    final_stack = stack.snapshot()
+    assert final_stack.active is None
+    assert final_stack.queued == ()
+    assert [h.status for h in final_stack.history] == ["ABANDONED", "ABANDONED"]
+
+    finish = _read_jsonl(tmp_path)[0]
+    assert finish["finalized_open_hypotheses_abandoned"] == 2
+    snap = finish["stack_snapshot"]
+    assert snap["active"] is None
+    assert snap["queued"] == []
+    assert [h["status"] for h in snap["history"]] == ["ABANDONED", "ABANDONED"]
+
+
 # ---------------------------------------------------------------------------
 # 7. Full sequence — all JSONL lines parse cleanly
 # ---------------------------------------------------------------------------

@@ -8,6 +8,7 @@ import sys
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model
+from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
@@ -122,6 +123,7 @@ def register_as_investigator_tool(
                 question,
                 deps=specialist_deps,
                 usage=ctx.usage,
+                usage_limits=UsageLimits(request_limit=ctx.deps.request_limit),
             )
         except Exception:
             _LOG.error(

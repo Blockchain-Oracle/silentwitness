@@ -47,11 +47,13 @@ def step_event(input_tokens: int = 1000, output_tokens: int = 500) -> dict[str, 
 def finish_event(
     total_tokens: int = 312_000,
     stack_snapshot: dict[str, Any] | None = None,
+    final_state: str = "COMPLETED",
 ) -> dict[str, Any]:
     ev: dict[str, Any] = {
         "ts": "2026-01-01T00:05:00+00:00",
         "type": "finish",
         "event": "on_finish",
+        "final_state": final_state,
         "total_tokens_consumed": total_tokens,
         "model_used": "claude-sonnet-4-6",
     }

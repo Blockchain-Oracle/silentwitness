@@ -39,6 +39,7 @@ from silentwitness_mcp.index.feeders_evtx import evtx_file_records
 from silentwitness_mcp.index.feeders_jumplist import jumplist_records
 from silentwitness_mcp.index.feeders_lnk import lnk_records
 from silentwitness_mcp.index.feeders_mft import mft_entry_records
+from silentwitness_mcp.index.feeders_pcap import pcap_records
 from silentwitness_mcp.index.feeders_prefetch import prefetch_records
 from silentwitness_mcp.index.feeders_pstranscript import pstranscript_records
 from silentwitness_mcp.index.feeders_registry import registry_hive_records
@@ -55,12 +56,22 @@ _PREPARED = "prepared"
 # Closed set of artifact kinds; a Literal so a typo'd label is a type error, not a
 # silent misroute.
 Kind = Literal[
-    "evtx", "registry", "srum", "mft", "usnjrnl", "prefetch", "lnk", "jumplist", "pstranscript"
+    "evtx",
+    "registry",
+    "srum",
+    "mft",
+    "usnjrnl",
+    "prefetch",
+    "lnk",
+    "jumplist",
+    "pstranscript",
+    "pcap",
 ]
 # Direct artifact-type -> kind mapping.
 _KINDS: dict[EvidenceType, Kind] = {
     EvidenceType.EVTX: "evtx",
     EvidenceType.HIVE: "registry",
+    EvidenceType.PCAP: "pcap",
 }
 # Artifacts registered as OTHER are disambiguated by exact filename.
 _OTHER_BY_NAME: dict[str, Kind] = {
@@ -145,6 +156,7 @@ def _feeder_for(kind: Kind) -> Feeder:
         "lnk": lnk_records,
         "jumplist": jumplist_records,
         "pstranscript": pstranscript_records,
+        "pcap": pcap_records,
     }
     return feeders[kind]
 

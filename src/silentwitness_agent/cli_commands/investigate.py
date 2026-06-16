@@ -29,17 +29,16 @@ from rich.console import Console
 from rich.layout import Layout
 from rich.live import Live
 
+from silentwitness_agent.cli_commands._investigate_runner import _do_agent_run
 from silentwitness_agent.cli_commands._live_layout import build_layout, update_layout
 from silentwitness_agent.cli_commands._live_render import (
     DisplayState,
-    build_display_hooks,
     decay_flash,
     refresh_layout_loop,
     stream_hypothesis_events,
 )
 from silentwitness_agent.config import SilentWitnessConfig
-from silentwitness_common.atomic_io import append_jsonl_line
-from silentwitness_mcp.evidence.registry import EvidenceRegistry
+from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 
 # Held during an active investigation so tests can trigger cancellation.
 _active_agent_task: asyncio.Task[Any] | None = None
@@ -87,7 +86,7 @@ def _emit_sigint_checkpoint(case_dir: Path, step: int) -> None:
     }
     # Best-effort: ValueError (forbidden chars) or OSError (disk) must not abort SIGINT exit.
     with contextlib.suppress(Exception):
-        append_jsonl_line(case_dir / "audit" / "agent.jsonl", json.dumps(payload))
+        append_chained_jsonl(case_dir / "audit" / "agent.jsonl", payload)
 
 
 def _load_checkpoint(case_dir: Path) -> dict[str, Any] | None:
@@ -132,90 +131,6 @@ def _try_start_hud(config: SilentWitnessConfig, err: Console) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Agent run wrapper — all agent construction is here so tests stub at this seam
-# ---------------------------------------------------------------------------
-
-
-async def _do_agent_run(
-    case_dir: Path,
-    examiner: str,
-    *,
-    model: str | None,
-    max_iterations: int,
-    max_tokens: int,
-    state: DisplayState,
-    is_tty: bool,
-    t_start: float,
-) -> Any:  # pragma: no cover — integration-only seam (monkeypatched in tests)
-    """Test seam (monkeypatched in tests to bypass model construction); else builds
-    the investigator, runs it, returns InvestigatorResult."""
-    from pydantic_ai.usage import UsageLimits
-
-    from silentwitness_agent.hooks import build_investigator_hooks
-    from silentwitness_agent.hypothesis.budget import BudgetEnforcer
-    from silentwitness_agent.hypothesis.stack import HypothesisStack
-    from silentwitness_agent.hypothesis_tools import register_hypothesis_tools
-    from silentwitness_agent.investigator import (
-        InvestigatorDeps,
-        InvestigatorResult,
-        build_investigator,
-    )
-    from silentwitness_agent.live_critic import (
-        build_live_critic_hooks,
-        register_pending_critique_instruction,
-    )
-    from silentwitness_agent.specialists._wiring import register_all_specialists
-
-    stack = HypothesisStack(case_dir=case_dir, examiner=examiner)
-    budget = BudgetEnforcer(default_token_budget=max_tokens)
-    audit_hooks = build_investigator_hooks(case_dir, examiner, stack, budget)
-    display_hooks = build_display_hooks(state, is_tty)
-    # Live closed-loop critic: CHALLENGEs route into deps.pending_critiques each turn.
-    critic_hooks = build_live_critic_hooks(case_dir, examiner, model=model)
-    cfg = build_investigator(
-        case_dir,
-        examiner,
-        model=model,
-        max_iterations=max_iterations,
-        hooks=[audit_hooks, display_hooks, critic_hooks],
-    )
-    register_hypothesis_tools(cfg.agent)  # without these the hypothesis wedge stays at zero
-    register_pending_critique_instruction(cfg.agent)
-    register_all_specialists(cfg.agent, model=model, shared_server=cfg.mcp_server)
-    deps = InvestigatorDeps(case_dir=case_dir, examiner=examiner, stack=stack, budget=budget)
-
-    # Surface registered evidence in the opening prompt so the agent doesn't burn
-    # iterations guessing paths that fail registration.
-    evidence_records = EvidenceRegistry(case_dir=case_dir).list_all()
-    evidence_block = (
-        "\n".join(f"- {rec.path} ({rec.type.value})" for rec in evidence_records)
-        or "- (no evidence registered)"
-    )
-    run_result = await cfg.agent.run(
-        f"Investigate case {case_dir.name}.\n\n"
-        "This evidence is parsed into the searchable case index — discover with "
-        f"search_evidence/timeline/get_record (do NOT read raw artifacts):\n{evidence_block}\n\n"
-        "Form your first hypothesis and analyse the evidence by querying the index.",
-        deps=deps,
-        usage_limits=UsageLimits(request_limit=cfg.max_iters),
-    )
-    snap = deps.stack.snapshot()
-    usage = run_result.usage
-    return InvestigatorResult(
-        hypotheses_formed=len(snap.history) + (1 if snap.active else 0),
-        hypotheses_confirmed=sum(1 for h in snap.history if str(h.status).upper() == "CONFIRMED"),
-        hypotheses_pivoted=snap.total_pivot_count,
-        hypotheses_abandoned=sum(1 for h in snap.history if str(h.status).upper() == "ABANDONED"),
-        findings_staged=run_result.output.findings_staged,
-        total_tool_calls=run_result.output.total_tool_calls,
-        total_tokens_consumed=getattr(usage, "total_tokens", 0) or 0,
-        time_elapsed_ms=(time.monotonic() - t_start) * 1000,
-        final_state="COMPLETED",
-        model_used=cfg.model_str,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Core async orchestrator
 # ---------------------------------------------------------------------------
 
@@ -225,7 +140,7 @@ async def _run_async(
     examiner: str,
     *,
     model: str | None,
-    max_iterations: int,
+    max_iterations: int | None,
     max_tokens: int,
     no_color: bool,
     no_hud: bool,
@@ -281,21 +196,25 @@ async def _run_async(
             live = Live(layout, refresh_per_second=4, console=Console(no_color=no_color))
             live.start()
             live_started = True
-            await agent_task
+            result = await agent_task
         else:
             stream_task = asyncio.create_task(stream_hypothesis_events(case_dir))
-            await agent_task
+            result = await agent_task
             # Yield to let the stream task pick up any trailing hypothesis events.
             await asyncio.sleep(0.15)
 
-        return 0
+        return 0 if getattr(result, "final_state", "COMPLETED") == "COMPLETED" else 1
 
     except asyncio.CancelledError:
         _emit_sigint_checkpoint(case_dir, state.step_count)
         return 130
 
-    except UsageLimitExceeded:
-        return 0
+    except UsageLimitExceeded as exc:
+        Console(stderr=True, no_color=no_color).print(
+            f"[red]✗[/red] Investigation hit the configured request limit: {exc}",
+            highlight=False,
+        )
+        return 1
 
     except Exception as exc:
         Console(stderr=True, no_color=no_color).print(
@@ -348,7 +267,7 @@ def run(
     debug: bool,
     *,
     model: str | None,
-    max_iterations: int,
+    max_iterations: int | None,
     max_tokens: int,
     no_hud: bool,
     hud: bool,

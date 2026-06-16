@@ -37,7 +37,7 @@ _BUILDERS = {
     "network": build_network_specialist,
 }
 
-_INVESTIGATE_SRC = Path("src/silentwitness_agent/cli_commands/investigate.py").read_text(
+_INVESTIGATE_SRC = Path("src/silentwitness_agent/cli_commands/_investigate_runner.py").read_text(
     encoding="utf-8"
 )
 
@@ -110,7 +110,10 @@ async def test_dispatch_specialist_runs_and_returns_report(
         confidence_assessment=Confidence.LOW,
     )
 
+    seen_request_limits: list[int | None] = []
+
     async def _fake_run(*_a: object, **_k: object) -> object:
+        seen_request_limits.append(_k["usage_limits"].request_limit)
         return SimpleNamespace(output=report)
 
     monkeypatch.setattr(specialist, "run", _fake_run)
@@ -158,6 +161,8 @@ async def test_dispatch_specialist_runs_and_returns_report(
         examiner="aj",
         stack=HypothesisStack(case_dir=tmp_path, examiner="aj"),
         budget=BudgetEnforcer(),
+        request_limit=123,
     )
     result = await investigator.run("go", deps=deps)
     assert result.output.final_state == "COMPLETED"
+    assert seen_request_limits == [123]

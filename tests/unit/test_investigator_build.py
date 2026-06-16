@@ -107,7 +107,9 @@ def test_factory_honours_max_iters_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_factory_default_max_iters() -> None:
-    assert _DEFAULT_MAX_ITERS == 50
+    assert _DEFAULT_MAX_ITERS is None
+    cfg = build_investigator(Path("sw-test-case"), "tester", model="test")
+    assert cfg.max_iters is None
 
 
 def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -120,13 +122,13 @@ def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPa
 def test_factory_invalid_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "not_a_number")
     with pytest.raises(ValueError, match="SILENTWITNESS_MAX_ITERS"):
-        _parse_max_iters_env(50)
+        _parse_max_iters_env(None)
 
 
 def test_factory_zero_max_iters_env_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("SILENTWITNESS_MAX_ITERS", "0")
     with pytest.raises(ValueError, match="must be >= 1"):
-        _parse_max_iters_env(50)
+        _parse_max_iters_env(None)
 
 
 # ---------------------------------------------------------------------------
@@ -197,6 +199,7 @@ def test_investigator_deps_has_expected_fields() -> None:
         "budget",
         "pending_critiques",
         "coverage_gate_attempts",
+        "request_limit",
     }
     assert set(InvestigatorDeps.model_fields) == expected
 

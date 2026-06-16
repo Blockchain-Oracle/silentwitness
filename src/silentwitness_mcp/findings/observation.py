@@ -19,8 +19,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from silentwitness_common.atomic_io import append_jsonl_line
 from silentwitness_common.types import AuditEntry, CitedSpan, ToolResponse
+from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 from silentwitness_mcp.audit.logger import AuditLogger
 from silentwitness_mcp.findings._id_gen import allocate_observation_id
 from silentwitness_mcp.findings._scrub import scrub_line_terminators
@@ -124,7 +124,7 @@ class _JsonlStripWriter(StripEventWriter):
         self._path = sanitizer_log
 
     def emit(self, event: StripEvent) -> None:
-        append_jsonl_line(self._path, event.model_dump_json())
+        append_chained_jsonl(self._path, json.loads(event.model_dump_json()))
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +356,7 @@ def _write_audit_row(
         model_token_count={},
     )
     findings_log.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(findings_log, entry.model_dump_json())
+    append_chained_jsonl(findings_log, json.loads(entry.model_dump_json()))
 
 
 def _wrap_envelope(

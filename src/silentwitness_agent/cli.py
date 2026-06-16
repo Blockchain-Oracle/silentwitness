@@ -159,7 +159,7 @@ def investigate(
     ctx: typer.Context,
     case_id: str = typer.Argument(...),
     model: str | None = typer.Option(None, "--model"),
-    max_iterations: int = typer.Option(50, "--max-iterations"),
+    max_iterations: int | None = typer.Option(None, "--max-iterations"),
     max_tokens: int = typer.Option(800_000, "--max-tokens"),
     specialist: list[str] | None = typer.Option(None, "--specialist"),
     resume: bool = typer.Option(False, "--resume"),

@@ -53,6 +53,10 @@ def test_categorize_known_prefixes() -> None:
     assert categorize("lnk") == "user_activity"
     assert categorize("jumplist:auto") == "user_activity"
     assert categorize("srum:network_usage") == "user_activity"
+    # Network evidence
+    assert categorize("zeek:conn") == "network"
+    assert categorize("zeek:dns") == "network"
+    assert categorize("zeek:http") == "network"
     # Detection (Sigma — any severity bucket)
     assert categorize("sigma:critical") == "detection"
     assert categorize("sigma:high") == "detection"

@@ -29,7 +29,7 @@ from silentwitness_mcp._case_env import build_server_env
 _LOG = logging.getLogger(__name__)
 
 _DEFAULT_MODEL = "anthropic:claude-opus-4-7"
-_DEFAULT_MAX_ITERS = 50
+_DEFAULT_MAX_ITERS: int | None = None
 # How many times the coverage gate may bounce the agent back before it is allowed to
 # finalize regardless — so a genuinely-unanswerable question can't deadlock the run. Each
 # bounce consumes one of the Agent ``retries`` below, which is SHARED with tool-call and
@@ -67,6 +67,10 @@ class InvestigatorDeps(BaseModel):
     # validator); capped at _MAX_COVERAGE_GATE_ATTEMPTS so an unanswerable question
     # can't deadlock the agent.
     coverage_gate_attempts: int = 0
+    # Shared Pydantic-AI request cap for nested specialist calls. None disables
+    # Pydantic's own default cap, which is otherwise 50 and can terminate long IR
+    # runs inside a specialist even when the outer investigator was configured higher.
+    request_limit: int | None = None
 
 
 class InvestigatorResult(BaseModel):
@@ -90,7 +94,7 @@ class InvestigatorResult(BaseModel):
 class _AgentConfig:
     agent: Agent[InvestigatorDeps, InvestigatorResult]
     model_str: str
-    max_iters: int
+    max_iters: int | None
     # The investigator's MCP server, exposed so specialists can SHARE it (one
     # subprocess, one AuditLogger). pydantic-ai's MCPServer is ref-counted, so
     # nested specialist runs reuse the same session instead of spawning a second
@@ -100,7 +104,7 @@ class _AgentConfig:
     mcp_server: MCPServerStdio
 
 
-def _parse_max_iters_env(default: int) -> int:
+def _parse_max_iters_env(default: int | None) -> int | None:
     """Read SILENTWITNESS_MAX_ITERS; raises ValueError with a diagnostic message on bad input."""
     raw = os.environ.get("SILENTWITNESS_MAX_ITERS")
     if raw is None:
@@ -110,7 +114,7 @@ def _parse_max_iters_env(default: int) -> int:
     except ValueError:
         raise ValueError(
             f"investigator: SILENTWITNESS_MAX_ITERS={raw!r} is not a valid integer; "
-            f"set it to a positive integer (e.g. {default}) or unset it."
+            "set it to a positive integer (e.g. 200) or unset it for no request cap."
         ) from None
     if value < 1:
         raise ValueError(f"investigator: SILENTWITNESS_MAX_ITERS={value} must be >= 1.")
@@ -168,7 +172,7 @@ def build_investigator(
     max_iters = (
         max_iterations if max_iterations is not None else _parse_max_iters_env(_DEFAULT_MAX_ITERS)
     )
-    if max_iters < 1:
+    if max_iters is not None and max_iters < 1:
         raise ValueError(f"max_iterations must be >= 1, got {max_iters}")
 
     resolved_model = _resolve_model(model_str)
@@ -258,6 +262,7 @@ async def investigate(
         examiner=examiner,
         stack=stack,
         budget=budget,
+        request_limit=cfg.max_iters,
     )
 
     t_start = time.monotonic()

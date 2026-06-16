@@ -246,6 +246,18 @@ def test_status_investigating_state(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert "INVESTIGATING" in result.output
 
 
+def test_status_reports_terminal_non_completed_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Given a finish event with MAX_ITERATIONS, status does not call it COMPLETED."""
+    case_dir = init_case(tmp_path, "mr-max-iterations-001", monkeypatch)
+    write_agent_jsonl(case_dir, [finish_event(final_state="MAX_ITERATIONS")])
+    result = runner.invoke(app, ["status", "mr-max-iterations-001"], catch_exceptions=False)
+    assert result.exit_code == 0
+    assert "MAX_ITERATIONS" in result.output
+    assert "COMPLETED" not in result.output
+
+
 # 12. ABORTED status on sigint_checkpoint
 
 

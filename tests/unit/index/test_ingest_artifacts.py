@@ -38,6 +38,7 @@ from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
         (EvidenceType.OTHER, "PowerShell_transcript.HOST.log", None),  # right prefix, wrong ext
         (EvidenceType.OTHER, "notes.txt", None),  # plain .txt is not a transcript
         (EvidenceType.OTHER, "UsrClass.dat", None),  # unmapped OTHER -> not ingested
+        (EvidenceType.PCAP, "nitroba.pcap", "pcap"),
         (EvidenceType.DISK_IMAGE, "img.e01", None),  # plaso path, not a targeted feeder
     ],
 )
@@ -106,6 +107,19 @@ def test_evtx_and_hive_dispatched_and_counted(
         assert result.counts == {"evtx": 2, "registry": 1}
         assert result.failures == []
         assert idx.count() == 3
+
+
+def test_pcap_dispatched_and_counted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ingest_artifacts, "pcap_records", _one_record_feeder("zeek:conn"))
+    registry = _FakeRegistry([_Rec(EvidenceType.PCAP, Path("/evidence/nitroba.pcap"))])
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        result = ingest_prepared_artifacts(
+            registry, idx, audit_id="sift-a-1", host="nitroba", max_workers=1
+        )
+        idx.rebuild_fts()
+        assert result.counts == {"pcap": 1}
+        assert result.failures == []
+        assert idx.count() == 1
 
 
 def test_feeder_error_on_one_artifact_is_skipped_and_recorded(

@@ -29,7 +29,7 @@ from silentwitness_agent.contradiction_detectors import run_contradiction_detect
 from silentwitness_agent.critic import CriticReport, CriticVerdictRecord, StagedFinding, critique
 from silentwitness_agent.critic_trigger import CriticTrigger
 from silentwitness_agent.investigator import InvestigatorDeps
-from silentwitness_common.atomic_io import append_jsonl_line
+from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 
 _LOG = logging.getLogger(__name__)
 
@@ -57,17 +57,15 @@ def _audit_critic_error(case_dir: Path, examiner: str) -> None:
     log = case_dir / _CRITIC_JSONL
     log.parent.mkdir(parents=True, exist_ok=True)
     with contextlib.suppress(Exception):
-        append_jsonl_line(
+        append_chained_jsonl(
             log,
-            json.dumps(
-                {
-                    "type": "critic_error",
-                    "reason": "LLM critique failed; deterministic detectors only",
-                    "examiner": examiner,
-                    "ts": datetime.now(UTC).isoformat(),
-                    "phase": "investigate",
-                }
-            ),
+            {
+                "type": "critic_error",
+                "reason": "LLM critique failed; deterministic detectors only",
+                "examiner": examiner,
+                "ts": datetime.now(UTC).isoformat(),
+                "phase": "investigate",
+            },
         )
 
 
@@ -106,20 +104,18 @@ def route_live_verdicts(
     # raises before any pending_critiques mutation, so the in-memory list never
     # disagrees with the audit log.
     for v in verdicts:
-        append_jsonl_line(
+        append_chained_jsonl(
             critic_log,
-            json.dumps(
-                {
-                    "type": v.verdict.lower(),
-                    "finding_id": v.finding_id,
-                    "reason": v.reason,
-                    "suggested_revision": v.suggested_revision,
-                    "missing_corroboration": v.missing_corroboration,
-                    "examiner": examiner,
-                    "ts": ts,
-                    "phase": "investigate",
-                }
-            ),
+            {
+                "type": v.verdict.lower(),
+                "finding_id": v.finding_id,
+                "reason": v.reason,
+                "suggested_revision": v.suggested_revision,
+                "missing_corroboration": v.missing_corroboration,
+                "examiner": examiner,
+                "ts": ts,
+                "phase": "investigate",
+            },
         )
     # Phase 2: push CHALLENGEs the agent hasn't already been told about (dedupe by
     # finding_id so a re-reviewed window doesn't stack duplicates).

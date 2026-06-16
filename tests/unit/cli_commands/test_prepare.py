@@ -14,6 +14,7 @@ import pytest
 
 from silentwitness_agent.cli_commands.prepare import _artifact_evidence_type, run
 from silentwitness_common.types import EvidenceType
+from silentwitness_mcp.evidence.registry import EvidenceRegistry
 
 
 @pytest.mark.parametrize(
@@ -43,3 +44,16 @@ def test_run_returns_1_when_nothing_registered(tmp_path: Path) -> None:
     case_dir.mkdir(parents=True)
     code = run(case_dir, "c1", examiner="examiner", no_color=True)
     assert code == 1
+
+
+def test_run_returns_0_for_pcap_only_case(tmp_path: Path) -> None:
+    """PCAP indexing is handled by the index phase, so prepare is a successful no-op."""
+    case_dir = tmp_path / "cases" / "nitroba"
+    case_dir.mkdir(parents=True)
+    pcap = tmp_path / "nitroba.pcap"
+    pcap.write_bytes(b"pcap")
+    EvidenceRegistry(case_dir).register(pcap, EvidenceType.PCAP, "sift-examiner-20260616-001")
+
+    code = run(case_dir, "nitroba", examiner="examiner", no_color=True)
+
+    assert code == 0

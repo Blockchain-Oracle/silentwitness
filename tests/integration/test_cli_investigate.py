@@ -303,11 +303,11 @@ def test_resume_with_checkpoint_exits_0(tmp_path: Path, monkeypatch: pytest.Monk
 
 
 # ---------------------------------------------------------------------------
-# 10. Budget exhaustion (UsageLimitExceeded) — clean exit 0
+# 10. Request-limit exhaustion (UsageLimitExceeded) — non-zero exit
 # ---------------------------------------------------------------------------
 
 
-def test_budget_exhaustion_exits_0(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_request_limit_exhaustion_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _init_case(tmp_path, "i010", monkeypatch)
 
     async def _budget_exceeded_stub(case_dir: Path, examiner: str, **kwargs: Any) -> Any:
@@ -320,7 +320,8 @@ def test_budget_exhaustion_exits_0(tmp_path: Path, monkeypatch: pytest.MonkeyPat
         _budget_exceeded_stub,
     )
     result = runner.invoke(app, ["investigate", "i010"], catch_exceptions=False)
-    assert result.exit_code == 0
+    assert result.exit_code == 1
+    assert "request limit" in result.stderr.lower()
 
 
 # ---------------------------------------------------------------------------

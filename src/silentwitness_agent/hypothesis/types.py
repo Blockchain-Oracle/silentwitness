@@ -118,7 +118,8 @@ class HypothesisEvent(BaseModel):
     """Immutable audit record emitted to ``audit/hypothesis.jsonl`` per transition.
 
     Schema matches architecture §5.3 verbatim — ``model_dump_json()`` output
-    is the JSONL line; ``model_validate_json`` reads it back losslessly.
+    is the domain JSONL payload. Chained audit metadata is accepted on read and
+    excluded on dump so strict domain callers can parse persisted rows.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True, str_strip_whitespace=True)
@@ -130,6 +131,8 @@ class HypothesisEvent(BaseModel):
     related_audit_ids: tuple[str, ...] = Field(default_factory=tuple)
     tokens_spent: int = Field(default=0, ge=0)
     steps_spent: int = Field(default=0, ge=0)
+    prev_record_hash: str | None = Field(default=None, exclude=True)
+    record_hash: str | None = Field(default=None, exclude=True)
 
 
 def make_hypothesis_id(seq: int) -> str:

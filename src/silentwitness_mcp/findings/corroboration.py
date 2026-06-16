@@ -76,6 +76,9 @@ _SOURCE_CATEGORY: Final[dict[str, str]] = {
     "lnk": "user_activity",
     "jumplist": "user_activity",
     "srum": "user_activity",
+    # Network evidence. Zeek logs are emitted by the PCAP feeder as
+    # zeek:conn / zeek:dns / zeek:http / ...
+    "zeek": "network",
     # Detection layer (Sigma) — single category regardless of severity bucket
     "sigma": "detection",
     # Plaso super-timeline breadth

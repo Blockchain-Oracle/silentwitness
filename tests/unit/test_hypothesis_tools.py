@@ -59,7 +59,9 @@ def test_coerce_specialist_rejects_unknown_with_helpful_error() -> None:
 def test_live_investigate_path_registers_hypothesis_tools() -> None:
     # Guard against the wiring being dropped again: the live runner module must
     # import and call register_hypothesis_tools.
-    src = Path("src/silentwitness_agent/cli_commands/investigate.py").read_text(encoding="utf-8")
+    src = Path("src/silentwitness_agent/cli_commands/_investigate_runner.py").read_text(
+        encoding="utf-8"
+    )
     assert "register_hypothesis_tools" in src
     assert "register_hypothesis_tools(cfg.agent)" in src
 

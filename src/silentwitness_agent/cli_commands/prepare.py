@@ -73,13 +73,20 @@ def run(case_dir: Path, case_id: str, *, examiner: str, no_color: bool) -> int:
         if r.type in (EvidenceType.MEMORY_DUMP, EvidenceType.OTHER)
         and r.path.suffix.lower() in _ARCHIVE_SUFFIXES
     ]
-    if not images and not archives:
+    if not records:
         err.print(
             "[yellow]⚠[/yellow] nothing to prepare: no DISK_IMAGE or compressed "
             "archive is registered (run register-evidence first)",
             highlight=False,
         )
         return 1
+    if not images and not archives:
+        out.print(
+            "[green]✓[/green] nothing to prepare: registered evidence does not require "
+            "artifact extraction",
+            highlight=False,
+        )
+        return 0
 
     # Lazy: only import the dfVFS-backed mechanics once there is real work, so
     # this module imports on machines lacking the forensic C-extension stack.

@@ -22,13 +22,14 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
 
-from silentwitness_common.atomic_io import append_jsonl_line, write_json_atomic
+from silentwitness_common.atomic_io import write_json_atomic
 from silentwitness_common.types import (
     AuditEntry,
     Confidence,
     LedgerItemType,
     ToolResponse,
 )
+from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 from silentwitness_mcp.audit.ledger import (
     HMACLedger,
     InterpretationParts,
@@ -39,6 +40,7 @@ from silentwitness_mcp.audit.ledger import (
     ObservationParts,
 )
 from silentwitness_mcp.audit.logger import AuditLogger
+from silentwitness_mcp.findings._approval_envelope import wrap_approval_envelope
 from silentwitness_mcp.findings._approval_store import (
     CaseSaltMalformedError,
     findings_lock,
@@ -226,7 +228,13 @@ def approve_finding(
                 reason=ApproveRejectReason.FINDINGS_STORE_UNWRITABLE,
                 context=preserved,
             )
-    return _wrap_envelope(result, audit_id=pre_audit_id, examiner=audit_logger.examiner)
+    return wrap_approval_envelope(
+        result,
+        audit_id=pre_audit_id,
+        examiner=audit_logger.examiner,
+        success=result.success,
+        advisory=str(result.reason) if result.reason else None,
+    )
 
 
 def _run_pipeline(
@@ -374,22 +382,7 @@ def _write_audit_row(
         model_token_count={},
     )
     findings_log.parent.mkdir(parents=True, exist_ok=True)
-    append_jsonl_line(findings_log, entry.model_dump_json())
-
-
-def _wrap_envelope(
-    result: ApproveResult, *, audit_id: str, examiner: str
-) -> ToolResponse[ApproveResult]:
-    from silentwitness_mcp.envelope import make_empty_provenance
-
-    return ToolResponse[ApproveResult](
-        success=True,
-        data=result,
-        audit_id=audit_id,
-        examiner=examiner,
-        advisories=() if result.success else (str(result.reason),),
-        data_provenance=make_empty_provenance("approve_finding"),
-    )
+    append_chained_jsonl(findings_log, json.loads(entry.model_dump_json()))
 
 
 __all__ = [
