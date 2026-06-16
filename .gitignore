@@ -21,9 +21,14 @@ coverage.xml
 *.cover
 
 # Project-specific
-cases/                      # per-case audit/evidence/report — never committed
-var/lib/silentwitness/      # HMAC verification ledgers — never committed
-harness/datasets/*.E01      # binary forensic images — manifests are committed, binaries are not
+# Per-case audit/evidence/report — never committed.
+cases/
+# Local evidence corpora copied to VPS/workstations for demo runs.
+evidence/
+# HMAC verification ledgers — never committed.
+var/lib/silentwitness/
+# Binary forensic images — manifests are committed, binaries are not.
+harness/datasets/*.E01
 harness/datasets/*.E0[2-9]
 harness/datasets/*.pcap
 harness/datasets/*.zip
@@ -31,8 +36,17 @@ harness/datasets/*.tar
 harness/datasets/*.tgz
 harness/datasets/*.dmg
 harness/datasets/*.iso
-harness/results/             # benchmark output — committed per-release only
-harness/case-trapdoor/output/   # synthetic adversary case (Epic 15 CUT — never used)
+# Benchmark output — committed per-release only.
+harness/results/
+# Synthetic adversary case (Epic 15 CUT — never used).
+harness/case-trapdoor/output/
+
+# VPS/demo run logs.
+vps-verification-*/
+log2timeline*.log.gz
+pinfo*.log.gz
+psort*.log.gz
+rocba-live*.log
 
 # SBOM + license artifacts (generated)
 sbom.cdx.json
