@@ -29,7 +29,8 @@ rules (observation = text|sorted(audit_ids), interpretation =
 obs_id|text|conf, finding = obs_bytes\\x00interp_bytes) so the signer
 (Epic 4 ``approve_finding`` tool) and the verifier (Epic 12 CLI
 ``silentwitness verify``) compose IDENTICAL bytes. Composer functions
-reject fields containing the separator chars (``|``, ``,``, ``\\x00``) so
+reject fields containing the separator chars for their specific position
+(``|`` / ``\\x00`` in text fields, plus ``,`` in comma-joined audit IDs) so
 two semantically distinct inputs cannot collapse to the same canonical
 bytes.
 
@@ -60,7 +61,8 @@ _DERIVED_KEY_BYTES: Final = 32
 _LEDGER_DIR_MODE: Final = 0o700
 _LEDGER_FILE_MODE: Final = 0o600
 _PRF: Final = "sha256"
-_COMPOSER_FORBIDDEN: Final = frozenset({"\x00", "|", ","})
+_FIELD_FORBIDDEN: Final = frozenset({"\x00", "|"})
+_AUDIT_ID_FORBIDDEN: Final = frozenset({"\x00", "|", ","})
 
 
 class LedgerError(Exception):
@@ -85,7 +87,7 @@ class LedgerCorruptionError(LedgerError, ValueError):
 
 
 class LedgerCompositionError(LedgerError, ValueError):
-    """Raised when a composer input contains a separator char (``|``, ``,``, NUL).
+    """Raised when a composer input contains a separator char.
 
     Architecture §4.9's stringly-typed separators are collision-prone if a
     field contains the separator. The composer rejects such inputs rather
@@ -116,8 +118,13 @@ class InterpretationParts:
     confidence: Confidence
 
 
-def _check_no_separator(value: str, field_name: str) -> None:
-    forbidden = _COMPOSER_FORBIDDEN & set(value)
+def _check_no_separator(
+    value: str,
+    field_name: str,
+    *,
+    forbidden_chars: frozenset[str] = _FIELD_FORBIDDEN,
+) -> None:
+    forbidden = forbidden_chars & set(value)
     if forbidden:
         codes = ", ".join(f"\\u{ord(c):04x}" for c in sorted(forbidden))
         raise LedgerCompositionError(
@@ -131,10 +138,10 @@ class LedgerComposer:
 
     Both signer (Epic 4 ``approve_finding``) and verifier (Epic 12 CLI
     ``silentwitness verify``) call these to produce IDENTICAL bytes. Drift
-    is impossible if both sides import the same function. Each composer
-    rejects fields containing ``|``, ``,``, or NUL — these are the
-    architecture §4.9 separators, and ambiguity in the canonical form is
-    the only thing standing between a valid HMAC and a forged claim.
+    is impossible if both sides import the same function. Text fields reject
+    ``|`` and NUL. Audit IDs additionally reject ``,`` because the IDs are
+    comma-joined. Commas in evidence prose are safe because they are not field
+    delimiters.
     """
 
     @staticmethod
@@ -142,7 +149,11 @@ class LedgerComposer:
         """``text + "|" + sorted(audit_ids).join(",")`` per architecture §4.9."""
         _check_no_separator(parts.text, "ObservationParts.text")
         for aid in parts.audit_ids:
-            _check_no_separator(aid, "ObservationParts.audit_ids[]")
+            _check_no_separator(
+                aid,
+                "ObservationParts.audit_ids[]",
+                forbidden_chars=_AUDIT_ID_FORBIDDEN,
+            )
         joined = ",".join(sorted(parts.audit_ids))
         return f"{parts.text}|{joined}".encode()
 

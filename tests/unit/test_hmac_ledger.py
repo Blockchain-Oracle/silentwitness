@@ -298,10 +298,10 @@ def test_compose_finding_joins_with_nul() -> None:
     assert LedgerComposer.finding(obs, interp) == b"ran|a\x00O-1|bad|MEDIUM"
 
 
-@pytest.mark.parametrize("forbidden", ["|", ",", "\x00"])
+@pytest.mark.parametrize("forbidden", ["|", "\x00"])
 def test_compose_observation_rejects_separator_in_text(forbidden: str) -> None:
-    """Silent-failure C2: ``|`` / ``,`` / NUL in text would let two distinct
-    inputs collapse to the same canonical bytes — the composer rejects."""
+    """Silent-failure C2: ``|`` / NUL in text would let two distinct inputs
+    collapse to the same canonical bytes — the composer rejects."""
     parts = ObservationParts(text=f"a{forbidden}b", audit_ids=("a",))
     with pytest.raises(LedgerCompositionError, match="separator"):
         LedgerComposer.observation(parts)
@@ -314,7 +314,7 @@ def test_compose_observation_rejects_separator_in_audit_id(forbidden: str) -> No
         LedgerComposer.observation(parts)
 
 
-@pytest.mark.parametrize("forbidden", ["|", ",", "\x00"])
+@pytest.mark.parametrize("forbidden", ["|", "\x00"])
 def test_compose_interpretation_rejects_separator(forbidden: str) -> None:
     parts = InterpretationParts(
         observation_id="O-1", text=f"a{forbidden}b", confidence=Confidence.HIGH
