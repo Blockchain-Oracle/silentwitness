@@ -57,17 +57,27 @@ export SILENTWITNESS_MODEL=anthropic:claude-sonnet-4-6
 ## Investigate
 
 ```bash
-silentwitness init mr-evil-001 --examiner "$USER"
-silentwitness register-evidence mr-evil-001 /evidence/hacking-case
-silentwitness prepare mr-evil-001
-silentwitness index mr-evil-001
-silentwitness investigate mr-evil-001
-silentwitness review mr-evil-001                  # list staged findings
-silentwitness review mr-evil-001 --finding-id F-001
-silentwitness approve mr-evil-001 F-001
-silentwitness verify --audit-chain mr-evil-001    # tamper check
-silentwitness export mr-evil-001 --md
+# 1) Pick and download a starter case from the SilentWitness catalog.
+silentwitness starter-cases catalog
+silentwitness starter-cases catalog "Standard Forensic Case"
+silentwitness starter-cases download "Standard Forensic Case" /evidence/rocba
+
+# 2) Register, prepare, index, investigate, review, and export.
+silentwitness init rocba --examiner "$USER"
+silentwitness register-evidence rocba /evidence/rocba
+silentwitness prepare rocba
+silentwitness index rocba
+silentwitness investigate rocba
+silentwitness review rocba                  # list staged findings
+silentwitness review rocba --finding-id F-001
+silentwitness approve rocba F-001
+silentwitness verify --audit-chain rocba    # tamper check
+silentwitness export rocba --md
 ```
+
+The starter-case download is idempotent and resumable. If you already mounted or
+copied evidence into `/evidence`, skip the `starter-cases download` line and pass
+that existing file or folder path to `register-evidence`.
 
 Repeat `review --finding-id ...` and `approve ...` for each finding you accept. The approval
 password is a case signing password for the HMAC ledger, not your OS/root password.
@@ -76,6 +86,7 @@ password is a case signing password for the HMAC ledger, not your OS/root passwo
 
 | Command | Meaning |
 |---|---|
+| `starter-cases catalog/download` | Lists the official starter-case catalog and downloads a selected case into `/evidence` with resumable, idempotent transfers. |
 | `init` | Creates `cases/<case-id>/`, the empty report, audit directory, evidence registry, and case metadata. |
 | `register-evidence` | Adds the evidence file or folder to the case, records its hash, classifies its type, and blocks unsafe writable evidence mounts. |
 | `prepare` | Extracts the artifacts SilentWitness needs from the registered evidence without modifying the original image. |
@@ -86,15 +97,15 @@ password is a case signing password for the HMAC ledger, not your OS/root passwo
 | `verify --audit-chain` | Rechecks the audit JSONL hash chains so tampering is visible. |
 | `export` | Prints the final `report.md` path or renders `--pdf`. IOC sidecars run only when `--ioc-format` is requested. |
 
-That's the full workflow. The report drops at `cases/mr-evil-001/report.md`
+That's the full workflow. The report drops at `cases/rocba/report.md`
 with inline `[verify:audit_id]` links resolving to JSONL audit entries.
 
 After export, inspect:
 
 ```bash
-cat cases/mr-evil-001/report.md
-cat cases/mr-evil-001/findings.json | jq '.[] | select(.status == "APPROVED")'
-ls cases/mr-evil-001/audit/*.jsonl
+cat cases/rocba/report.md
+cat cases/rocba/findings.json | jq '.[] | select(.status == "APPROVED")'
+ls cases/rocba/audit/*.jsonl
 ```
 
 For GitHub-clickable report, findings JSON, audit JSONL, and ledger examples,

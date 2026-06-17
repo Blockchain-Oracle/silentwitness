@@ -90,17 +90,27 @@ the end, including parser imports, `log2timeline`, `psort`, and the spaCy entity
 After install + at least one LLM API key exported:
 
 ```bash
-silentwitness init mr-evil-001 --examiner "$USER"
-silentwitness register-evidence mr-evil-001 /evidence/hacking-case
-silentwitness prepare mr-evil-001
-silentwitness index mr-evil-001
-silentwitness investigate mr-evil-001
-silentwitness review mr-evil-001                    # list staged findings
-silentwitness review mr-evil-001 --finding-id F-001 # inspect one finding in detail
-silentwitness approve mr-evil-001 F-001             # accept it into report material
-silentwitness verify --audit-chain mr-evil-001      # tamper-evident audit trail
-silentwitness export mr-evil-001 --md
+# 1) Pick and download a starter case from the SilentWitness catalog.
+silentwitness starter-cases catalog
+silentwitness starter-cases catalog "Standard Forensic Case"
+silentwitness starter-cases download "Standard Forensic Case" /evidence/rocba
+
+# 2) Register, prepare, index, investigate, review, and export.
+silentwitness init rocba --examiner "$USER"
+silentwitness register-evidence rocba /evidence/rocba
+silentwitness prepare rocba
+silentwitness index rocba
+silentwitness investigate rocba
+silentwitness review rocba                    # list staged findings
+silentwitness review rocba --finding-id F-001 # inspect one finding in detail
+silentwitness approve rocba F-001             # accept it into report material
+silentwitness verify --audit-chain rocba      # tamper-evident audit trail
+silentwitness export rocba --md
 ```
+
+The starter-case download is idempotent and resumable. If you already mounted or
+copied evidence into `/evidence`, skip the `starter-cases download` line and pass
+that existing file or folder path to `register-evidence`.
 
 Repeat `review --finding-id ...` and `approve ...` for each staged finding you accept. The approval
 prompt asks for a case signing password, not your OS/root password. Reuse the same signing password
@@ -110,6 +120,7 @@ for every approval in that case so `silentwitness verify` can reconcile the HMAC
 
 | Command | What it does |
 |---|---|
+| `starter-cases catalog/download` | Lists the official starter-case catalog and downloads a selected case into `/evidence` with resumable, idempotent transfers. |
 | `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
 | `register-evidence` | Records an evidence file or starter-case folder, classifies artifact types, computes hashes, and refuses unsafe writable evidence mounts. |
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
