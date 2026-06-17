@@ -38,7 +38,7 @@ class FindingsSnapshot:
 
 @dataclasses.dataclass(frozen=True)
 class BudgetSnapshot:
-    """Point-in-time budget headroom from the active hypothesis."""
+    """Point-in-time budget headroom from an active hypothesis or the run."""
 
     tokens_remaining: int
     steps_remaining: int

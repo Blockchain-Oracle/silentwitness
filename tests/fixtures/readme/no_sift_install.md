@@ -10,6 +10,6 @@
 docker compose up -d
 ```
 
-![Architecture](docs/diagrams/architecture.svg)
+![Architecture](assets/brand/diagram-A-architecture.png)
 
 MIT

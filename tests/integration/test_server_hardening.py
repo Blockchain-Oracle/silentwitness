@@ -100,8 +100,20 @@ def test_guard_mount_uses_mount_failure_reason_default_for_bad_mount() -> None:
     )
     ctx = _ctx_with_lifespan(lifespan_context=bad_ctx)
     with pytest.raises(MountValidationError) as exc_info:
-        _guard_mount("record_observation", ctx)
+        _guard_mount("register_evidence", ctx)
     assert exc_info.value.reason == "MOUNT_NOT_RO_NOEXEC_NOSUID"
+
+
+def test_guard_mount_allows_record_observation_on_bad_mount() -> None:
+    """record_observation cites rows from index.db and writes case findings;
+    it must not depend on raw /evidence mount posture after indexing."""
+    bad_ctx = AppContext(
+        mount=MountCheckResult(ok=False, advisories=["missing ro"]),
+        evidence_root=DEFAULT_EVIDENCE_ROOT,
+        injection_pattern_count=1,
+    )
+    ctx = _ctx_with_lifespan(lifespan_context=bad_ctx)
+    _guard_mount("record_observation", ctx)
 
 
 # ---------------------------------------------------------------------------

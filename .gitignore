@@ -106,3 +106,5 @@ AGENTS.md
 .private/
 *.original.md
 .vercel
+
+.kite-passport/

@@ -19,7 +19,7 @@ def test_anthropic_provider_selected_by_model_string(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """SILENTWITNESS_MODEL=anthropic:... routes through the Anthropic provider."""
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-sonnet-4-6")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "fake-key-for-construction")
 
     cfg = build_investigator(
@@ -27,7 +27,7 @@ def test_anthropic_provider_selected_by_model_string(
         "tester",
     )
 
-    assert cfg.model_str == "anthropic:claude-opus-4-7"
+    assert cfg.model_str == "anthropic:claude-sonnet-4-6"
     assert "anthropic" in repr(cfg.agent.model).lower()
 
 
@@ -35,7 +35,7 @@ def test_openai_provider_selected_by_model_string(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """SILENTWITNESS_MODEL=openai:... routes through the OpenAI provider."""
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5-mini")
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-construction")
 
     cfg = build_investigator(
@@ -43,5 +43,5 @@ def test_openai_provider_selected_by_model_string(
         "tester",
     )
 
-    assert cfg.model_str == "openai:gpt-5"
+    assert cfg.model_str == "openai:gpt-5-mini"
     assert "openai" in repr(cfg.agent.model).lower()

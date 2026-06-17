@@ -99,12 +99,12 @@ def test_default_model_constant_is_haiku() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 5. High-quality model constant is opus
+# 5. High-quality model constant is Sonnet
 # ---------------------------------------------------------------------------
 
 
-def test_high_quality_model_constant_is_opus() -> None:
-    assert _HIGH_QUALITY_MODEL == "anthropic:claude-opus-4-7"
+def test_high_quality_model_constant_is_sonnet() -> None:
+    assert _HIGH_QUALITY_MODEL == "anthropic:claude-sonnet-4-6"
 
 
 # ---------------------------------------------------------------------------
@@ -132,11 +132,11 @@ def test_factory_explicit_model_overrides_env(monkeypatch: pytest.MonkeyPatch) -
 
 
 # ---------------------------------------------------------------------------
-# 8. SILENTWITNESS_MODEL_QUALITY=high → model name contains "opus"
+# 8. SILENTWITNESS_MODEL_QUALITY=high → model name contains "sonnet"
 # ---------------------------------------------------------------------------
 
 
-def test_factory_quality_high_resolves_to_opus(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_factory_quality_high_resolves_to_sonnet(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("SILENTWITNESS_SPECIALIST_MODEL_NETWORK", raising=False)
     monkeypatch.setenv("SILENTWITNESS_MODEL_QUALITY", "high")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test")
@@ -144,7 +144,7 @@ def test_factory_quality_high_resolves_to_opus(monkeypatch: pytest.MonkeyPatch) 
 
     model = _resolve_specialist_model(None)
     assert hasattr(model, "model_name"), f"unexpected model type {type(model)}"
-    assert "opus" in model.model_name  # type: ignore[union-attr]
+    assert "sonnet" in model.model_name  # type: ignore[union-attr]
 
 
 # ---------------------------------------------------------------------------

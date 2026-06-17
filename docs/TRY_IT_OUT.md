@@ -51,8 +51,8 @@ Illustrative panel layout — the real rich layout is column-split (HYPOTHESIS S
 │        dispatch → log specialist       │ │                                │
 └────────────────────────────────────────┘ └────────────────────────────────┘
 ┌─ FINDINGS ──────────┐ ┌─ BUDGET ────────────┐ ┌─ LAST EVENT ─────────────┐
-│ staged: 1           │ │ tokens: 142k/800k   │ │ vol_pslist OK            │
-│ tool calls: 14      │ │ steps: 14/50        │ │ 4.2s, sha 11f9c283…      │
+│ staged: 1           │ │ tokens: 142k/6M     │ │ vol_pslist OK            │
+│ tool calls: 14      │ │ steps: 14/80        │ │ 4.2s, sha 11f9c283…      │
 │ elapsed: 47s        │ │                     │ │                          │
 └─────────────────────┘ └─────────────────────┘ └──────────────────────────┘
 ```
@@ -106,7 +106,7 @@ services:
       - silentwitness-ledger:/var/lib/silentwitness
     environment:
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-      - SILENTWITNESS_MODEL=anthropic:claude-opus-4-7
+      - SILENTWITNESS_MODEL=anthropic:claude-sonnet-4-6
 
 volumes:
   silentwitness-ledger: {driver: local}
@@ -128,9 +128,9 @@ volumes:
 `SILENTWITNESS_MODEL` selects the provider + model. All four are CI-tested via `tests/integration/test_investigator_provider_switch.py`:
 
 ```bash
-export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"        # default; recommended for the demo
-export SILENTWITNESS_MODEL="openai:gpt-5"                          # alternative — chat-completions API
-export SILENTWITNESS_MODEL="google-gla:gemini-2.5-pro"             # alternative
+export SILENTWITNESS_MODEL="anthropic:claude-sonnet-4-6"      # default; recommended for the demo
+export SILENTWITNESS_MODEL="openai:gpt-5-mini"                     # cost-safe OpenAI alternative
+export SILENTWITNESS_MODEL="google-gla:gemini-2.5-flash"           # cost-safe Gemini alternative
 export SILENTWITNESS_MODEL="ollama:llama4-70b-instruct"            # local; longer-running on first cold cache
 ```
 
@@ -155,7 +155,7 @@ The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT
 - **"`silentwitness install` seems to hang / `apt-get` lock"**: the install script runs `sudo apt-get update` to provision Hayabusa, Chainsaw, Zeek, Suricata. Lock contention with an unattended-upgrade or another apt session is the usual cause — `sudo lsof /var/lib/dpkg/lock-frontend` identifies the holder. The HUD is **optional** and binds 8088 by default; the install script does NOT touch port 80, so a port-80 Apache binding on a stock SIFT VM is unrelated to install hang.
 - **"evidence mount is not read-only — register-evidence refuses"**: remount with `mount -o remount,ro,noexec,nosuid /evidence` (architecture.md §4.11 — mount validation). SilentWitness intentionally refuses to register evidence on a writable mount to preserve audit integrity.
 - **"Volatility 3 reports symbol-table mismatch on a memory image"**: this is the **intended** self-correction moment. The agent rebuilds via `windows.info` + retry; no manual intervention is required and the pivot is captured in `audit/hypothesis.jsonl` with `transition=pivot`.
-- **"model exceeds the default 800k-token budget"**: override at invocation — `silentwitness investigate <case> --max-tokens 1_200_000`. The investigator aborts cleanly when the budget is reached, with a Gap entry in the report.
+- **"model exceeds the default 6M-token budget"**: override at invocation — `silentwitness investigate <case> --max-tokens 8_000_000`. The investigator aborts cleanly when the budget is reached, with a Gap entry in the report.
 - **"Claude Code drop-in not picked up after install"**: force-rewrite the drop-in with `silentwitness install --claude-code --force`; this overwrites `~/.claude/silentwitness.json`. Restart Claude Code afterward.
 - **"HMAC verify fails after re-running on a different machine"**: the HMAC key is derived from the examiner password via PBKDF2 (600,000 iters) and is machine-local; verify on the same machine + same password used to approve the finding (architecture.md §4.9 — HMAC-signed approval ledger). The ledger is intentionally non-portable.
 

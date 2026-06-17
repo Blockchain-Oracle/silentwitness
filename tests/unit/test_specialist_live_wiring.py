@@ -110,10 +110,10 @@ async def test_dispatch_specialist_runs_and_returns_report(
         confidence_assessment=Confidence.LOW,
     )
 
-    seen_request_limits: list[int | None] = []
+    seen_limits: list[object] = []
 
     async def _fake_run(*_a: object, **_k: object) -> object:
-        seen_request_limits.append(_k["usage_limits"].request_limit)
+        seen_limits.append(_k["usage_limits"])
         return SimpleNamespace(output=report)
 
     monkeypatch.setattr(specialist, "run", _fake_run)
@@ -162,7 +162,13 @@ async def test_dispatch_specialist_runs_and_returns_report(
         stack=HypothesisStack(case_dir=tmp_path, examiner="aj"),
         budget=BudgetEnforcer(),
         request_limit=123,
+        total_token_limit=456_789,
     )
     result = await investigator.run("go", deps=deps)
     assert result.output.final_state == "COMPLETED"
-    assert seen_request_limits == [123]
+    assert len(seen_limits) == 1
+    assert seen_limits[0].request_limit == 123
+    assert seen_limits[0].total_tokens_limit == 456_789
+    # Pydantic AI's TestModel does not implement count_tokens(); production
+    # provider models keep preflight counting enabled.
+    assert seen_limits[0].count_tokens_before_request is False

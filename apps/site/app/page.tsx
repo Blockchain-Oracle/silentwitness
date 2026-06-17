@@ -50,6 +50,11 @@ const figures = [
     body: "Eight trust boundaries, six enforced in code.",
   },
   {
+    src: "/brand/diagram-C-ingest.png",
+    title: "Ingest and Index",
+    body: "Read-only evidence becomes parsed records with source paths, hashes, and audit IDs.",
+  },
+  {
     src: "/brand/diagram-F-trace.png",
     title: "Claim Trace",
     body: "A finding has to resolve to the exact tool execution that produced it.",
@@ -58,6 +63,11 @@ const figures = [
     src: "/brand/diagram-D-investigation-loop.png",
     title: "Investigation Loop",
     body: "Detections become hypotheses, cited observations, pivots, critic review, and report output.",
+  },
+  {
+    src: "/brand/diagram-E-recall.png",
+    title: "Accuracy and Gaps",
+    body: "Ground truth comparison, recalled findings, misses, and residual gaps stay visible.",
   },
 ];
 

@@ -15,9 +15,7 @@ _MAX_LINES = 400
 # First-screen checks (demo, image, architecture asset) scope to the first 100 lines.
 _HEAD_LINES = 100
 _DEMO_RE = re.compile(r"youtu\.be/|youtube\.com/watch|vimeo\.com/\d+|<!--\s*DEMO_VIDEO_URL\s*-->")
-_ARCHITECTURE_RE = re.compile(
-    r"docs/diagrams/architecture\.svg|assets/brand/diagram-A-architecture\.png"
-)
+_ARCHITECTURE_RE = re.compile(r"assets/brand/diagram-A-architecture\.png")
 _MIT_RE = re.compile(r"\bMIT\b")
 _H1_RE = re.compile(r"^# SilentWitness\b")
 _BANNED = (

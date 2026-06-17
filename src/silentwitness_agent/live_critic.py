@@ -48,6 +48,9 @@ class CritiqueFn(Protocol):
         findings: list[StagedFinding],
         *,
         model: str | None = ...,
+        usage: Any | None = ...,
+        request_limit: int | None = ...,
+        total_token_limit: int | None = ...,
     ) -> CriticReport: ...
 
 
@@ -208,7 +211,15 @@ def build_critic_hooks(
         # even if the LLM critic is unavailable.
         verdicts: list[CriticVerdictRecord] = list(run_contradiction_detectors(staged))
         try:
-            report = await critique_fn(case_dir, examiner, staged, model=model)
+            report = await critique_fn(
+                case_dir,
+                examiner,
+                staged,
+                model=model,
+                usage=ctx.usage,
+                request_limit=ctx.deps.request_limit,
+                total_token_limit=ctx.deps.total_token_limit,
+            )
             verdicts.extend(report.verdicts)
         except Exception:
             _LOG.warning(

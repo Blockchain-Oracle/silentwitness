@@ -65,6 +65,15 @@ Top-level shape of the system. The three artifacts (`silentwitness-mcp`, `silent
 <!-- canonical-architecture-diagram -->
 ![SilentWitness system architecture](../assets/brand/diagram-A-architecture.png)
 
+The diagram set is meant to be read in order:
+
+1. **Architecture map** — evidence, ingest, index, MCP, investigator, and report output.
+2. **Ingest and index** — how read-only source artifacts become citable records.
+3. **MCP firewall** — where unsupported claims are rejected before they become findings.
+4. **Investigation loop** — how hypotheses, specialists, critic challenges, and pivots move.
+5. **Claim trace** — how report text resolves back to record spans, tool audit rows, and source artifacts.
+6. **Accuracy and honesty** — how measured recall, misses, and residual gaps stay visible.
+
 ### Trust boundaries (annotated)
 
 1. **Agent ↔ MCP server.** The agent is the model-driven planner; the MCP server is the typed, audited tool surface. The MCP server does not trust agent-supplied claims — it verifies them via the citation + entity gates before persisting. The model never holds a write path into `findings.json`, `report.md`, `audit/*.jsonl`, or the ledger; all writes are mediated by typed MCP tools.
@@ -152,7 +161,7 @@ silentwitness/
 │   ├── STARTER_CASES.md
 │   ├── THREE_CLAIM_TRACE.md
 │   ├── EXAMPLE_EXECUTION_LOGS/            # synthetic demo case
-│   └── diagrams/                          # tracked SVG diagrams for README + judge docs
+│   └── diagrams/                          # retired; public architecture images live in assets/brand/*.png
 ├── apps/site/                             # Fumadocs documentation site
 ├── .github/workflows/                     # CI pipeline
 ├── .pre-commit-config.yaml
@@ -407,12 +416,13 @@ The mount check is independent of the registry: even if a path is in the manifes
 
 Pydantic AI `Agent` instance configured at runtime from environment.
 
-- **Model selection.** `SILENTWITNESS_MODEL` env var. Default: `anthropic:claude-opus-4-7`. Supported model strings:
-  - `anthropic:claude-opus-4-7` (default; 1M context where available)
-  - `anthropic:claude-sonnet-4-7`
-  - `openai:gpt-5`
-  - `openai:gpt-5-mini` (cost-optimized specialists)
-  - `google-gla:gemini-2.5-pro`
+- **Model selection.** `SILENTWITNESS_MODEL` env var. Default: `anthropic:claude-sonnet-4-6`. Supported model strings:
+  - `anthropic:claude-sonnet-4-6` (default)
+  - `anthropic:claude-haiku-4-5` (lower cost)
+  - `openai:gpt-5-mini` (cost-safe OpenAI investigator/specialist choice)
+  - `openai:gpt-5.4-mini` (stronger current OpenAI mini option)
+  - `google-gla:gemini-2.5-flash` (cost-safe Gemini choice)
+  - `google-gla:gemini-2.5-pro` (higher-cost Gemini option)
   - `ollama:llama-3.3-70b` (local, zero-cost option)
   - `vllm:<base_url>` via `OpenAIModel(base_url=...)` (custom self-hosted)
   Per Pydantic AI model-string convention (Pydantic AI library research §2). The repo installs the full `pydantic-ai` package; `pydantic-ai-slim[...]` is the extras-driven alternative when you want a narrower install.
@@ -422,7 +432,7 @@ Pydantic AI `Agent` instance configured at runtime from environment.
   - `@hooks.on.after_tool_execute` — emit a post-tool entry referencing the `audit_id` returned by the MCP server.
   - `@hooks.on.after_model_request` — per-LLM-call delta event to `audit/agent.jsonl` (used for token accounting; this replaces our earlier `on_step` placeholder which does not exist as a hook name).
   - `@hooks.on.after_run` — flush state, write the final hypothesis snapshot (this replaces our earlier `on_finish` placeholder).
-- **Max iterations.** Configurable via `SILENTWITNESS_MAX_ITERS` env or `--max-iterations` CLI flag. **Default: unlimited (None).** Pydantic-AI's `UsageLimits.request_limit` defaults to 50, so we pass `None` explicitly to disable it — a stock judges' run must NOT be killed mid-flight by an arbitrary ceiling (self-termination comes from the coverage gate + live critic + agent decision). There is NO `Agent(max_iterations=N)` constructor kwarg — pass `usage_limits=UsageLimits(request_limit=N or None)` at each `agent.run(..., usage_limits=...)` invocation; `UsageLimitExceeded` is caught in the wrapping coroutine and fires only when an opt-in cap is set, marking remaining hypotheses ABANDONED and writing the report's `Gaps` section.
+- **Usage limits.** Configurable via `SILENTWITNESS_MAX_STEPS` / `SILENTWITNESS_MAX_ITERS`, `SILENTWITNESS_MAX_TOKENS`, `--max-iterations`, and `--max-tokens`. **Defaults: 80 model requests and 6,000,000 total tokens.** There is no `Agent(max_iterations=N)` constructor kwarg; pass `usage_limits=UsageLimits(request_limit=N, total_tokens_limit=T, count_tokens_before_request=True)` at each `agent.run(..., usage_limits=...)` invocation, including nested specialist runs. `UsageLimitExceeded` is caught by the wrapping coroutine: request caps produce `MAX_ITERATIONS`, token caps produce `BUDGET_EXHAUSTED`, remaining active hypotheses are abandoned, and a finish event is written to `audit/agent.jsonl`.
 - **System prompt.** The senior-analyst frame. Verbatim (lives in `silentwitness_agent/prompts/investigator.md`):
 
   > You are a senior incident response analyst working a digital forensics case. Your method is hypothesis-driven: you form a single concrete hypothesis at a time, dispatch one specialist to test it, and based on the evidence you either confirm the hypothesis, pivot to a new one, or abandon it. You never claim a finding without citing the specific tool output that supports it. When the evidence is incomplete, you list the gap in the report's Gaps section rather than guess. You read tool errors carefully and adjust your approach. You are working a case, not running a checklist.
@@ -444,7 +454,7 @@ Four specialists, each its own `Agent`, invoked from the investigator via the ag
   The real primitive is `pydantic_ai.FilteredToolset` (`pydantic_ai_slim/pydantic_ai/toolsets/filtered.py`).
 
 - **Memory specialist** (`specialists/memory.py`)
-  - Model: `SILENTWITNESS_SPECIALIST_MODEL_MEMORY` (default `anthropic:claude-haiku-4-5` for cost; `claude-opus-4-7` if `SILENTWITNESS_MODEL_QUALITY=high`).
+  - Model: `SILENTWITNESS_SPECIALIST_MODEL_MEMORY` wins if set. Otherwise specialists use a same-provider cost-optimized sibling of `SILENTWITNESS_MODEL`: Anthropic → `anthropic:claude-haiku-4-5`, OpenAI → `openai:gpt-5-mini`, Google/Gemini → `google:gemini-2.5-flash`. `SILENTWITNESS_MODEL_QUALITY=high` preserves the explicit global model instead.
   - MCP allowlist (passed to `.filtered()`): `vol_pslist`, `vol_pstree`, `vol_psscan`, `vol_malfind`, `vol_netscan`, `vol_cmdline`, `vol_dlllist`, `vol_handles`, `vol_lsadump`, `record_observation`, `record_interpretation`, `register_evidence`, `verify_evidence_hash`.
   - System prompt: "You are a memory forensics specialist. You answer one targeted question per invocation. You cite the exact tool output line that supports your answer."
   - Returns: `SpecialistFinding` (typed Pydantic model with the structured finding payload).
@@ -479,9 +489,10 @@ class Hypothesis:
 
 **`HypothesisStack`** manages active hypotheses, enforces budgets, emits transitions. Methods: `form(statement, specialist, parent=None)`, `dispatch(id)`, `confirm(id, evidence_observed)`, `pivot(id, new_statement, reason)`, `abandon(id, reason)`. Concurrency is not supported in v1 (one hypothesis tested at a time); structurally simpler and sufficient for the demo.
 
-**Transitions:**
+**Transitions:** the public investigation-loop diagram shows the shipped flow from detections
+to hypotheses, cited observations, critic challenge, and confirm / pivot / abandon outcomes.
 
-![Hypothesis state transitions](diagrams/hypothesis-state.svg)
+![SilentWitness investigation loop](../assets/brand/diagram-D-investigation-loop.png)
 
 **Budgets:**
 - Default per-hypothesis token budget: 5,000 tokens (configurable via `SILENTWITNESS_HYPOTHESIS_TOKEN_BUDGET`).
@@ -519,7 +530,7 @@ content_hash: <sha256 of body>
 created_at: 2026-06-13T14:27:03Z
 updated_at: 2026-06-13T14:42:17Z
 silentwitness_version: 1.0.0
-model_used: anthropic:claude-opus-4-7
+model_used: anthropic:claude-sonnet-4-6
 ---
 ```
 
@@ -549,7 +560,7 @@ This means a crashed render never leaves a partial `report.md` — either the pr
 
 ### 5.5 Closed-loop critic
 
-A separate Pydantic AI `Agent` instance, distinct context window, instantiated with model `SILENTWITNESS_CRITIC_MODEL` (default `anthropic:claude-haiku-4-5` for speed; can be set to opus for rigor).
+A separate Pydantic AI `Agent` instance, distinct context window, instantiated with model `SILENTWITNESS_CRITIC_MODEL` (default `anthropic:claude-haiku-4-5` for speed; can be set to a stronger model for rigor).
 
 **Triggers** (whichever fires first):
 - Every N findings staged. Default N=5; configurable via `SILENTWITNESS_CRITIC_INTERVAL_FINDINGS`.
@@ -699,27 +710,45 @@ The Compose file mounts `/evidence:ro,noexec,nosuid` (the mount validator catche
 
 ---
 
-## 8. Interaction diagrams
+## 8. Public diagram walkthrough
 
-Four public-facing interaction diagrams matching the four critical flows judges need to understand fast.
+These public-facing diagrams are the review path for judges and new users. They avoid the old
+separate SVG pack and point to the same PNG assets used by README, Devpost, and the hosted docs.
 
-### 8.1 Investigator → hypothesis form → specialist dispatch → tool call → citation gate → observation staged → report updated
+### 8.1 Evidence ingest and indexing
 
-![Investigator to cited finding flow](diagrams/investigation-flow.svg)
+![SilentWitness evidence ingest and indexing](../assets/brand/diagram-C-ingest.png)
 
-### 8.2 Examiner approves a finding — HMAC ledger interaction
+Source evidence is registered and hashed, prepared read-only, parsed by targeted forensic
+feeders, and indexed into SQLite / FTS as citable records with source paths, hashes, and audit IDs.
 
-![Approval ledger flow](diagrams/approval-flow.svg)
+### 8.2 MCP firewall and finding gates
 
-### 8.3 Critic fires → re-reads findings → CHALLENGE on interpretation
+![SilentWitness MCP firewall](../assets/brand/diagram-B-firewall.png)
 
-![Critic challenge flow](diagrams/critic-flow.svg)
+The model can propose an observation, but the server owns the finding path. Citation, entity,
+contradiction, critic, and coverage gates decide whether the claim is accepted, challenged, or rejected.
 
-### 8.4 Citation gate rejects a hallucinated observation
+### 8.3 Hypothesis-first investigation loop
 
-![Citation gate rejection flow](diagrams/citation-rejection.svg)
+![SilentWitness investigation loop](../assets/brand/diagram-D-investigation-loop.png)
 
-This is the killer demo moment — the 3:30–4:00 citation-gate beat.
+The investigator starts from detections, forms a hypothesis, searches records, stages a cited
+observation, and then confirms, pivots, or abandons. The critic challenge path is part of the loop.
+
+### 8.4 Finding-to-evidence trace
+
+![SilentWitness finding trace](../assets/brand/diagram-F-trace.png)
+
+Each report claim resolves to a finding ID, observation, record span, tool audit row, source artifact,
+and hash-chain entry. This is the fastest way to explain why the report is reviewable.
+
+### 8.5 Accuracy, misses, and residual gaps
+
+![SilentWitness accuracy and honesty](../assets/brand/diagram-E-recall.png)
+
+The accuracy report is not only a scorecard. It records ground truth comparison, cited findings,
+misses, residual gaps, and audit replay so the demo remains measurable instead of just polished.
 
 ---
 
@@ -809,7 +838,7 @@ Each ADR is a stub here; full ADR files live at `docs/adrs/<NNN>-<slug>.md`. Eac
 - **Context.** A real DFIR engagement may have multiple examiners reviewing the same case. Supporting this requires per-examiner HMAC ledgers, role separation, conflict resolution.
 - **Decision.** Single examiner per case in v1. `CASE.yaml` records exactly one `examiner` and one `salt`.
 - **Consequences.** Sufficient for the demo (judges score a one-examiner workflow). Multi-examiner is a known post-hackathon expansion path.
-- **Alternatives considered.** Multi-examiner with role separation (overshoots scope; doubles approval-flow LOC; not demo-relevant).
+- **Alternatives considered.** Multi-examiner with role separation (overshoots scope; doubles approval-ledger LOC; not demo-relevant).
 
 ### ADR-010: Local Ollama as the no-cost model option
 
@@ -923,7 +952,7 @@ Implementing agents must not weaken any of these gates without an ADR.
 
 Decisions surfaced but not made here. To be resolved in implementation phase or as a follow-up ADR.
 
-1. **Critic model selection.** Default `anthropic:claude-haiku-4-5` for speed; opus is more rigorous but slower. Possibly run both — haiku for the per-5-finding trigger, opus for the pre-approval review. Decide after first benchmark run on Nitroba.
+1. **Critic model selection.** Default `anthropic:claude-haiku-4-5` for speed; use a stronger reviewer only for explicit final review passes. Decide after first benchmark run on Nitroba.
 2. **Velociraptor MCP stretch.** Live-host triage via Velociraptor as a stretch goal. Out of v1; ADR if built.
 3. **Examiner-portal CLI ergonomics.** Auto-approve mode for benchmark runs (skip the password prompt against a CI-only test salt).
 4. **HUD via Server-Sent Events** on port 8088 — optional, time-permitting. ADR if built.

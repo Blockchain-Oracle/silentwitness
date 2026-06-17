@@ -55,7 +55,7 @@ def test_mit_word_boundary_not_matched_in_substrings(tmp_path: Path) -> None:
     bad.write_text(
         # All-the-other-rules-pass shape, but the only "MIT" letters are inside `commit`.
         "# SilentWitness\n\n> pitch\n\n<!-- DEMO_VIDEO_URL -->\n\n![alt](x.png)\n\n"
-        "![Architecture](docs/diagrams/architecture.svg)\n\n"
+        "![Architecture](assets/brand/diagram-A-architecture.png)\n\n"
         "```bash\ncurl https://x/install.sh | bash\n```\n\n"
         "```bash\ndocker compose up -d\n```\n\n"
         "Please commit and transMIT your changes.\n"

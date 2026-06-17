@@ -16,18 +16,23 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic_ai import Agent
 from pydantic_ai.models import Model, infer_model
+from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent._caching import cache_settings
+from silentwitness_agent.model_policy import (
+    DEFAULT_CRITIC_MODEL,
+    cost_optimized_model_for_provider,
+)
 from silentwitness_common.types import Confidence
 
 _LOG = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = "anthropic:claude-opus-4-7"
+_DEFAULT_MODEL = DEFAULT_CRITIC_MODEL
 _CRITIC_FAST_MODEL = "anthropic:claude-haiku-4-5"
 
 try:
@@ -123,8 +128,10 @@ def _select_model_str(model: str | None) -> str:
     critic_env = os.environ.get("SILENTWITNESS_CRITIC_MODEL")
     if critic_env:
         return critic_env
-    # Fall back to investigator model, then hard default.
-    return os.environ.get("SILENTWITNESS_MODEL", _DEFAULT_MODEL)
+    global_model = os.environ.get("SILENTWITNESS_MODEL")
+    if global_model:
+        return cost_optimized_model_for_provider(global_model)
+    return _DEFAULT_MODEL
 
 
 # ---------------------------------------------------------------------------
@@ -139,8 +146,8 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
     1. ``model`` argument
     2. ``SILENTWITNESS_CRITIC_FAST=1`` → haiku
     3. ``SILENTWITNESS_CRITIC_MODEL`` env var
-    4. ``SILENTWITNESS_MODEL`` env var
-    5. Hard default: ``anthropic:claude-opus-4-7``
+    4. provider-aware cheap sibling of ``SILENTWITNESS_MODEL``
+    5. Hard default: ``anthropic:claude-haiku-4-5``
 
     The critic has NO MCP toolset — it reasons purely over inline evidence.
     This is architecturally required: tool access would pollute the fresh context.
@@ -154,6 +161,20 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
         output_type=CriticReport,
         system_prompt=_SYSTEM_PROMPT,
         model_settings=cache_settings(resolved_model),
+    )
+
+
+def critic_usage_limits(
+    model: Any,
+    *,
+    request_limit: int | None,
+    token_limit: int | None,
+) -> UsageLimits:
+    """Build critic limits, avoiding token pre-counting for TestModel."""
+    return UsageLimits(
+        request_limit=request_limit,
+        total_tokens_limit=token_limit,
+        count_tokens_before_request=model.__class__.__name__ != "TestModel",
     )
 
 
@@ -196,6 +217,9 @@ async def critique(
     findings: list[StagedFinding],
     *,
     model: str | None = None,
+    usage: Any | None = None,
+    request_limit: int | None = None,
+    total_token_limit: int | None = None,
 ) -> CriticReport:
     """Run the critic against a list of staged findings; return a CriticReport.
 
@@ -212,7 +236,16 @@ async def critique(
     deps = CriticDeps(case_dir=case_dir, examiner=examiner, findings_to_review=findings)
 
     agent = build_critic(model=model)
-    run_result = await agent.run(prompt, deps=deps)
+    run_kwargs: dict[str, Any] = {"deps": deps}
+    if usage is not None:
+        run_kwargs["usage"] = usage
+    if request_limit is not None or total_token_limit is not None:
+        run_kwargs["usage_limits"] = critic_usage_limits(
+            agent.model,
+            request_limit=request_limit,
+            token_limit=total_token_limit,
+        )
+    run_result = await agent.run(prompt, **run_kwargs)
 
     elapsed_ms = (time.monotonic() - t0) * 1000.0
     # SDK-authoritative token count; wall-clock elapsed replaces any model-reported value.
@@ -229,5 +262,6 @@ __all__ = [
     "CriticVerdictRecord",
     "StagedFinding",
     "build_critic",
+    "critic_usage_limits",
     "critique",
 ]

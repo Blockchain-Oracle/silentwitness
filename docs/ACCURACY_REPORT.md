@@ -34,7 +34,7 @@ gate, and the model. This progression is the real story and the most important t
 | Baseline (pre-rearchitecture raw-tool agent) | 40% | original |
 | New index spine, **coverage gate OFF** (gpt-5.2) | **20%** | the agent confirmed one brute-force hypothesis from the loudest detection signal and concluded — never addressing the other questions, though the evidence was indexed |
 | + enforced coverage gate (gpt-5.2) | 30–50% | breadth restored, but **high run-to-run variance** (see §3) |
-| **+ coverage gate (gpt-5.5)** | **100% (10/10)** | 9 findings, 6 confirmed hypotheses; every Key-Question finding recalled |
+| Archived larger-model benchmark | **100% (10/10)** | 9 findings, 6 confirmed hypotheses; every Key-Question finding recalled |
 
 **Headline:** with the coverage gate and a capable model, the system recalled **all 10**
 ground-truth findings on the real case — the stolen SRL R&D projects (LNK targets
@@ -57,8 +57,9 @@ that, but we do not claim a stable 100%.
   findings (Q3 = OneDrive *and* Dropbox *and* Office365; Q4 = RDP *and* SDelete *and*
   BACKUPADMIN), the gate enforces *one* cited observation per question, and which sibling the
   model surfaces is stochastic.
-- **Recall scales with model capability.** gpt-5.2 (30–50%) vs gpt-5.5 (100%) on the *same*
-  architecture, index, and gate. We report both, not only the best.
+- **Recall scales with model capability.** gpt-5.2 varied between 30–50%, while an archived
+  higher-cost benchmark reached 100% on the *same* architecture, index, and gate. We report both,
+  not only the best, but the higher-cost run is not the recommended default operating posture.
 - **Premature convergence is the failure mode we found and fixed.** Without the coverage gate,
   even a capable model collapsed onto the single loudest signal (~540k brute-force detections)
   and scored *below* baseline (20%). The gate — a framework-level `output_validator` that
@@ -153,10 +154,10 @@ agent could alter original evidence, regardless of what the model decides:
 silentwitness register-evidence rocba /path/to/rocba.E01
 silentwitness prepare rocba           # dfVFS extract (read-only)
 silentwitness index rocba             # targeted parsers + Sigma detections -> FTS index
-SILENTWITNESS_MODEL=openai:gpt-5.5 silentwitness investigate rocba
+SILENTWITNESS_MODEL=openai:gpt-5.2 silentwitness investigate rocba --max-iterations 80
 python -m harness.score_case --case cases/rocba --dataset rocba
 ```
 
-The headline run's full logs are committed under
+The archived higher-cost benchmark logs are committed under
 [`docs/execution_logs/gpt55_100pct_run/`](execution_logs/gpt55_100pct_run/) for the three-claim
 trace (find → `record_id` → `search_evidence` execution in `index.jsonl`).

@@ -8,15 +8,19 @@ import sys
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.mcp import MCPServerStdio
 from pydantic_ai.models import Model
-from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.investigator import InvestigatorDeps, InvestigatorResult
+from silentwitness_agent.model_policy import (
+    DEFAULT_SPECIALIST_MODEL,
+    HIGH_QUALITY_ANTHROPIC_MODEL,
+)
 from silentwitness_agent.specialists._base import (
     SpecialistDeps,
     SpecialistReport,
     _load_specialist_prompt,
     resolve_specialist_model,
+    specialist_usage_limits,
 )
 
 _LOG = logging.getLogger(__name__)
@@ -44,8 +48,8 @@ MEMORY_TOOL_ALLOWLIST: frozenset[str] = frozenset(
 _SYSTEM_PROMPT: str = _load_specialist_prompt("memory")
 
 _ENV_MODEL_KEY = "SILENTWITNESS_SPECIALIST_MODEL_MEMORY"
-_DEFAULT_MODEL = "anthropic:claude-haiku-4-5"
-_HIGH_QUALITY_MODEL = "anthropic:claude-opus-4-7"
+_DEFAULT_MODEL = DEFAULT_SPECIALIST_MODEL
+_HIGH_QUALITY_MODEL = HIGH_QUALITY_ANTHROPIC_MODEL
 
 
 def _resolve_specialist_model(model: str | None) -> Model:
@@ -65,8 +69,9 @@ def build_memory_specialist(
     """Build and return the memory specialist agent.
 
     Model resolution order: ``model`` arg → ``SILENTWITNESS_SPECIALIST_MODEL_MEMORY`` env
-    → ``SILENTWITNESS_MODEL`` (global) → ``SILENTWITNESS_MODEL_QUALITY=high`` (→ opus-4-7)
-    → default (haiku-4-5).
+    → provider-aware cost-optimized sibling of ``SILENTWITNESS_MODEL`` (global)
+    → ``SILENTWITNESS_MODEL_QUALITY=high`` (preserve global model, or Sonnet
+    if no global is set) → default (haiku-4-5).
 
     ``shared_server``: when the live investigator passes its case-bound MCP server,
     the specialist reuses it (one subprocess, one AuditLogger). Omitting it spawns
@@ -123,7 +128,11 @@ def register_as_investigator_tool(
                 question,
                 deps=specialist_deps,
                 usage=ctx.usage,
-                usage_limits=UsageLimits(request_limit=ctx.deps.request_limit),
+                usage_limits=specialist_usage_limits(
+                    memory_specialist.model,
+                    request_limit=ctx.deps.request_limit,
+                    token_limit=ctx.deps.total_token_limit,
+                ),
             )
         except Exception:
             _LOG.error(

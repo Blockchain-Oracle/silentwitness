@@ -29,9 +29,15 @@ The result is a report where each finding carries a verification reference, not 
 
 ![SilentWitness architecture](https://switness.xyz/brand/diagram-A-architecture.png)
 
+![SilentWitness ingest and index pipeline](https://switness.xyz/brand/diagram-C-ingest.png)
+
+![SilentWitness MCP firewall](https://switness.xyz/brand/diagram-B-firewall.png)
+
 ![SilentWitness investigation loop](https://switness.xyz/brand/diagram-D-investigation-loop.png)
 
 ![SilentWitness three-claim trace](https://switness.xyz/brand/diagram-F-trace.png)
+
+![SilentWitness accuracy and gaps](https://switness.xyz/brand/diagram-E-recall.png)
 
 ## Inspiration
 

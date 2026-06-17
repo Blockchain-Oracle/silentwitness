@@ -44,6 +44,22 @@ _LOG = logging.getLogger(__name__)
 # Mirrors architecture §4.4 result_summary truncation: full args are in MCP-side JSONL.
 _ARGS_SUMMARY_LIMIT = 1024
 _FINALIZE_ABANDON_REASON = "RUN_FINALIZED_WITH_OPEN_QUESTIONS"
+_NO_ACTIVE_ALLOWED_TOOLS = {
+    "form_hypothesis",
+    "record_narrative",
+}
+
+
+class NoActiveHypothesisToolError(RuntimeError):
+    """Raised when a run has resolved every hypothesis but keeps querying evidence."""
+
+    def __init__(self, tool_name: str) -> None:
+        super().__init__(
+            "NO_ACTIVE_HYPOTHESIS: "
+            f"{tool_name} cannot run after all hypotheses are resolved. "
+            "Form a new hypothesis or finalize the investigation."
+        )
+        self.tool_name = tool_name
 
 
 # ---------------------------------------------------------------------------
@@ -83,6 +99,26 @@ def _close_open_hypotheses(stack: HypothesisStack) -> int:
             _LOG.exception("hooks: failed to finalize open hypothesis %s", active.id)
             return closed
         closed += 1
+
+
+def _has_resolved_hypothesis(stack: HypothesisStack) -> bool:
+    """True once the run has already formed and resolved at least one hypothesis."""
+    snap = stack.snapshot()
+    return bool(snap.history)
+
+
+def _blocks_no_active_tool(stack: HypothesisStack, tool_name: str) -> bool:
+    """Prevent evidence-query loops after the last hypothesis has been resolved.
+
+    The initial call to ``form_hypothesis`` naturally has no active hypothesis,
+    so the guard only starts after at least one hypothesis has reached history.
+    """
+    snap = stack.snapshot()
+    if snap.active is not None:
+        return False
+    if not _has_resolved_hypothesis(stack):
+        return False
+    return tool_name not in _NO_ACTIVE_ALLOWED_TOOLS
 
 
 def _append_agent_jsonl(case_dir: Path, payload: dict[str, Any]) -> None:
@@ -170,6 +206,8 @@ def build_investigator_hooks(
         tool_def: ToolDefinition,
         args: ValidatedToolArgs,
     ) -> ValidatedToolArgs:
+        if _blocks_no_active_tool(ctx.deps.stack, call.tool_name):
+            raise NoActiveHypothesisToolError(call.tool_name)
         _inflight[call.tool_call_id] = time.monotonic_ns()
         payload: dict[str, Any] = {
             "ts": _ts_now(),
@@ -330,4 +368,4 @@ def build_investigator_hooks(
     return hooks
 
 
-__all__ = ["build_investigator_hooks"]
+__all__ = ["NoActiveHypothesisToolError", "build_investigator_hooks"]

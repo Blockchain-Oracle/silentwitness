@@ -63,7 +63,7 @@ def test_status_hypothesis_counts(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     assert result.exit_code == 0
     assert "(3 active, 2 confirmed, 1 pivoted, 0 abandoned)" in result.output
     assert "findings: staged 9  approved 0  rejected 1" in result.output
-    assert "312k / 800k budget" in result.output
+    assert "312k / 6M budget" in result.output
 
 
 # 3. --json emits valid JSON with expected keys, no ANSI escapes
@@ -122,12 +122,12 @@ def test_status_corrupted_hypothesis_jsonl(tmp_path: Path, monkeypatch: pytest.M
 
 
 def test_status_tokens_from_finish_event(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Given finish event has total_tokens_consumed=312000, budget shows 312k / 800k."""
+    """Given finish event has total_tokens_consumed=312000, budget shows 312k / 6M."""
     case_dir = init_case(tmp_path, "mr-token-001", monkeypatch)
     write_agent_jsonl(case_dir, [step_event(1000, 500), finish_event(total_tokens=312_000)])
     result = runner.invoke(app, ["status", "mr-token-001"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert "312k / 800k budget" in result.output
+    assert "312k / 6M budget" in result.output
 
 
 # 7. Tokens summed from step events when no finish event
@@ -139,7 +139,7 @@ def test_status_tokens_from_step_events(tmp_path: Path, monkeypatch: pytest.Monk
     write_agent_jsonl(case_dir, [step_event(2_000, 1_000) for _ in range(5)])
     result = runner.invoke(app, ["status", "mr-inprogress-001"], catch_exceptions=False)
     assert result.exit_code == 0
-    assert "15k / 800k budget" in result.output
+    assert "15k / 6M budget" in result.output
 
 
 # 8. --full shows ABANDONED section once only (no double-render)

@@ -171,7 +171,7 @@ def investigate(
     case_id: str = typer.Argument(...),
     model: str | None = typer.Option(None, "--model"),
     max_iterations: int | None = typer.Option(None, "--max-iterations"),
-    max_tokens: int = typer.Option(800_000, "--max-tokens"),
+    max_tokens: int | None = typer.Option(None, "--max-tokens"),
     specialist: list[str] | None = typer.Option(None, "--specialist"),
     resume: bool = typer.Option(False, "--resume"),
     no_hud: bool = typer.Option(False, "--no-hud"),
@@ -247,6 +247,7 @@ def review(
         non_interactive=non_interactive,
         no_color=cli_ctx.no_color,
         examiner=examiner,
+        config=cli_ctx.config,
     )
     raise typer.Exit(code=code)
 

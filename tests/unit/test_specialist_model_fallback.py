@@ -68,9 +68,27 @@ def test_specialist_inherits_global_openai_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear(monkeypatch)
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-4o")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5.2")
     model = resolve(None)  # type: ignore[operator]
-    assert isinstance(model, OpenAIChatModel), f"{name} ignored global model"
+    assert isinstance(model, OpenAIChatModel), f"{name} ignored global provider"
+    assert model.model_name == "gpt-5-mini"
+
+
+@pytest.mark.parametrize(("name", "resolve", "_env"), _RESOLVERS)
+def test_specialist_inherits_global_gemini_provider_with_flash_default(
+    name: str,
+    resolve: object,
+    _env: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai.models.google import GoogleModel
+
+    _clear(monkeypatch)
+    monkeypatch.setenv("GEMINI_API_KEY", "test")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "google:gemini-2.5-pro")
+    model = resolve(None)  # type: ignore[operator]
+    assert isinstance(model, GoogleModel), f"{name} ignored global provider"
+    assert model.model_name == "gemini-2.5-flash"
 
 
 @pytest.mark.parametrize(("name", "resolve", "env_key"), _RESOLVERS)
@@ -120,15 +138,14 @@ def test_global_model_outranks_quality_high(
     _env: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    # The explicit global provider must win over the quality knob, whose
-    # high-quality id is hardcoded Anthropic — otherwise an OpenAI-only key
-    # would 401. This pins the deliberate precedence (regression guard for a
-    # future reorder of the two branches).
+    # quality=high preserves the explicit global model instead of switching
+    # to a hardcoded Anthropic id.
     _clear(monkeypatch)
     monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-4o")
     monkeypatch.setenv("SILENTWITNESS_MODEL_QUALITY", "high")
     model = resolve(None)  # type: ignore[operator]
     assert isinstance(model, OpenAIChatModel), f"{name}: quality=high defeated global model"
+    assert model.model_name == "gpt-4o"
 
 
 @pytest.mark.parametrize(("name", "resolve", "_env"), _RESOLVERS)
@@ -168,6 +185,7 @@ def test_build_site_runs_on_inherited_global_model(
     # the inherited global one — the resolver being correct is necessary but
     # not sufficient if the builder dropped it.
     _clear(monkeypatch)
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-4o")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5.2")
     agent = build()  # type: ignore[operator]
     assert isinstance(agent.model, OpenAIChatModel), f"{name}: builder lost the global model"
+    assert agent.model.model_name == "gpt-5-mini"
