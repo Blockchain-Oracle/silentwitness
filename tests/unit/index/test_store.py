@@ -89,6 +89,24 @@ def test_rebuild_fts_is_idempotent_across_incremental_loads(tmp_path: Path) -> N
         assert len(idx.search("chrome")) == 1
 
 
+def test_reset_clears_records_and_fts_before_rebuild(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        idx.bulk_ingest(_records())
+        idx.rebuild_fts()
+        assert idx.count() == 3
+        assert idx.search("powershell")
+
+        idx.reset()
+        assert idx.count() == 0
+        assert idx.search("powershell") == []
+
+        idx.bulk_ingest([_records()[2]])
+        idx.rebuild_fts()
+        assert idx.count() == 1
+        assert idx.search("chrome")
+        assert idx.search("powershell") == []
+
+
 def test_search_matches_keyword(tmp_path: Path) -> None:
     with EvidenceIndex(tmp_path / "index.db") as idx:
         idx.ingest(_records())

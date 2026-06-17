@@ -177,6 +177,20 @@ class EvidenceIndex:
         ):
             self._conn.execute(pragma)
 
+    def reset(self) -> None:
+        """Clear all indexed rows before rebuilding the case index.
+
+        ``silentwitness index`` is a build step over prepared evidence. Re-running it
+        should replace the previous index contents, not append duplicate rows that make
+        search results and counts drift.
+        """
+        try:
+            with self._conn:
+                self._conn.execute("DELETE FROM record_fts")
+                self._conn.execute("DELETE FROM record")
+        except sqlite3.Error as exc:
+            raise EvidenceIndexError(f"cannot reset evidence index: {exc}") from exc
+
     def rebuild_fts(self) -> None:
         """Rebuild the FTS index from the ``record`` content table in one pass.
 

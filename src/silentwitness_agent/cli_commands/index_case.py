@@ -144,6 +144,7 @@ def run(
             highlight=False,
         )
         with EvidenceIndex(case_dir / _INDEX_DB) as idx:
+            idx.reset()
             idx.begin_bulk()  # bulk-load PRAGMAs; FTS is built once at the end
             ingested = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
             counts = ingested.counts
