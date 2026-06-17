@@ -1,0 +1,34 @@
+[
+  {
+    "finding_id": "F-001",
+    "envelope_success": true,
+    "success": true,
+    "reason": null,
+    "context": {},
+    "advisories": []
+  },
+  {
+    "finding_id": "F-002",
+    "envelope_success": true,
+    "success": true,
+    "reason": null,
+    "context": {},
+    "advisories": []
+  },
+  {
+    "finding_id": "F-003",
+    "envelope_success": true,
+    "success": true,
+    "reason": null,
+    "context": {},
+    "advisories": []
+  },
+  {
+    "finding_id": "F-004",
+    "envelope_success": true,
+    "success": true,
+    "reason": null,
+    "context": {},
+    "advisories": []
+  }
+]

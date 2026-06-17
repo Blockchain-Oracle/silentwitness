@@ -1,0 +1,15 @@
+case:        rocba-gpt-5-4-mini-001  model:   openai-chat:gpt-5.4-mini
+examiner:    root                  status:  ERROR (1m 21s elapsed)
+
+hypothesis stack (0 active, 4 confirmed, 0 pivoted, 0 abandoned):
+ H-001  [CONFIRMED]  The highest-severity detection will identify the initial
+                     suspicious execution or
+ H-002  [CONFIRMED]  The next key evidence will identify the account or project
+                     most associated with
+ H-003  [CONFIRMED]  The data transfer path will be visible in cloud-sync and
+                     email artifacts, specif
+ H-004  [CONFIRMED]  The access method and timeline will be supported by
+                     security or terminal service
+
+findings: staged 4  approved 4  rejected 0
+tokens:   1M / 6M budget

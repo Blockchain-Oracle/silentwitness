@@ -1,0 +1,10 @@
+{
+  "case_id": "rocba-gpt-5-4-mini-001",
+  "model": "openai-chat:gpt-5.4-mini",
+  "investigate_exit": 1,
+  "records": 8,
+  "draft_findings": 0,
+  "approved_findings": 4,
+  "rejected_findings": 0,
+  "observation_records": 8
+}
