@@ -117,10 +117,13 @@ silentwitness index rocba
 ```
 
 *What it does:* runs the forensic parsers + the Sigma detection engine over the extracted
-artifacts and builds a fast searchable index. This is the heavy step, and it only happens once. If
-you registered a memory image, the default memory profile is tuned for demo speed: Volatility runs
-`pslist`, `cmdline`, `netscan`, and `psscan` with visible per-plugin progress. The expensive
-all-process `malfind` VAD scan is opt-in. For a bounded malware sweep, use the targeted profile:
+artifacts and builds a fast searchable index. This is the heavy step. SilentWitness records an
+index freshness manifest after a successful build, so an unchanged rerun returns quickly with
+`index already current`; use `silentwitness index rocba --force` when you intentionally want a
+clean rebuild. If you registered a memory image, the default memory profile is tuned for demo
+speed: Volatility runs `pslist`, `cmdline`, `netscan`, and `psscan` with visible per-plugin
+progress. The expensive all-process `malfind` VAD scan is opt-in. For a bounded malware sweep, use
+the targeted profile:
 
 ```bash
 silentwitness index rocba --memory-profile targeted
@@ -136,8 +139,8 @@ silentwitness index rocba --memory-profile deep
 
 Slow plugins are bounded by `SILENTWITNESS_VOL3_TIMEOUT_SEC` (default: 300 seconds) and become
 audit advisories instead of making the terminal look stuck.
-*What you'll see:* a summary like `indexed 2,673,733 records`, plus any memory-plugin advisory
-that needs review.
+*What you'll see:* a summary like `indexed 2,673,733 records`, phase timings for parser, memory,
+and full-text-index rebuild work, plus any memory-plugin advisory that needs review.
 
 ### Step 5 - Investigate
 
@@ -212,6 +215,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | Investigation stops with `request_limit` | The model needs more steps | Re-run with `silentwitness investigate rocba --max-iterations 120`. |
 | `authentication` / 401 error | API key not set or out of credit | Re-check Step 4; confirm your provider account has credit. |
 | `indexed 0 records` | `prepare` extracted nothing | Confirm the image path is correct and is a Windows disk image. |
+| `index already current` | The registered evidence, prepared artifacts, host label, memory profile, and relevant parser settings match the last successful build | Continue to `investigate`; add `--force` only when you intentionally want to rebuild. |
 | `vol3 malfind timed out` | The optional memory malware scan exceeded the bounded per-plugin timeout | The disk/log/indexed memory inventory is still usable. Re-run with `silentwitness index rocba --memory-profile targeted` for bounded PID scanning, or `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0 silentwitness index rocba --memory-profile deep` if you want an unbounded all-process sweep. |
 | Recall varies between runs | The AI is non-deterministic | Expected — see the [Accuracy Report](ACCURACY_REPORT.md) §3; a stronger model gives higher, steadier recall. |
 

@@ -117,7 +117,7 @@ volumes:
 1. **`silentwitness init nitroba-smoke-001 --examiner $USER`** — creates `cases/nitroba-smoke-001/.silentwitness/case.toml`, `audit/`, `report.md`, `CASE.yaml`, and an empty `evidence.json` registry.
 2. **`silentwitness register-evidence nitroba-smoke-001 /evidence/nitroba.pcap`** — computes SHA256, classifies the artifact type, and refuses unsafe writable evidence mounts (`ro,noexec,nosuid` check per architecture.md §4.11).
 3. **`silentwitness prepare nitroba-smoke-001`** — extracts high-value artifacts from the registered evidence without modifying the original file.
-4. **`silentwitness index nitroba-smoke-001`** — parses the prepared artifacts into `cases/nitroba-smoke-001/index.db`, the searchable evidence index used by the agent.
+4. **`silentwitness index nitroba-smoke-001`** — parses the prepared artifacts into `cases/nitroba-smoke-001/index.db`, the searchable evidence index used by the agent. Unchanged reruns skip the rebuild with `index already current`; use `--force` only when you want to rebuild the index from the prepared artifacts.
 5. **`silentwitness investigate nitroba-smoke-001`** — opens the live rich layout; the hypothesis sequence is `form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC → confirm`. Each tool call appears in `audit/<backend>.jsonl` with its `audit_id`, `result_sha256`, and `elapsed_ms`.
 6. **`silentwitness review nitroba-smoke-001`** — paginates staged findings with the `[a]pprove [r]eject [m]odify [s]kip` examiner UI. Approval signs the HMAC ledger row at `/var/lib/silentwitness/verification/<case_id>.jsonl`.
 7. **`silentwitness verify --audit-chain nitroba-smoke-001`** — recomputes every audit JSONL hash chain and exits non-zero if a row is missing or edited.

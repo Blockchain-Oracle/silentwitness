@@ -165,15 +165,18 @@ class EvidenceIndex:
         return written
 
     def begin_bulk(self) -> None:
-        """Apply PRAGMAs that speed a large one-shot load (durability relaxed for build).
+        """Apply PRAGMAs that speed a large one-shot load.
 
-        Safe for an index rebuilt from immutable evidence: if the load crashes we just
-        re-run ``index``; :meth:`rebuild_fts` restores full searchability."""
+        The index is derived from immutable registered evidence. During a rebuild we
+        favor throughput over mid-build durability: if the process dies, the operator
+        reruns ``index`` and the freshness manifest is written only after success."""
         for pragma in (
-            "PRAGMA journal_mode=WAL",
-            "PRAGMA synchronous=NORMAL",
+            "PRAGMA locking_mode=EXCLUSIVE",
+            "PRAGMA journal_mode=OFF",
+            "PRAGMA synchronous=OFF",
             "PRAGMA temp_store=MEMORY",
-            "PRAGMA cache_size=-262144",  # ~256 MB page cache
+            "PRAGMA cache_size=-524288",  # ~512 MB page cache
+            "PRAGMA mmap_size=268435456",  # 256 MB
         ):
             self._conn.execute(pragma)
 

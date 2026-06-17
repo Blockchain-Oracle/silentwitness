@@ -32,6 +32,11 @@ _MEMORY_PROFILE_OPT = typer.Option(
         "malfind --pid; deep runs all-process malfind."
     ),
 )
+_FORCE_INDEX_OPT = typer.Option(
+    False,
+    "--force",
+    help="Rebuild the index even if inputs are unchanged.",
+)
 _BASELINE_OPT = typer.Option("protocol-sift", "--baseline")
 _OUT_OPT = typer.Option(None, "--out")
 _METRICS_OPT = typer.Option("time,pivots,provenance,hallucinations,epistemic", "--metrics")
@@ -122,6 +127,7 @@ def index(
     case_id: str = _CASE_ID_ARG,
     host: str = _HOST_OPT,
     memory_profile: str = _MEMORY_PROFILE_OPT,
+    force: bool = _FORCE_INDEX_OPT,
 ) -> None:
     """Parse the prepared artifacts into the case's searchable evidence index."""
     from silentwitness_agent.cli_commands.index_case import run as _run
@@ -153,6 +159,7 @@ def index(
         host=host,
         no_color=cli_ctx.no_color,
         memory_profile=profile,
+        force=force,
     )
     raise typer.Exit(code=code)
 

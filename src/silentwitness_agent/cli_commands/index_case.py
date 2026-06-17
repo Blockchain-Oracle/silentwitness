@@ -93,6 +93,7 @@ def run(
     host: str = "",
     no_color: bool,
     memory_profile: Literal["standard", "targeted", "deep"] = "standard",
+    force: bool = False,
 ) -> int:
     """Run the targeted parsers (+ best-effort plaso) over prepared artifacts.
 
@@ -121,24 +122,48 @@ def run(
     from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
     from silentwitness_mcp.index.ingest_memory import MemoryPluginEvent, ingest_memory_image
 
-    audit = AuditLogger(case_dir, examiner)
-    t0 = time.monotonic()
     counts: dict[str, int] = {}
     plaso_rows = 0
     memory_counts: dict[str, int] = {}
     memory_total = 0
     advisories: list[str] = []
+    summary: dict[str, object] = {}
     if memory_profile == "deep":
         memory_plugins = DEEP_PLUGINS
     elif memory_profile == "targeted":
         memory_plugins = TARGETED_PLUGINS
     else:
         memory_plugins = STANDARD_PLUGINS
+    from silentwitness_agent.cli_commands.index_manifest import (
+        build_expected_manifest,
+        index_is_current,
+        write_index_manifest,
+    )
+
+    expected_manifest = build_expected_manifest(
+        case_id=case_id,
+        host=host,
+        memory_profile=memory_profile,
+        memory_plugins=memory_plugins,
+        artifacts=artifacts,
+    )
+    if not force:
+        is_current, row_count = index_is_current(case_dir, expected_manifest)
+        if is_current:
+            out.print(
+                f"[green]✓[/green] index already current "
+                f"({row_count} records in {case_dir / _INDEX_DB}; use --force to rebuild)",
+                highlight=False,
+            )
+            return 0
+    audit = AuditLogger(case_dir, examiner)
+    t0 = time.monotonic()
     # Sentinel so the post-finally summary doesn't UnboundLocalError if the try block
     # raised before `ingested` was assigned (e.g. EvidenceIndex open fails).
     ingested = IngestResult()
     try:
         audit_id = audit.next_audit_id()
+        phase_timings: dict[str, float] = {}
         out.print(
             "[cyan]…[/cyan] parsing prepared artifacts in parallel (targeted parsers)",
             highlight=False,
@@ -146,7 +171,9 @@ def run(
         with EvidenceIndex(case_dir / _INDEX_DB) as idx:
             idx.reset()
             idx.begin_bulk()  # bulk-load PRAGMAs; FTS is built once at the end
+            phase_t0 = time.monotonic()
             ingested = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
+            phase_timings["targeted_parsers"] = time.monotonic() - phase_t0
             counts = ingested.counts
             for kind, name, message in ingested.failures:
                 advisories.append(f"{kind} parse FAILED on {name}: {message}")
@@ -157,6 +184,7 @@ def run(
             _print_skip_summary(err, ingested.diagnostics)
 
             images = [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE]
+            phase_t0 = time.monotonic()
             for rec in images:
                 out.print(
                     f"[cyan]…[/cyan] plaso super-timeline over {rec.path.name} "
@@ -172,7 +200,9 @@ def run(
                         "— targeted spine still indexed (see advisory)",
                         highlight=False,
                     )
+            phase_timings["plaso"] = time.monotonic() - phase_t0
             memory_images = [r for r in artifacts if r.type == EvidenceType.MEMORY_DUMP]
+            phase_t0 = time.monotonic()
             for rec in memory_images:
                 out.print(
                     f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name}",
@@ -223,11 +253,14 @@ def run(
                     memory_counts[plugin] = memory_counts.get(plugin, 0) + written
                 for plugin, message in mem.failures:
                     advisories.append(f"vol3 {plugin} failed on {rec.path.name}: {message}")
+            phase_timings["memory"] = time.monotonic() - phase_t0
             out.print("[cyan]…[/cyan] building the full-text search index", highlight=False)
+            phase_t0 = time.monotonic()
             idx.rebuild_fts()
+            phase_timings["fts_rebuild"] = time.monotonic() - phase_t0
         memory_total = sum(memory_counts.values())
         total = sum(counts.values()) + plaso_rows + memory_total
-        summary: dict[str, object] = {
+        summary = {
             "rows": total,
             "targeted_counts": counts,
             "plaso_rows": plaso_rows,
@@ -236,7 +269,9 @@ def run(
             "skipped_records": sum(sum(s.values()) for _, _, s in ingested.diagnostics),
             "host": host,
             "advisories": advisories,
+            "phase_timings_sec": {k: round(v, 3) for k, v in phase_timings.items()},
         }
+        write_index_manifest(case_dir, expected_manifest, rows=total, summary=summary)
         audit.emit(
             backend="index",
             tool="index.ingest",
@@ -263,10 +298,19 @@ def run(
     failed = len(ingested.failures)
     mark = "[yellow]✓[/yellow]" if failed else "[green]✓[/green]"
     suffix = f" — [yellow]{failed} artifact(s) FAILED (see advisories)[/yellow]" if failed else ""
+    timings = summary.get("phase_timings_sec")
+    if isinstance(timings, dict):
+        timing_detail = (
+            f" phases: targeted={timings.get('targeted_parsers', 0):g}s, "
+            f"plaso={timings.get('plaso', 0):g}s, memory={timings.get('memory', 0):g}s, "
+            f"fts={timings.get('fts_rebuild', 0):g}s"
+        )
+    else:
+        timing_detail = ""
     out.print(
         f"{mark} indexed {total} records "
         f"(targeted: {detail}; plaso: {plaso_rows}; memory: {mem_detail}) "
-        f"into {case_dir / _INDEX_DB}{suffix}",
+        f"into {case_dir / _INDEX_DB}{timing_detail}{suffix}",
         highlight=False,
     )
     return 0
