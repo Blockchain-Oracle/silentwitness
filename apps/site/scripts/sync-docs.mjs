@@ -33,6 +33,7 @@ const DIAGRAMS_DST = path.join(SITE_ROOT, "public", "diagrams");
 const CANONICAL = {
   "SETUP_GUIDE.md": "setup-guide.mdx",
   "ACCURACY_REPORT.md": "accuracy-report.mdx",
+  "DEMO_ARTIFACTS.md": "demo-artifacts.mdx",
   "THREE_CLAIM_TRACE.md": "three-claim-trace.mdx",
   "STARTER_CASES.md": "starter-cases.mdx",
   "TRY_IT_OUT.md": "try-it-out.mdx",
@@ -43,6 +44,7 @@ const STALE_GENERATED = ["datasets.mdx"];
 const DOC_ROUTES = new Map([
   ["SETUP_GUIDE.md", "/docs/setup-guide"],
   ["ACCURACY_REPORT.md", "/docs/accuracy-report"],
+  ["DEMO_ARTIFACTS.md", "/docs/demo-artifacts"],
   ["THREE_CLAIM_TRACE.md", "/docs/three-claim-trace"],
   ["STARTER_CASES.md", "/docs/starter-cases"],
   ["TRY_IT_OUT.md", "/docs/try-it-out"],

@@ -63,9 +63,14 @@ Illustrative panel layout — the real rich layout is column-split (HYPOTHESIS S
 
 ```bash
 cat cases/nitroba-smoke-001/report.md
+cat cases/nitroba-smoke-001/findings.json | jq '.[] | select(.status == "APPROVED")'
+ls cases/nitroba-smoke-001/audit/*.jsonl
 cat cases/nitroba-smoke-001/audit/hypothesis.jsonl | jq '.transition'
 # Expect: form → dispatch → confirm → pivot → confirm
 ```
+
+For a GitHub-clickable map of the report, findings JSON, audit JSONL, and
+approval ledger artifacts, see [`DEMO_ARTIFACTS.md`](./DEMO_ARTIFACTS.md).
 
 ## Path B — Docker Compose
 
@@ -129,6 +134,12 @@ volumes:
 9. **`silentwitness verify --audit-chain nitroba-smoke-001`** — recomputes every audit JSONL hash chain and exits non-zero if a row is missing or edited.
 10. **`silentwitness export nitroba-smoke-001 --md`** — prints the final Markdown report path. Use `--pdf --out ./report.pdf` when you want the WeasyPrint-rendered PDF.
 
+After export, the examiner-facing report is `cases/nitroba-smoke-001/report.md`.
+The machine-readable finding records are in `cases/nitroba-smoke-001/findings.json`;
+the replayable tool-call logs are in `cases/nitroba-smoke-001/audit/*.jsonl`.
+Use [`DEMO_ARTIFACTS.md`](./DEMO_ARTIFACTS.md) when you want the same artifact
+map as clickable GitHub links.
+
 ## Model selection (provider-agnostic)
 
 `SILENTWITNESS_MODEL` selects the provider + model. All four are CI-tested via `tests/integration/test_investigator_provider_switch.py`:
@@ -168,6 +179,7 @@ The harness is documented end-to-end in [`ACCURACY_REPORT.md`](./ACCURACY_REPORT
 ## Where to go next
 
 - Per-case reproducibility recipes: [`STARTER_CASES.md`](./STARTER_CASES.md).
+- Demo report + JSON artifact map: [`DEMO_ARTIFACTS.md`](./DEMO_ARTIFACTS.md).
 - Cross-case accuracy report (Δ vs vanilla Protocol SIFT): [`ACCURACY_REPORT.md`](./ACCURACY_REPORT.md).
 - Component architecture + ADRs: [`architecture.md`](./architecture.md).
 - Devpost submission entry: see the README badge row for the gallery link.

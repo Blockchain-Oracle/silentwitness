@@ -146,7 +146,10 @@ Provenance + memorization-risk disclosure per case: see [`docs/STARTER_CASES.md`
 
 ## Example execution logs
 
-Real audit JSONL output from past runs: see [`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/).
+Report, findings JSON, audit JSONL, and approval-ledger pointers: see
+[`docs/DEMO_ARTIFACTS.md`](./docs/DEMO_ARTIFACTS.md). Synthetic full-case logs
+live in [`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/), and
+real ROCBA trace logs live in [`docs/execution_logs/`](./docs/execution_logs/).
 
 ## Architecture deep-dive
 

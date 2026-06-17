@@ -208,11 +208,14 @@ audit row is missing or edited, this command exits non-zero and tells you where 
 ```bash
 silentwitness export rocba --md
 cat cases/rocba/report.md           # the full investigative narrative
+cat cases/rocba/findings.json | jq '.[] | select(.status == "APPROVED")'
+ls cases/rocba/audit/*.jsonl
 ```
 
-*What it does:* prints the final Markdown report path. `approve` updates the report as findings
-are accepted; `export --md` is the stable way to locate it during a demo. Use `--pdf` when you want
-a PDF report. IOC sidecars are attempted only when you explicitly pass `--ioc-format`.
+*What it does:* prints the final Markdown report path and shows the machine-readable artifacts
+behind it. `approve` updates the report as findings are accepted; `export --md` is the stable way
+to locate it during a demo. Use `--pdf` when you want a PDF report. IOC sidecars are attempted only
+when you explicitly pass `--ioc-format`.
 
 ### (Optional) Score it against known answers
 If you have a ground-truth file (we ship one for the ROCBA case):
@@ -232,6 +235,10 @@ python -m harness.score_case --case cases/rocba --dataset rocba
 - **`cases/rocba/audit/*.jsonl`** — the timestamped log of every tool the agent ran. Any finding
   can be traced back to the exact search that produced it (see
   [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) for a worked example).
+- **`/var/lib/silentwitness/verification/rocba.jsonl`** — the HMAC-signed ledger for findings
+  approved by the examiner.
+
+For a GitHub-clickable artifact map, use [`DEMO_ARTIFACTS.md`](DEMO_ARTIFACTS.md).
 
 Every claim in the report quotes real evidence. If the AI ever tried to "make something up," the
 system rejects it before it reaches the report — see the [Accuracy Report](ACCURACY_REPORT.md).
@@ -263,8 +270,10 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
   with your own API key.
 - **Three-claim trace:** [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) walks three findings from
   the report → the cited evidence record → the exact `search_evidence` tool execution
-  (`docs/execution_logs/gpt55_100pct_run/`).
-- **Self-correction in the logs:** `docs/execution_logs/gpt55_100pct_run/critic.jsonl` — the live
+  (`docs/execution_logs/rocba_headline_run/`).
+- **Report + JSON artifacts:** [`DEMO_ARTIFACTS.md`](DEMO_ARTIFACTS.md) points to the committed
+  report, findings JSON, audit JSONL, and approval-ledger examples.
+- **Self-correction in the logs:** `docs/execution_logs/rocba_headline_run/critic.jsonl` — the live
   critic challenged 3 of 7 findings; the agent revised them.
 - **Evidence integrity:** [Accuracy Report §6](ACCURACY_REPORT.md#6-evidence-integrity--how-the-architecture-prevents-data-modification)
   — read-only evidence, no write surface, tamper-evident provenance, enforced architecturally.
@@ -283,6 +292,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | How accurate it is (honest) | [`docs/ACCURACY_REPORT.md`](ACCURACY_REPORT.md) |
 | What data it was tested on | [`docs/STARTER_CASES.md`](STARTER_CASES.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |
+| Report + JSON artifact map | [`docs/DEMO_ARTIFACTS.md`](DEMO_ARTIFACTS.md) |
 | Real run logs | [`docs/execution_logs/`](execution_logs/) |
 | The MCP server (the product) | `src/silentwitness_mcp/` |
 | The agent | `src/silentwitness_agent/` |

@@ -88,3 +88,14 @@ password is a case signing password for the HMAC ledger, not your OS/root passwo
 
 That's the full workflow. The report drops at `cases/mr-evil-001/report.md`
 with inline `[verify:audit_id]` links resolving to JSONL audit entries.
+
+After export, inspect:
+
+```bash
+cat cases/mr-evil-001/report.md
+cat cases/mr-evil-001/findings.json | jq '.[] | select(.status == "APPROVED")'
+ls cases/mr-evil-001/audit/*.jsonl
+```
+
+For GitHub-clickable report, findings JSON, audit JSONL, and ledger examples,
+open [Demo artifacts](/docs/demo-artifacts).

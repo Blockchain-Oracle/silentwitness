@@ -2,7 +2,7 @@
 
 > The rules guarantee a judge "must be able to trace any finding back to the specific tool
 > execution that produced it." This walks three findings from the headline 100% run end to end,
-> using only the committed logs in [`execution_logs/gpt55_100pct_run/`](execution_logs/gpt55_100pct_run/).
+> using only the committed logs in [`execution_logs/rocba_headline_run/`](execution_logs/rocba_headline_run/).
 
 Every claim traces through the same chain:
 
@@ -64,9 +64,9 @@ created it.
 
 ```bash
 # the cited record's verbatim text and source artifact:
-grep -o 'record_id": 2514417[^}]*' docs/execution_logs/gpt55_100pct_run/findings.json
+grep -o 'record_id": 2514417[^}]*' docs/execution_logs/rocba_headline_run/findings.json
 # the tool execution that surfaced it (audit_id + query + timestamp):
-grep 'sift-analyst-20260615-209' docs/execution_logs/gpt55_100pct_run/index.jsonl
+grep 'sift-analyst-20260615-209' docs/execution_logs/rocba_headline_run/index.jsonl
 # the critic verdict on the finding:
-grep 'O-003' docs/execution_logs/gpt55_100pct_run/critic.jsonl
+grep 'O-003' docs/execution_logs/rocba_headline_run/critic.jsonl
 ```

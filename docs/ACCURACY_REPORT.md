@@ -75,7 +75,7 @@ does not match the hand-crafted ground-truth finding set.
 Known false-positive risk in the ROCBA runs is over-broad interpretation, not fabricated artifacts:
 for example, cloud-sync and logon observations can be evidence-present while still too broad until
 the critic narrows them to the specific cited records. The headline run includes that challenge and
-revision loop for O-004/O-007 in `docs/execution_logs/gpt55_100pct_run/critic.jsonl` and
+revision loop for O-004/O-007 in `docs/execution_logs/rocba_headline_run/critic.jsonl` and
 `findings.jsonl`. We treat those as noisy claims that must be narrowed, not as proof the raw
 artifact was invented.
 
@@ -101,7 +101,7 @@ hallucination *prevention* is architectural here, not prompt-based:
 ## 5. Self-correction — documented, in the logs
 
 Self-correction is in the audit logs, not staged for the video. In the headline run
-([`execution_logs/gpt55_100pct_run/critic.jsonl`](execution_logs/gpt55_100pct_run/critic.jsonl))
+([`execution_logs/rocba_headline_run/critic.jsonl`](execution_logs/rocba_headline_run/critic.jsonl))
 the live critic (separate agent, fresh context) **CHALLENGED 3 of 7 findings** (O-002, O-004,
 O-005) on real grounds — e.g. O-002: the critic narrowed an over-broad logon claim to the
 specific `LogonType=3 NTLM` / `LogonType=10 RDP` records actually cited. The investigator then
@@ -159,5 +159,5 @@ python -m harness.score_case --case cases/rocba --dataset rocba
 ```
 
 The archived higher-cost benchmark logs are committed under
-[`docs/execution_logs/gpt55_100pct_run/`](execution_logs/gpt55_100pct_run/) for the three-claim
+[`docs/execution_logs/rocba_headline_run/`](execution_logs/rocba_headline_run/) for the three-claim
 trace (find → `record_id` → `search_evidence` execution in `index.jsonl`).
