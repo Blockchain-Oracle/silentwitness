@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from silentwitness_mcp.index import ingest
 from silentwitness_mcp.index.ingest import (
     _MAX_TEXT,
     _iter_json_lines,
@@ -81,3 +82,24 @@ def test_resolve_finds_tool_env_script_when_not_on_path(
     )
 
     assert _resolve("log2timeline.py", "log2timeline") == str(tool)
+
+
+def test_tool_script_dirs_include_uv_tool_bin_before_resolved_python(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool_bin = tmp_path / "tool" / "bin"
+    real_bin = tmp_path / "python" / "bin"
+    tool_bin.mkdir(parents=True)
+    real_bin.mkdir(parents=True)
+    real_python = real_bin / "python3"
+    real_python.write_text("#!/bin/sh\n", encoding="utf-8")
+    tool_python = tool_bin / "python"
+    tool_python.symlink_to(real_python)
+
+    monkeypatch.setattr(ingest.sys, "executable", str(tool_python))
+    monkeypatch.setattr(ingest.sysconfig, "get_path", lambda name: str(tool_bin))
+
+    dirs = ingest._tool_script_dirs()
+
+    assert dirs[0] == tool_bin
+    assert real_bin in dirs

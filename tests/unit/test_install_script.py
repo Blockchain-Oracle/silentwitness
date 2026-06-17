@@ -39,4 +39,5 @@ def test_install_verifies_forensic_tool_environment_after_model_install() -> Non
 
     assert '"Evtx", "regipy", "pyscca", "dfvfs", "plaso", "spacy"' in block
     assert '"silentwitness", "log2timeline", "psort"' in block
+    assert 'sysconfig.get_path("scripts")' in block
     assert text.index("\ninstall_spacy_model\n") < text.index("\nverify_tool_environment\n")

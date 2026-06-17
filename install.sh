@@ -376,11 +376,12 @@ verify_tool_environment() {
 import importlib
 import pathlib
 import sys
+import sysconfig
 
 for module in ("Evtx", "regipy", "pyscca", "dfvfs", "plaso", "spacy"):
     importlib.import_module(module)
 
-scripts = pathlib.Path(sys.executable).resolve().parent
+scripts = pathlib.Path(sysconfig.get_path("scripts") or pathlib.Path(sys.executable).parent)
 missing = [
     name
     for name in ("silentwitness", "log2timeline", "psort")

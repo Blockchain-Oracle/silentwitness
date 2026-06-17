@@ -216,7 +216,7 @@ def _resolve(*names: str) -> str:
 
 def _tool_script_dirs() -> tuple[Path, ...]:
     """Script dirs to search when dependency CLIs live inside the uv tool venv."""
-    candidates = [Path(sys.executable).resolve().parent]
+    candidates = [Path(sys.executable).parent, Path(sys.executable).resolve().parent]
     scripts = sysconfig.get_path("scripts")
     if scripts:
         candidates.append(Path(scripts))
