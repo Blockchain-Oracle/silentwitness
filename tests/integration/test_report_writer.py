@@ -13,7 +13,7 @@ import json
 import time
 from pathlib import Path
 
-from silentwitness_agent.report.template import ReportTemplate, parse_frontmatter
+from silentwitness_agent.report.template import ReportStatus, ReportTemplate, parse_frontmatter
 from silentwitness_agent.report.writer import ReportRenderResult, ReportWriter
 
 # ---------------------------------------------------------------------------
@@ -132,6 +132,33 @@ def test_approved_finding_appears_in_findings_section(tmp_path: Path) -> None:
     _make_writer(case_dir).render()
     text = (case_dir / "report.md").read_text(encoding="utf-8")
     assert "F-001" in text
+
+
+def test_frontmatter_status_reviewed_when_findings_are_approved(tmp_path: Path) -> None:
+    case_dir = _make_case(tmp_path)
+    obs = _obs_record(
+        "O-001",
+        "Malware detected on host.",
+        ["sift-aj-20260613-001"],
+        "I-001",
+        "Attacker installed malware.",
+    )
+    finding = _finding_record("F-001", "O-001", "I-001", "APPROVED")
+    _write_findings(case_dir, [obs, finding])
+    _make_writer(case_dir).render()
+
+    fm, _ = parse_frontmatter((case_dir / "report.md").read_text(encoding="utf-8"))
+
+    assert fm.status == ReportStatus.REVIEWED
+
+
+def test_frontmatter_status_draft_when_no_findings_are_approved(tmp_path: Path) -> None:
+    case_dir = _make_case(tmp_path)
+    _make_writer(case_dir).render()
+
+    fm, _ = parse_frontmatter((case_dir / "report.md").read_text(encoding="utf-8"))
+
+    assert fm.status == ReportStatus.DRAFT
 
 
 def test_draft_finding_does_not_appear_in_findings_body(tmp_path: Path) -> None:

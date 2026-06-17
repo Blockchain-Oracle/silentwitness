@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -9,6 +10,7 @@ from typer.testing import CliRunner
 
 from silentwitness_agent.cli import app
 from silentwitness_agent.report.pdf import PdfRenderResult
+from silentwitness_agent.report.template import ReportStatus, parse_frontmatter
 from silentwitness_agent.report.verify_links import BrokenVerifyLink
 from tests.integration._helpers_status import init_case
 
@@ -57,6 +59,40 @@ def test_export_md_explicit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     assert result.exit_code == 0
     assert str((case_dir / "report.md").resolve()) in result.output
     assert "IOC export" not in result.output
+
+
+def test_export_md_rerenders_report_status_from_findings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Approved findings should refresh stale DRAFT frontmatter during export."""
+    case_dir = _make_case(tmp_path, "mr-exp-reviewed-001", monkeypatch)
+    records = [
+        {
+            "observation_id": "O-001",
+            "text": "Evidence text",
+            "audit_ids": ["sift-001"],
+            "interpretations": [
+                {
+                    "interpretation_id": "I-001",
+                    "text": "Approved interpretation",
+                    "confidence": "HIGH",
+                }
+            ],
+        },
+        {
+            "finding_id": "F-001",
+            "observation_id": "O-001",
+            "interpretation_id": "I-001",
+            "status": "APPROVED",
+        },
+    ]
+    (case_dir / "findings.json").write_text(json.dumps(records), encoding="utf-8")
+
+    result = runner.invoke(app, ["export", "mr-exp-reviewed-001", "--md"], catch_exceptions=False)
+
+    assert result.exit_code == 0
+    frontmatter, _ = parse_frontmatter((case_dir / "report.md").read_text(encoding="utf-8"))
+    assert frontmatter.status == ReportStatus.REVIEWED
 
 
 # ---------------------------------------------------------------------------

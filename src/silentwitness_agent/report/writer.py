@@ -149,10 +149,11 @@ class ReportWriter:
             except (OSError, ValueError):
                 _LOG.warning("Could not read prior report.md created_at; using now", exc_info=True)
 
+        report_status = ReportStatus.REVIEWED if approved else ReportStatus.DRAFT
         fm = Frontmatter(
             case_id=case_id,
             examiner=self._examiner,
-            status=ReportStatus.DRAFT,
+            status=report_status,
             content_hash=content_hash,
             created_at=created_at,
             updated_at=now,

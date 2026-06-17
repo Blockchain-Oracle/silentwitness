@@ -16,6 +16,7 @@ from typer.testing import CliRunner
 
 from silentwitness_agent.cli import app
 from silentwitness_agent.critic import CriticReport
+from silentwitness_agent.report.template import ReportStatus, parse_frontmatter
 from tests.integration._helpers_status import init_case
 
 runner = CliRunner()
@@ -82,8 +83,10 @@ def test_observation_materializes_through_review_to_report(
 
     # --- report.md is populated with the approved finding ---
     report = (case_dir / "report.md").read_text(encoding="utf-8")
+    frontmatter, _ = parse_frontmatter(report)
     assert "## Findings" in report
     assert "bad_HTTP_request" in report, "approved observation text missing from report"
+    assert frontmatter.status == ReportStatus.REVIEWED
     findings_after = json.loads((case_dir / "findings.json").read_text(encoding="utf-8"))
     approved = next(f for f in findings_after if f.get("finding_id") == fid)
     assert approved["status"] == "APPROVED"

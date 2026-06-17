@@ -7,7 +7,10 @@ from pathlib import Path
 from rich.console import Console
 
 from silentwitness_agent.report.pdf import PdfRenderer
+from silentwitness_agent.report.template import parse_frontmatter
 from silentwitness_agent.report.verify_links import BrokenVerifyLink
+from silentwitness_agent.report.writer import ReportWriter
+from silentwitness_common.version import __version__ as sw_version
 
 _IOC_EXTENSIONS: dict[str, str] = {
     "csv": "iocs.csv",
@@ -45,6 +48,29 @@ def _emit_iocs(
         err.print(f"[yellow]⚠[/yellow] IOC export failed: {exc}", highlight=False)
 
 
+def _render_report_md(case_dir: Path, *, err: Console) -> bool:
+    report_md = case_dir / "report.md"
+    examiner = "examiner"
+    model_used = "unknown"
+    try:
+        frontmatter, _ = parse_frontmatter(report_md.read_text(encoding="utf-8"))
+        examiner = frontmatter.examiner or examiner
+        model_used = frontmatter.model_used or model_used
+    except (OSError, ValueError):
+        err.print("[yellow]⚠[/yellow] report.md frontmatter unreadable; using defaults")
+    try:
+        ReportWriter(
+            case_dir,
+            examiner=examiner,
+            model_used=model_used,
+            silentwitness_version=sw_version,
+        ).render()
+        return True
+    except Exception as exc:
+        err.print(f"[red]✗[/red] report.md render failed: {exc}", highlight=False)
+        return False
+
+
 def run(
     case_dir: Path,
     case_id: str,
@@ -74,7 +100,8 @@ def run(
         err.print("[yellow]⚠[/yellow] --out ignored in --md mode", highlight=False)
 
     if not pdf:
-        # --md mode (default): emit the canonical report.md path.
+        if not _render_report_md(case_dir, err=err):
+            return 2
         if ioc_format is not None:
             _emit_iocs(case_dir, ioc_format, err=err)
         print(str(report_md.resolve()))
