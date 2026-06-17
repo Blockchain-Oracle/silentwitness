@@ -38,6 +38,17 @@ _INDEX_DB = "index.db"
 _SUMMARY_SAMPLE_LIMIT = 5
 
 
+def _remove_index_files(case_dir: Path) -> None:
+    """Remove the derived SQLite index files before a rebuild.
+
+    ``index.db`` is derived from registered evidence. If a previous build was
+    interrupted, SQLite may be malformed enough that ``DELETE`` cannot reset it.
+    Replacing the DB files gives ``silentwitness index`` a clean rebuild path.
+    """
+    for suffix in ("", "-wal", "-shm"):
+        (case_dir / f"{_INDEX_DB}{suffix}").unlink(missing_ok=True)
+
+
 def _counts_by_kind(items: Sequence[tuple[str, object, object]]) -> str:
     counts: dict[str, int] = {}
     for kind, _, _ in items:
@@ -168,8 +179,8 @@ def run(
             "[cyan]…[/cyan] parsing prepared artifacts in parallel (targeted parsers)",
             highlight=False,
         )
+        _remove_index_files(case_dir)
         with EvidenceIndex(case_dir / _INDEX_DB) as idx:
-            idx.reset()
             idx.begin_bulk()  # bulk-load PRAGMAs; FTS is built once at the end
             phase_t0 = time.monotonic()
             ingested = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
