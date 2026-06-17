@@ -25,7 +25,7 @@ from silentwitness_agent.config import DEFAULT_MAX_STEPS, DEFAULT_MAX_TOKENS
 from silentwitness_agent.critic import CriticVerdictRecord
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
-from silentwitness_agent.model_policy import DEFAULT_INVESTIGATOR_MODEL
+from silentwitness_agent.model_policy import DEFAULT_INVESTIGATOR_MODEL, normalize_model_string
 from silentwitness_mcp._case_env import build_server_env
 
 _LOG = logging.getLogger(__name__)
@@ -135,10 +135,11 @@ def _usage_limits(
     *,
     model: Any = None,
 ) -> UsageLimits:
+    _ = model
     return UsageLimits(
         request_limit=request_limit,
         total_tokens_limit=token_limit,
-        count_tokens_before_request=model is None or model.__class__.__name__ != "TestModel",
+        count_tokens_before_request=False,
     )
 
 
@@ -152,6 +153,7 @@ def _usage_limit_final_state(
 
 def _resolve_model(model_str: str) -> Model:
     """Route ``vllm:<base_url>`` through OpenAIChatModel; all others via Pydantic AI registry."""
+    model_str = normalize_model_string(model_str)
     if model_str.startswith("vllm:"):
         base_url = model_str[len("vllm:") :]
         if not base_url or not base_url.startswith(("http://", "https://")):
@@ -194,7 +196,7 @@ def build_investigator(
 
     ``hooks`` is optional so the agent can run without emitting per-step audit events.
     """
-    model_str = (
+    model_str = normalize_model_string(
         model if model is not None else os.environ.get("SILENTWITNESS_MODEL", _DEFAULT_MODEL)
     )
     max_iters = (

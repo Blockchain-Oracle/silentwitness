@@ -38,6 +38,7 @@ from silentwitness_agent.cli_commands._live_render import (
     stream_hypothesis_events,
 )
 from silentwitness_agent.config import SilentWitnessConfig
+from silentwitness_agent.model_policy import normalize_model_string
 from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 
 # Held during an active investigation so tests can trigger cancellation.
@@ -288,7 +289,9 @@ def run(
     if should_start_hud:
         _try_start_hud(config, err)
 
-    resolved_model = model or os.environ.get("SILENTWITNESS_MODEL") or config.model.default
+    resolved_model = normalize_model_string(
+        model or os.environ.get("SILENTWITNESS_MODEL") or config.model.default
+    )
     resolved_max_iterations = (
         max_iterations if max_iterations is not None else config.budget.max_steps
     )

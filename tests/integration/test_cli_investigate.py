@@ -117,7 +117,7 @@ def test_model_flag_sets_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         app, ["investigate", "i002", "--model", "openai:gpt-5-mini"], catch_exceptions=False
     )
     assert result.exit_code == 0
-    assert captured and captured[0] == "openai:gpt-5-mini"
+    assert captured and captured[0] == "openai-chat:gpt-5-mini"
 
 
 # ---------------------------------------------------------------------------

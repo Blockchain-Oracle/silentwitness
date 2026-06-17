@@ -129,7 +129,7 @@ volumes:
 
 ```bash
 export SILENTWITNESS_MODEL="anthropic:claude-sonnet-4-6"      # default; recommended for the demo
-export SILENTWITNESS_MODEL="openai:gpt-5-mini"                     # cost-safe OpenAI alternative
+export SILENTWITNESS_MODEL="openai-chat:gpt-5-mini"                # cost-safe OpenAI alternative
 export SILENTWITNESS_MODEL="google-gla:gemini-2.5-flash"           # cost-safe Gemini alternative
 export SILENTWITNESS_MODEL="ollama:llama4-70b-instruct"            # local; longer-running on first cold cache
 ```

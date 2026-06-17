@@ -64,7 +64,7 @@ Pick **one** provider and paste your key in place of the placeholder.
 ```bash
 # Option A — OpenAI
 export OPENAI_API_KEY="<paste-your-openai-key-here>"
-export SILENTWITNESS_MODEL="openai:gpt-5-mini"   # cost-safe OpenAI investigator model
+export SILENTWITNESS_MODEL="openai-chat:gpt-5-mini"   # cost-safe OpenAI investigator model
 
 # Option B — Anthropic (Claude)
 export ANTHROPIC_API_KEY="<paste-your-anthropic-key-here>"

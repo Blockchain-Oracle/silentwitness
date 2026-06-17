@@ -48,10 +48,10 @@ def test_home_rc_loaded(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: home)
     (home / ".silentwitnessrc.toml").write_text(
-        '[model]\ndefault = "openai:gpt-5-mini"\n', encoding="utf-8"
+        '[model]\ndefault = "openai-chat:gpt-5-mini"\n', encoding="utf-8"
     )
     cfg = load_config()
-    assert cfg.model.default == "openai:gpt-5-mini"
+    assert cfg.model.default == "openai-chat:gpt-5-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -67,7 +67,7 @@ def test_cwd_rc_overrides_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.chdir(cwd)
     monkeypatch.setattr(Path, "home", lambda: home)
     (home / ".silentwitnessrc.toml").write_text(
-        '[model]\ndefault = "openai:gpt-5-mini"\n', encoding="utf-8"
+        '[model]\ndefault = "openai-chat:gpt-5-mini"\n', encoding="utf-8"
     )
     (cwd / ".silentwitnessrc.toml").write_text(
         '[model]\ndefault = "anthropic:claude-sonnet-4-6"\n', encoding="utf-8"
@@ -87,7 +87,7 @@ def test_env_var_overrides_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: home)
     (home / ".silentwitnessrc.toml").write_text(
-        '[model]\ndefault = "openai:gpt-5-mini"\n', encoding="utf-8"
+        '[model]\ndefault = "openai-chat:gpt-5-mini"\n', encoding="utf-8"
     )
     monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-sonnet-4-6")
     cfg = load_config()
@@ -102,7 +102,7 @@ def test_env_var_overrides_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 def test_config_file_overrides_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5-mini")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "openai-chat:gpt-5-mini")
     explicit = tmp_path / "explicit.toml"
     explicit.write_text('[model]\ndefault = "anthropic:claude-sonnet-4-6"\n', encoding="utf-8")
     cfg = load_config(config_file=explicit)

@@ -34,7 +34,7 @@ def test_anthropic_provider_selected_by_model_string(
 def test_openai_provider_selected_by_model_string(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """SILENTWITNESS_MODEL=openai:... routes through the OpenAI provider."""
+    """SILENTWITNESS_MODEL=openai:... routes through the OpenAI Chat provider."""
     monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5-mini")
     monkeypatch.setenv("OPENAI_API_KEY", "fake-key-for-construction")
 
@@ -43,5 +43,5 @@ def test_openai_provider_selected_by_model_string(
         "tester",
     )
 
-    assert cfg.model_str == "openai:gpt-5-mini"
+    assert cfg.model_str == "openai-chat:gpt-5-mini"
     assert "openai" in repr(cfg.agent.model).lower()

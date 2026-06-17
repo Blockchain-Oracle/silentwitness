@@ -80,7 +80,7 @@ docker compose exec silentwitness silentwitness investigate mr-evil-001
 | `SILENTWITNESS_VOL3_MALFIND_MAX_PIDS` | `64` | PID cap for `--memory-profile targeted`, which runs `malfind --pid` only against selected high-signal processes. |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
 
-For OpenAI runs, start with `SILENTWITNESS_MODEL=openai:gpt-5-mini`. Treat larger OpenAI models as deliberate reruns with an explicit `--max-tokens` cap.
+For OpenAI runs, start with `SILENTWITNESS_MODEL=openai-chat:gpt-5-mini`. Treat larger OpenAI models as deliberate reruns with an explicit `--max-tokens` cap.
 
 The Linux installer uses the `silentwitness[forensics]` target and verifies the tool environment at
 the end, including parser imports, `log2timeline`, `psort`, and the spaCy entity model.

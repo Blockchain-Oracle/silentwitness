@@ -154,7 +154,7 @@ agent could alter original evidence, regardless of what the model decides:
 silentwitness register-evidence rocba /path/to/rocba.E01
 silentwitness prepare rocba           # dfVFS extract (read-only)
 silentwitness index rocba             # targeted parsers + Sigma detections -> FTS index
-SILENTWITNESS_MODEL=openai:gpt-5.2 silentwitness investigate rocba --max-iterations 80
+SILENTWITNESS_MODEL=openai-chat:gpt-5.2 silentwitness investigate rocba --max-iterations 80
 python -m harness.score_case --case cases/rocba --dataset rocba
 ```
 
