@@ -73,7 +73,7 @@ def test_factory_falls_back_to_silentwitness_model_provider_sibling(
     monkeypatch.delenv("SILENTWITNESS_CRITIC_FAST", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-test")  # pragma: allowlist secret
     monkeypatch.setenv("SILENTWITNESS_MODEL", "openai:gpt-5.2")
-    assert _select_model_str(None) == "openai:gpt-5-mini"
+    assert _select_model_str(None) == "openai-chat:gpt-5-mini"
 
 
 def test_factory_critic_fast_selects_haiku(monkeypatch: pytest.MonkeyPatch) -> None:

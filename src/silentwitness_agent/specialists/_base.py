@@ -16,7 +16,10 @@ from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent.critic import CriticVerdictRecord
-from silentwitness_agent.model_policy import cost_optimized_model_for_provider
+from silentwitness_agent.model_policy import (
+    cost_optimized_model_for_provider,
+    normalize_model_string,
+)
 from silentwitness_common.types import AuditId, Confidence, SpecialistName
 
 _GLOBAL_MODEL_ENV = "SILENTWITNESS_MODEL"
@@ -95,12 +98,13 @@ def _infer_model_checked(value: str, source: str) -> Model:
     only those two are relabelled with the env-var context.
     """
     try:
-        return infer_model(value)
+        return infer_model(normalize_model_string(value))
     except (UserError, ValueError) as exc:
         if "Unknown model" in str(exc) or "Unknown provider" in str(exc):
             raise ValueError(
                 f"{source}={value!r} is not a valid Pydantic AI model string "
-                f"(e.g. 'anthropic:claude-haiku-4-5' or 'openai:gpt-4o'). Error: {exc}"
+                f"(e.g. 'anthropic:claude-haiku-4-5' or 'openai-chat:gpt-5-mini'). "
+                f"Error: {exc}"
             ) from exc
         raise
 
@@ -121,7 +125,7 @@ def resolve_specialist_model(
     ``MODEL_QUALITY=high`` → ``default_model``.
 
     The cost-optimized sibling prevents a strong investigator model such as
-    ``openai:gpt-5.2`` or ``google:gemini-2.5-pro`` from making every nested
+    ``openai-chat:gpt-5.2`` or ``google:gemini-2.5-pro`` from making every nested
     specialist call use that same expensive model. ``MODEL_QUALITY=high`` opts
     back into the explicit global model without switching providers.
     """
@@ -152,14 +156,15 @@ def specialist_usage_limits(
 ) -> UsageLimits:
     """Build nested specialist limits, avoiding pre-counting for TestModel.
 
-    Real provider models can preflight token counts. Pydantic AI's TestModel
-    intentionally does not implement ``count_tokens()``, so offline unit tests
-    must disable pre-counting while preserving the same request/token caps.
+    Pydantic AI checks token totals from model response usage. We keep preflight
+    counting disabled because OpenAI Chat does not implement ``count_tokens()``
+    and would otherwise fail before the request is sent.
     """
+    _ = model
     return UsageLimits(
         request_limit=request_limit,
         total_tokens_limit=token_limit,
-        count_tokens_before_request=model.__class__.__name__ != "TestModel",
+        count_tokens_before_request=False,
     )
 
 

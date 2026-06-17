@@ -419,8 +419,8 @@ Pydantic AI `Agent` instance configured at runtime from environment.
 - **Model selection.** `SILENTWITNESS_MODEL` env var. Default: `anthropic:claude-sonnet-4-6`. Supported model strings:
   - `anthropic:claude-sonnet-4-6` (default)
   - `anthropic:claude-haiku-4-5` (lower cost)
-  - `openai:gpt-5-mini` (cost-safe OpenAI investigator/specialist choice)
-  - `openai:gpt-5.4-mini` (stronger current OpenAI mini option)
+  - `openai-chat:gpt-5-mini` (cost-safe OpenAI investigator/specialist choice)
+  - `openai-chat:gpt-5.4-mini` (stronger current OpenAI mini option)
   - `google-gla:gemini-2.5-flash` (cost-safe Gemini choice)
   - `google-gla:gemini-2.5-pro` (higher-cost Gemini option)
   - `ollama:llama-3.3-70b` (local, zero-cost option)
@@ -432,7 +432,7 @@ Pydantic AI `Agent` instance configured at runtime from environment.
   - `@hooks.on.after_tool_execute` — emit a post-tool entry referencing the `audit_id` returned by the MCP server.
   - `@hooks.on.after_model_request` — per-LLM-call delta event to `audit/agent.jsonl` (used for token accounting; this replaces our earlier `on_step` placeholder which does not exist as a hook name).
   - `@hooks.on.after_run` — flush state, write the final hypothesis snapshot (this replaces our earlier `on_finish` placeholder).
-- **Usage limits.** Configurable via `SILENTWITNESS_MAX_STEPS` / `SILENTWITNESS_MAX_ITERS`, `SILENTWITNESS_MAX_TOKENS`, `--max-iterations`, and `--max-tokens`. **Defaults: 80 model requests and 6,000,000 total tokens.** There is no `Agent(max_iterations=N)` constructor kwarg; pass `usage_limits=UsageLimits(request_limit=N, total_tokens_limit=T, count_tokens_before_request=True)` at each `agent.run(..., usage_limits=...)` invocation, including nested specialist runs. `UsageLimitExceeded` is caught by the wrapping coroutine: request caps produce `MAX_ITERATIONS`, token caps produce `BUDGET_EXHAUSTED`, remaining active hypotheses are abandoned, and a finish event is written to `audit/agent.jsonl`.
+- **Usage limits.** Configurable via `SILENTWITNESS_MAX_STEPS` / `SILENTWITNESS_MAX_ITERS`, `SILENTWITNESS_MAX_TOKENS`, `--max-iterations`, and `--max-tokens`. **Defaults: 80 model requests and 6,000,000 total tokens.** There is no `Agent(max_iterations=N)` constructor kwarg; pass `usage_limits=UsageLimits(request_limit=N, total_tokens_limit=T, count_tokens_before_request=False)` at each `agent.run(..., usage_limits=...)` invocation, including nested specialist runs. Pydantic AI checks token totals from model response usage; preflight counting is disabled because OpenAI Chat does not implement `count_tokens()` and would fail before the first request. `UsageLimitExceeded` is caught by the wrapping coroutine: request caps produce `MAX_ITERATIONS`, token caps produce `BUDGET_EXHAUSTED`, remaining active hypotheses are abandoned, and a finish event is written to `audit/agent.jsonl`.
 - **System prompt.** The senior-analyst frame. Verbatim (lives in `silentwitness_agent/prompts/investigator.md`):
 
   > You are a senior incident response analyst working a digital forensics case. Your method is hypothesis-driven: you form a single concrete hypothesis at a time, dispatch one specialist to test it, and based on the evidence you either confirm the hypothesis, pivot to a new one, or abandon it. You never claim a finding without citing the specific tool output that supports it. When the evidence is incomplete, you list the gap in the report's Gaps section rather than guess. You read tool errors carefully and adjust your approach. You are working a case, not running a checklist.
@@ -454,7 +454,7 @@ Four specialists, each its own `Agent`, invoked from the investigator via the ag
   The real primitive is `pydantic_ai.FilteredToolset` (`pydantic_ai_slim/pydantic_ai/toolsets/filtered.py`).
 
 - **Memory specialist** (`specialists/memory.py`)
-  - Model: `SILENTWITNESS_SPECIALIST_MODEL_MEMORY` wins if set. Otherwise specialists use a same-provider cost-optimized sibling of `SILENTWITNESS_MODEL`: Anthropic → `anthropic:claude-haiku-4-5`, OpenAI → `openai:gpt-5-mini`, Google/Gemini → `google:gemini-2.5-flash`. `SILENTWITNESS_MODEL_QUALITY=high` preserves the explicit global model instead.
+  - Model: `SILENTWITNESS_SPECIALIST_MODEL_MEMORY` wins if set. Otherwise specialists use a same-provider cost-optimized sibling of `SILENTWITNESS_MODEL`: Anthropic → `anthropic:claude-haiku-4-5`, OpenAI → `openai-chat:gpt-5-mini`, Google/Gemini → `google:gemini-2.5-flash`. `SILENTWITNESS_MODEL_QUALITY=high` preserves the explicit global model instead.
   - MCP allowlist (passed to `.filtered()`): `vol_pslist`, `vol_pstree`, `vol_psscan`, `vol_malfind`, `vol_netscan`, `vol_cmdline`, `vol_dlllist`, `vol_handles`, `vol_lsadump`, `record_observation`, `record_interpretation`, `register_evidence`, `verify_evidence_hash`.
   - System prompt: "You are a memory forensics specialist. You answer one targeted question per invocation. You cite the exact tool output line that supports your answer."
   - Returns: `SpecialistFinding` (typed Pydantic model with the structured finding payload).

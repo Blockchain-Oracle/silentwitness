@@ -27,6 +27,7 @@ from silentwitness_agent._caching import cache_settings
 from silentwitness_agent.model_policy import (
     DEFAULT_CRITIC_MODEL,
     cost_optimized_model_for_provider,
+    normalize_model_string,
 )
 from silentwitness_common.types import Confidence
 
@@ -116,7 +117,7 @@ class CriticDeps(BaseModel):
 
 def _resolve_critic_model(model_str: str) -> Model:
     """Resolve model string to a Pydantic AI Model instance."""
-    return infer_model(model_str)
+    return infer_model(normalize_model_string(model_str))
 
 
 def _select_model_str(model: str | None) -> str:
@@ -152,7 +153,7 @@ def build_critic(model: str | None = None) -> Agent[CriticDeps, CriticReport]:
     The critic has NO MCP toolset — it reasons purely over inline evidence.
     This is architecturally required: tool access would pollute the fresh context.
     """
-    model_str = _select_model_str(model)
+    model_str = normalize_model_string(_select_model_str(model))
     resolved_model = _resolve_critic_model(model_str)
 
     return Agent(
@@ -170,11 +171,12 @@ def critic_usage_limits(
     request_limit: int | None,
     token_limit: int | None,
 ) -> UsageLimits:
-    """Build critic limits, avoiding token pre-counting for TestModel."""
+    """Build critic limits without unsupported preflight token counting."""
+    _ = model
     return UsageLimits(
         request_limit=request_limit,
         total_tokens_limit=token_limit,
-        count_tokens_before_request=model.__class__.__name__ != "TestModel",
+        count_tokens_before_request=False,
     )
 
 

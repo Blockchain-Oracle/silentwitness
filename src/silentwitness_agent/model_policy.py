@@ -9,7 +9,7 @@ HIGH_QUALITY_ANTHROPIC_MODEL = "anthropic:claude-sonnet-4-6"
 
 PROVIDER_COST_OPTIMIZED_MODELS = {
     "anthropic": "anthropic:claude-haiku-4-5",
-    "openai": "openai:gpt-5-mini",
+    "openai": "openai-chat:gpt-5-mini",
     "openai-chat": "openai-chat:gpt-5-mini",
     "openai-responses": "openai-responses:gpt-5-mini",
     "google": "google:gemini-2.5-flash",
@@ -17,8 +17,16 @@ PROVIDER_COST_OPTIMIZED_MODELS = {
 }
 
 
+def normalize_model_string(model_str: str) -> str:
+    """Pin ambiguous OpenAI shorthand to the current Chat Completions provider."""
+    if model_str.startswith("openai:"):
+        return f"openai-chat:{model_str.removeprefix('openai:')}"
+    return model_str
+
+
 def cost_optimized_model_for_provider(model_str: str) -> str:
     """Return a cheaper same-provider sibling for nested agent calls."""
+    model_str = normalize_model_string(model_str)
     provider, sep, model_name = model_str.partition(":")
     if not sep:
         return model_str
@@ -42,4 +50,5 @@ __all__ = [
     "HIGH_QUALITY_ANTHROPIC_MODEL",
     "PROVIDER_COST_OPTIMIZED_MODELS",
     "cost_optimized_model_for_provider",
+    "normalize_model_string",
 ]

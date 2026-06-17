@@ -20,7 +20,7 @@ from pathlib import Path
 _REPO = Path(__file__).resolve().parents[1]
 _DOC = _REPO / "docs" / "TRY_IT_OUT.md"
 _MAX = 400
-_REQUIRED_MODELS = ("anthropic:", "openai:", "google-gla:", "ollama:")
+_REQUIRED_MODELS = ("anthropic:", "openai-chat:", "google-gla:", "ollama:")
 _BANNED = (
     "court-admissible",
     "autonomous SOC",
@@ -55,9 +55,8 @@ def _strip_code_fences(text: str) -> str:
 
 
 def _contains_provider_prefix(section: str, prefix: str) -> bool:
-    """Word-bounded check so `openai:` doesn't false-pass on `openai-chat:`."""
-    # The prefix ends in `:`; require the char before is not a word char or hyphen
-    # (so `openai-chat:` does NOT match `openai:`).
+    """Word-bounded check so similarly named providers do not false-pass."""
+    # The prefix ends in `:`; require the char before is not a word char or hyphen.
     pattern = rf"(?<![\w-]){re.escape(prefix)}"
     return re.search(pattern, section) is not None
 

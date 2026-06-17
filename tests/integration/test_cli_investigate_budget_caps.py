@@ -79,7 +79,7 @@ def test_runner_usage_limits_include_token_budget() -> None:
 
     assert limits.request_limit == 80
     assert limits.total_tokens_limit == 6_000_000
-    assert limits.count_tokens_before_request is True
+    assert limits.count_tokens_before_request is False
 
 
 def test_runner_classifies_token_limit_as_budget_exhausted() -> None:

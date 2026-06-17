@@ -22,7 +22,7 @@ def _agent_usage_limits(request_limit: int | None, token_limit: int) -> Any:
     return UsageLimits(
         request_limit=request_limit,
         total_tokens_limit=token_limit,
-        count_tokens_before_request=True,
+        count_tokens_before_request=False,
     )
 
 
