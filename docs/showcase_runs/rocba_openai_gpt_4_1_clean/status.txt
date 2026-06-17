@@ -1,0 +1,17 @@
+case:        rocba-gpt-4-1-001     model:   openai-chat:gpt-4.1
+examiner:    root                  status:  ERROR (8m 38s elapsed)
+
+hypothesis stack (0 active, 5 confirmed, 0 pivoted, 0 abandoned):
+ H-001  [CONFIRMED]  There was unauthorized access to a local user account via
+                     remote means (e.g., RD
+ H-002  [CONFIRMED]  The 'fredr' account was used during the RDP sessions to
+                     access or exfiltrate loc
+ H-003  [CONFIRMED]  Data accessed by the 'fredr' user during RDP sessions was
+                     exfiltrated using a cl
+ H-004  [CONFIRMED]  The first instance of RDP LogonType=10 activity for user
+                     'fredr' on SRL-FORGE oc
+ H-005  [CONFIRMED]  No other user accounts besides 'fredr' and possibly
+                     'srl-h' display RDP LogonTyp
+
+findings: staged 9  approved 6  rejected 8
+tokens:   4M / 6M budget

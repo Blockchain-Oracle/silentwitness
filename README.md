@@ -147,9 +147,9 @@ Provenance + memorization-risk disclosure per case: see [`docs/STARTER_CASES.md`
 ## Example execution logs
 
 Report, findings JSON, audit JSONL, and approval-ledger pointers: see
-[`docs/DEMO_ARTIFACTS.md`](./docs/DEMO_ARTIFACTS.md). The current judge/demo
-showcase bundle lives in
-[`docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/`](./docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/).
+[`docs/DEMO_ARTIFACTS.md`](./docs/DEMO_ARTIFACTS.md). Judge/demo showcase
+bundles live in [`docs/showcase_runs/`](./docs/showcase_runs/), including the
+ROCBA GPT-4.1 clean model run and the Mr. Evil GPT-5.2 resume snapshot.
 Synthetic full-case logs live in
 [`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/).
 

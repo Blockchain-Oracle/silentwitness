@@ -1,0 +1,9 @@
+{
+  "case_id": "rocba-gpt-4-1-001",
+  "model": "openai-chat:gpt-4.1",
+  "records": 15,
+  "draft_findings": 0,
+  "approved_findings": 6,
+  "rejected_findings": 0,
+  "observation_records": 12
+}
