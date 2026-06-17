@@ -24,7 +24,7 @@ coverage.xml
 # Per-case audit/evidence/report — never committed.
 cases/
 # Local evidence corpora copied to VPS/workstations for demo runs.
-evidence/
+/evidence/
 # HMAC verification ledgers — never committed.
 var/lib/silentwitness/
 # Binary forensic images — manifests are committed, binaries are not.
