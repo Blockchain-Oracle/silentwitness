@@ -37,6 +37,7 @@ from typing import Any, Final, Literal, Protocol
 
 from silentwitness_mcp.index._feeder_util import sha256_file
 from silentwitness_mcp.index.feeders_memory import MAPPERS, PLUGINS, _short_plugin
+from silentwitness_mcp.index.memory_targets import MALFIND_PLUGIN, select_malfind_pids
 from silentwitness_mcp.index.store import EvidenceIndex, IndexRecord
 
 _LOG = logging.getLogger(__name__)
@@ -45,7 +46,9 @@ _LOG = logging.getLogger(__name__)
 # `vol_bin=` override so tests and non-SIFT installs can point at their own venv.
 _VOL_BIN: Final[str] = "/opt/silentwitness/vol3-venv/bin/vol"
 _DEFAULT_VOL3_TIMEOUT_SEC: Final[int] = 300
+_DEFAULT_TARGETED_MALFIND_MAX_PIDS: Final[int] = 64
 _TIMEOUT_ENV: Final[str] = "SILENTWITNESS_VOL3_TIMEOUT_SEC"
+_MALFIND_MAX_PIDS_ENV: Final[str] = "SILENTWITNESS_VOL3_MALFIND_MAX_PIDS"
 
 
 @dataclass
@@ -66,7 +69,7 @@ class MemoryIngestResult:
 class MemoryPluginEvent:
     """Progress event for one Volatility plugin run."""
 
-    status: Literal["start", "ok", "failed"]
+    status: Literal["start", "ok", "failed", "skipped"]
     plugin: str
     short_name: str
     timeout_seconds: float | None
@@ -84,7 +87,12 @@ MemoryProgress = Callable[[MemoryPluginEvent], None]
 
 
 def _run_vol_json(
-    image: Path, plugin: str, *, timeout: float | None, vol_bin: str = _VOL_BIN
+    image: Path,
+    plugin: str,
+    *,
+    timeout: float | None,
+    vol_bin: str = _VOL_BIN,
+    plugin_args: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """Run ``vol -r json -f <image> <plugin>`` and return its parsed JSON rows.
 
@@ -95,7 +103,7 @@ def _run_vol_json(
     top-level dict instead of a list (some plugin renderers wrap rows as
     ``{"renderer": "json", "rows": [...]}``)."""
     completed = subprocess.run(  # noqa: S603  # fixed vendored vol3 binary, validated args
-        [vol_bin, "-q", "-r", "json", "-f", str(image), plugin],
+        [vol_bin, "-q", "-r", "json", "-f", str(image), plugin, *plugin_args],
         capture_output=True,
         check=True,
         timeout=timeout,
@@ -135,6 +143,17 @@ def _timeout_for_plugin(plugin: str, default_timeout: int) -> float | None:
     except ValueError:
         return float(default_timeout)
     return value if value > 0 else None
+
+
+def _targeted_malfind_max_pids() -> int:
+    raw = os.environ.get(_MALFIND_MAX_PIDS_ENV)
+    if raw is None:
+        return _DEFAULT_TARGETED_MALFIND_MAX_PIDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return _DEFAULT_TARGETED_MALFIND_MAX_PIDS
+    return max(0, value)
 
 
 def _emit(progress: MemoryProgress | None, event: MemoryPluginEvent) -> None:
@@ -180,6 +199,7 @@ def ingest_memory_image(
     timeout_seconds: int = _DEFAULT_VOL3_TIMEOUT_SEC,
     vol_bin: str = _VOL_BIN,
     progress: MemoryProgress | None = None,
+    targeted_malfind: bool = False,
 ) -> MemoryIngestResult:
     """Run each ``plugins`` plugin against ``image``, ingest rows, return the result.
 
@@ -196,15 +216,43 @@ def ingest_memory_image(
         result.failures.append(("__driver__", f"vol3 binary not found at {vol_bin}"))
         return result
     cite = artifact_path if artifact_path is not None else image.name
+    rows_by_plugin: dict[str, list[dict[str, Any]]] = {}
 
     for plugin in plugins:
         timeout = _timeout_for_plugin(plugin, timeout_seconds)
         short = _short_plugin(plugin)
+        plugin_args: tuple[str, ...] = ()
+        message = ""
+        if targeted_malfind and plugin == MALFIND_PLUGIN:
+            pids = select_malfind_pids(
+                rows_by_plugin,
+                max_pids=_targeted_malfind_max_pids(),
+            )
+            if not pids:
+                message = "no selected PIDs from netscan/cmdline/psscan"
+                result.counts[short] = 0
+                _emit(
+                    progress,
+                    MemoryPluginEvent(
+                        status="skipped",
+                        plugin=plugin,
+                        short_name=short,
+                        timeout_seconds=timeout,
+                        message=message,
+                    ),
+                )
+                continue
+            plugin_args = ("--pid", *(str(pid) for pid in pids))
+            message = f"targeted pids={len(pids)}"
         started = time.monotonic()
         _emit(
             progress,
             MemoryPluginEvent(
-                status="start", plugin=plugin, short_name=short, timeout_seconds=timeout
+                status="start",
+                plugin=plugin,
+                short_name=short,
+                timeout_seconds=timeout,
+                message=message,
             ),
         )
         mapper = MAPPERS.get(plugin)
@@ -224,7 +272,14 @@ def ingest_memory_image(
             )
             continue
         try:
-            rows = _run_vol_json(image, plugin, timeout=timeout, vol_bin=vol_bin)
+            rows = _run_vol_json(
+                image,
+                plugin,
+                timeout=timeout,
+                vol_bin=vol_bin,
+                plugin_args=plugin_args,
+            )
+            rows_by_plugin[plugin] = rows
         except subprocess.CalledProcessError as exc:
             message = _record_subprocess_failure(result, plugin, exc)
             _emit(

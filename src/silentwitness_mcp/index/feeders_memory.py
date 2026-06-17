@@ -40,6 +40,8 @@ class Mapper(Protocol):
     ) -> Iterator[IndexRecord]: ...
 
 
+MALFIND_PLUGIN: Final[str] = "windows.malware.malfind.Malfind"
+
 # Standard memory inventory used by the CLI's default index profile. These produce
 # useful process/network corroboration without the expensive all-process VAD scan.
 STANDARD_PLUGINS: Final[tuple[str, ...]] = (
@@ -49,12 +51,13 @@ STANDARD_PLUGINS: Final[tuple[str, ...]] = (
     "windows.psscan.PsScan",
 )
 
+# Targeted memory scan: standard inventory plus malfind against selected PIDs only.
+# The driver computes selected PIDs from rows emitted by the earlier plugins.
+TARGETED_PLUGINS: Final[tuple[str, ...]] = (*STANDARD_PLUGINS, MALFIND_PLUGIN)
+
 # Deep memory scan used when explicitly requested. Keep expensive scanners last so
 # a slow malware sweep cannot delay basic process/network memory rows.
-DEEP_PLUGINS: Final[tuple[str, ...]] = (
-    *STANDARD_PLUGINS,
-    "windows.malware.malfind.Malfind",
-)
+DEEP_PLUGINS: Final[tuple[str, ...]] = (*STANDARD_PLUGINS, MALFIND_PLUGIN)
 
 PLUGINS: Final[tuple[str, ...]] = DEEP_PLUGINS
 
@@ -282,7 +285,7 @@ MAPPERS: Final[Mapping[str, Mapper]] = {
     "windows.pslist.PsList": _pslist_to_records,
     "windows.cmdline.CmdLine": _cmdline_to_records,
     "windows.netscan.NetScan": _netscan_to_records,
-    "windows.malware.malfind.Malfind": _malfind_to_records,
+    MALFIND_PLUGIN: _malfind_to_records,
     "windows.psscan.PsScan": _psscan_to_records,
 }
 
@@ -293,4 +296,12 @@ if set(MAPPERS) != set(PLUGINS):  # load-time invariant
     raise AssertionError("PLUGINS and MAPPERS keys diverged")
 
 
-__all__ = ["DEEP_PLUGINS", "MAPPERS", "PLUGINS", "STANDARD_PLUGINS", "Mapper"]
+__all__ = [
+    "DEEP_PLUGINS",
+    "MALFIND_PLUGIN",
+    "MAPPERS",
+    "PLUGINS",
+    "STANDARD_PLUGINS",
+    "TARGETED_PLUGINS",
+    "Mapper",
+]

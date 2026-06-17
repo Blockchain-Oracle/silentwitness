@@ -75,7 +75,8 @@ docker compose exec silentwitness silentwitness investigate mr-evil-001
 | `CRITIC_MODEL` | (inherits) | Live critic model — usually a faster/cheaper sibling of the investigator. |
 | `MAX_ITERS` | unlimited | Hard cap on agent iterations. Unlimited by default (PR #236); three self-termination signals — structured output, token budget, coverage-gate retry exhaustion — still stop the run. |
 | `CASES_DIR` | `./cases` | Where investigations are written. |
-| `SILENTWITNESS_VOL3_TIMEOUT_SEC` | `300` | Per-Volatility-plugin timeout during `index` when memory evidence is registered. The default memory profile skips all-process `malfind`; use `silentwitness index <case> --memory-profile deep` for that scan. |
+| `SILENTWITNESS_VOL3_TIMEOUT_SEC` | `300` | Per-Volatility-plugin timeout during `index` when memory evidence is registered. |
+| `SILENTWITNESS_VOL3_MALFIND_MAX_PIDS` | `64` | PID cap for `--memory-profile targeted`, which runs `malfind --pid` only against selected high-signal processes. |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
 
 ## Quick start
@@ -100,7 +101,7 @@ silentwitness export mr-evil-001 --md
 | `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
 | `register-evidence` | Records an evidence file or starter-case folder, classifies artifact types, computes hashes, and refuses unsafe writable evidence mounts. |
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
-| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If memory evidence is present, the default `standard` profile indexes process, command-line, network, and pool-scan rows; `--memory-profile deep` also runs slower `malfind` scanning. |
+| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If memory evidence is present, `standard` indexes process, command-line, network, and pool-scan rows; `targeted` adds bounded `malfind --pid`; `deep` runs all-process `malfind`. |
 | `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |
 | `review` | Lets the examiner inspect staged findings before they become accepted report material. |
 | `verify --audit-chain` | Recomputes every audit JSONL hash chain and reports tampering or missing audit links. |

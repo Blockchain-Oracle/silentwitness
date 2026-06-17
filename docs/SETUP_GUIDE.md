@@ -120,7 +120,15 @@ silentwitness index rocba
 artifacts and builds a fast searchable index. This is the heavy step, and it only happens once. If
 you registered a memory image, the default memory profile is tuned for demo speed: Volatility runs
 `pslist`, `cmdline`, `netscan`, and `psscan` with visible per-plugin progress. The expensive
-all-process `malfind` VAD scan is opt-in:
+all-process `malfind` VAD scan is opt-in. For a bounded malware sweep, use the targeted profile:
+
+```bash
+silentwitness index rocba --memory-profile targeted
+```
+
+That runs standard inventory first, selects high-signal PIDs from `netscan`, suspicious command
+lines, and `psscan`-only processes, then runs `malfind --pid` for that bounded set. The PID cap is
+`SILENTWITNESS_VOL3_MALFIND_MAX_PIDS` (default: 64). For an all-process sweep:
 
 ```bash
 silentwitness index rocba --memory-profile deep
@@ -204,7 +212,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | Investigation stops with `request_limit` | The model needs more steps | Re-run with `silentwitness investigate rocba --max-iterations 120`. |
 | `authentication` / 401 error | API key not set or out of credit | Re-check Step 4; confirm your provider account has credit. |
 | `indexed 0 records` | `prepare` extracted nothing | Confirm the image path is correct and is a Windows disk image. |
-| `vol3 malfind timed out` | The optional deep memory malware scan exceeded the bounded per-plugin timeout | The disk/log/indexed memory inventory is still usable. Re-run with `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0 silentwitness index rocba --memory-profile deep` if you want an unbounded deep memory sweep. |
+| `vol3 malfind timed out` | The optional memory malware scan exceeded the bounded per-plugin timeout | The disk/log/indexed memory inventory is still usable. Re-run with `silentwitness index rocba --memory-profile targeted` for bounded PID scanning, or `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0 silentwitness index rocba --memory-profile deep` if you want an unbounded all-process sweep. |
 | Recall varies between runs | The AI is non-deterministic | Expected — see the [Accuracy Report](ACCURACY_REPORT.md) §3; a stronger model gives higher, steadier recall. |
 
 ---

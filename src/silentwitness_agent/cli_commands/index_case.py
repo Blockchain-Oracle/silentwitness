@@ -92,7 +92,7 @@ def run(
     examiner: str,
     host: str = "",
     no_color: bool,
-    memory_profile: Literal["standard", "deep"] = "standard",
+    memory_profile: Literal["standard", "targeted", "deep"] = "standard",
 ) -> int:
     """Run the targeted parsers (+ best-effort plaso) over prepared artifacts.
 
@@ -112,7 +112,11 @@ def run(
         return 1
 
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
-    from silentwitness_mcp.index.feeders_memory import DEEP_PLUGINS, STANDARD_PLUGINS
+    from silentwitness_mcp.index.feeders_memory import (
+        DEEP_PLUGINS,
+        STANDARD_PLUGINS,
+        TARGETED_PLUGINS,
+    )
     from silentwitness_mcp.index.ingest import IngestError, ingest_image_timeline
     from silentwitness_mcp.index.ingest_artifacts import IngestResult, ingest_prepared_artifacts
     from silentwitness_mcp.index.ingest_memory import MemoryPluginEvent, ingest_memory_image
@@ -124,7 +128,12 @@ def run(
     memory_counts: dict[str, int] = {}
     memory_total = 0
     advisories: list[str] = []
-    memory_plugins = DEEP_PLUGINS if memory_profile == "deep" else STANDARD_PLUGINS
+    if memory_profile == "deep":
+        memory_plugins = DEEP_PLUGINS
+    elif memory_profile == "targeted":
+        memory_plugins = TARGETED_PLUGINS
+    else:
+        memory_plugins = STANDARD_PLUGINS
     # Sentinel so the post-finally summary doesn't UnboundLocalError if the try block
     # raised before `ingested` was assigned (e.g. EvidenceIndex open fails).
     ingested = IngestResult()
@@ -177,7 +186,8 @@ def run(
                             else f"timeout {event.timeout_seconds:g}s"
                         )
                         out.print(
-                            f"[cyan]…[/cyan] vol3 {event.short_name} ({timeout})",
+                            f"[cyan]…[/cyan] vol3 {event.short_name} "
+                            f"({timeout}{'; ' + event.message if event.message else ''})",
                             highlight=False,
                         )
                     elif event.status == "ok":
@@ -185,6 +195,11 @@ def run(
                         out.print(
                             f"[green]✓[/green] vol3 {event.short_name}: {rows} row(s) "
                             f"in {event.elapsed_seconds:.1f}s",
+                            highlight=False,
+                        )
+                    elif event.status == "skipped":
+                        out.print(
+                            f"[yellow]↷[/yellow] vol3 {event.short_name}: {_brief(event.message)}",
                             highlight=False,
                         )
                     else:
@@ -201,6 +216,7 @@ def run(
                     host=host,
                     plugins=memory_plugins,
                     progress=_memory_progress,
+                    targeted_malfind=memory_profile == "targeted",
                 )
                 for plugin, written in mem.counts.items():
                     memory_counts[plugin] = memory_counts.get(plugin, 0) + written

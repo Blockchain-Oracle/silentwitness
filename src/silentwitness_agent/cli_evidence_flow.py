@@ -27,7 +27,10 @@ _HOST_OPT = typer.Option("", "--host", help="Host label stamped on indexed rows 
 _MEMORY_PROFILE_OPT = typer.Option(
     "standard",
     "--memory-profile",
-    help="Memory indexing depth: standard is fast inventory; deep also runs malfind.",
+    help=(
+        "Memory indexing depth: standard is fast inventory; targeted adds bounded "
+        "malfind --pid; deep runs all-process malfind."
+    ),
 )
 _BASELINE_OPT = typer.Option("protocol-sift", "--baseline")
 _OUT_OPT = typer.Option(None, "--out")
@@ -129,13 +132,19 @@ def index(
     if not case_dir.exists():
         err.print(f"[red]✗[/red] case '{case_id}' not found", highlight=False)
         raise typer.Exit(code=1)
-    if memory_profile not in {"standard", "deep"}:
+    if memory_profile not in {"standard", "targeted", "deep"}:
         err.print(
-            "[red]✗[/red] --memory-profile must be 'standard' or 'deep'",
+            "[red]✗[/red] --memory-profile must be 'standard', 'targeted', or 'deep'",
             highlight=False,
         )
         raise typer.Exit(code=2)
-    profile: Literal["standard", "deep"] = "deep" if memory_profile == "deep" else "standard"
+    profile: Literal["standard", "targeted", "deep"]
+    if memory_profile == "deep":
+        profile = "deep"
+    elif memory_profile == "targeted":
+        profile = "targeted"
+    else:
+        profile = "standard"
     examiner = _read_case_examiner(case_dir, cli_ctx.config.examiner.name)
     code = _run(
         case_dir,

@@ -64,6 +64,29 @@ def test_index_accepts_deep_memory_profile(monkeypatch: pytest.MonkeyPatch, tmp_
     assert calls[0]["memory_profile"] == "deep"
 
 
+def test_index_accepts_targeted_memory_profile(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _case_root(tmp_path)
+    monkeypatch.setenv("SILENTWITNESS_CASES_DIR", str(tmp_path))
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(*_args: object, **kwargs: object) -> int:
+        calls.append(dict(kwargs))
+        return 0
+
+    monkeypatch.setattr(index_case, "run", fake_run)
+
+    result = runner.invoke(
+        app,
+        ["index", "rocba", "--memory-profile", "targeted"],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert calls[0]["memory_profile"] == "targeted"
+
+
 def test_index_rejects_unknown_memory_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -77,4 +100,4 @@ def test_index_rejects_unknown_memory_profile(
     )
 
     assert result.exit_code == 2
-    assert "--memory-profile must be 'standard' or 'deep'" in result.output
+    assert "--memory-profile must be 'standard', 'targeted', or 'deep'" in result.output
