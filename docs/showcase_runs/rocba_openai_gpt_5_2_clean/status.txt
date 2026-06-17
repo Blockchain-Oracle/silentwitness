@@ -1,0 +1,9 @@
+case:        rocba-gpt-5-2-001     model:   openai-chat:gpt-5.2
+examiner:    root                  status:  MAX_ITERATIONS (5m 31s elapsed)
+
+hypothesis stack (0 active, 1 confirmed, 0 pivoted, 2 abandoned):
+ H-002  [CONFIRMED]  If sensitive project data was accessed and staged for
+                     exfiltration, LNK/JumpList
+
+findings: staged 2  approved 2  rejected 10
+tokens:   1M / 6M budget

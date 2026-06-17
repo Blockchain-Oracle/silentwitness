@@ -19,6 +19,12 @@ syncs results into the repository automatically.
   Its investigation status is preserved as `ERROR` because the process exited
   non-zero after the final agent step, even though the reviewed report and
   approval ledger were generated.
+- [`rocba_openai_gpt_5_2_clean/`](rocba_openai_gpt_5_2_clean/) - ROCBA clean
+  model showcase run using `openai-chat:gpt-5.2`. The snapshot captured
+  `1M / 6M` tokens, 1 confirmed hypothesis, and 2 approved findings. Its
+  investigation status is preserved as `MAX_ITERATIONS` because the run stopped
+  on the configured iteration cap after generating a reviewed report and
+  approval ledger.
 
 ## Resume bundle
 
