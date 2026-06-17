@@ -53,7 +53,7 @@ class _VerifierCorruptError(Exception):
     """CASE.yaml has verifier fields that exist but are unreadable or malformed."""
 
 
-def _read_password(prompt: str = "examiner password: ") -> str:
+def _read_password(prompt: str = "approval signing password: ") -> str:
     # _SILENTWITNESS_TEST_PASSWORD: test-only bypass for TTY requirement.
     # Only active when pytest is loaded — never in production.
     if "pytest" in sys.modules and (tp := os.environ.get("_SILENTWITNESS_TEST_PASSWORD")):
@@ -254,6 +254,24 @@ def run(
     interp = _find_interp(obs, finding.get("interpretation_id", ""))
     _print_block(finding, obs, interp, 1, 1, console=console)
 
+    try:
+        verifier_entry = _load_verifier(case_dir)
+    except _VerifierCorruptError as exc:
+        err.print(f"[red]✗[/red] VERIFIER_CORRUPT: {exc}", highlight=False)
+        _write_cli_audit(cli_log, finding_id, case_id, examiner, "error_VERIFIER_CORRUPT")
+        return 2
+    if verifier_entry is None:
+        err.print(
+            "[dim]This is not your Linux password. It signs this case's HMAC approval "
+            "ledger; reuse the same signing password for every approval in this case.[/dim]",
+            highlight=False,
+        )
+    else:
+        err.print(
+            "[dim]Enter the case approval signing password. This is not your Linux password.[/dim]",
+            highlight=False,
+        )
+
     # Password loop — max 3 attempts.
     attempts_remaining = _MAX_ATTEMPTS
     while attempts_remaining > 0:
@@ -270,12 +288,9 @@ def run(
             console.print(highlight=False)
             return 130
 
-        try:
+        check = None
+        if verifier_entry is not None:
             check = _check_verifier(password, case_dir)
-        except _VerifierCorruptError as exc:
-            err.print(f"[red]✗[/red] VERIFIER_CORRUPT: {exc}", highlight=False)
-            _write_cli_audit(cli_log, finding_id, case_id, examiner, "error_VERIFIER_CORRUPT")
-            return 2
         if check is False:
             attempts_remaining -= 1
             _write_cli_audit(cli_log, finding_id, case_id, examiner, "error_INVALID_PASSWORD")

@@ -171,12 +171,30 @@ or challenged by its own critic.
 
 ```bash
 silentwitness review rocba          # see the staged findings
+silentwitness review rocba --finding-id F-001
 ```
 
 *What it does:* shows the findings the agent staged so the examiner can approve, reject, modify,
-or skip them before they become report material.
+or skip them before they become report material. The list view prints the next command to inspect
+one finding in detail. The detail view shows the observation, interpretation, cited audit IDs,
+caveats, and action prompt.
 
-### Step 7 - Verify the audit trail
+### Step 7 - Approve accepted findings
+
+```bash
+silentwitness approve rocba F-001
+```
+
+*What it does:* promotes a DRAFT finding into APPROVED report material, signs the
+tamper-evident HMAC ledger at `/var/lib/silentwitness/verification/<case-id>.jsonl`, and updates
+`cases/rocba/report.md`. The password prompt is a case approval signing password, not your
+Linux/root password. Reuse the same signing password for every approval in the same case so
+`silentwitness verify rocba` can later reconcile the ledger.
+
+Repeat `review --finding-id ...` and `approve ...` for each finding you accept. Reject or skip
+findings you do not want in the final report.
+
+### Step 8 - Verify the audit trail
 
 ```bash
 silentwitness verify --audit-chain rocba
@@ -185,15 +203,16 @@ silentwitness verify --audit-chain rocba
 *What it does:* walks every `audit/<backend>.jsonl` file and recomputes the hash chain. If an
 audit row is missing or edited, this command exits non-zero and tells you where the chain broke.
 
-### Step 8 - Export the report
+### Step 9 - Export the report
 
 ```bash
 silentwitness export rocba --md
 cat cases/rocba/report.md           # the full investigative narrative
 ```
 
-*What it does:* writes the final report from the reviewed findings. Use `--pdf` when you want a
-PDF report, or IOC options when you want a machine-readable indicator export.
+*What it does:* prints the final Markdown report path. `approve` updates the report as findings
+are accepted; `export --md` is the stable way to locate it during a demo. Use `--pdf` when you want
+a PDF report. IOC sidecars are attempted only when you explicitly pass `--ioc-format`.
 
 ### (Optional) Score it against known answers
 If you have a ground-truth file (we ship one for the ROCBA case):
@@ -228,6 +247,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | Investigation stops with `request_limit` | The model needs more steps | Re-run with `silentwitness investigate rocba --max-iterations 120`. |
 | Investigation stops with `total_tokens_limit` | The model consumed the run-wide token budget | Re-run only if needed with a deliberate cap, for example `silentwitness investigate rocba --max-tokens 8_000_000`. |
 | `authentication` / 401 error | API key not set or out of credit | Re-check Step 4; confirm your provider account has credit. |
+| `approval signing password:` prompt | The approval ledger needs a signing secret | This is not your Linux/root password. Choose one for the case and reuse it for every approval in that case. |
 | `indexed 0 records` | `prepare` extracted nothing | Confirm the image path is correct and is a Windows disk image. |
 | `index already current` | The registered evidence, prepared artifacts, host label, memory profile, and relevant parser settings match the last successful build | Continue to `investigate`; add `--force` only when you intentionally want to rebuild. |
 | `vol3 malfind timed out` | The optional memory malware scan exceeded the bounded per-plugin timeout | The disk/log/indexed memory inventory is still usable. Re-run with `silentwitness index rocba --memory-profile targeted` for bounded PID scanning, or `SILENTWITNESS_VOL3_TIMEOUT_MALFIND_SEC=0 silentwitness index rocba --memory-profile deep` if you want an unbounded all-process sweep. |

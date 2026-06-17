@@ -95,10 +95,16 @@ silentwitness register-evidence mr-evil-001 /evidence/hacking-case
 silentwitness prepare mr-evil-001
 silentwitness index mr-evil-001
 silentwitness investigate mr-evil-001
-silentwitness review mr-evil-001                    # materialise findings
+silentwitness review mr-evil-001                    # list staged findings
+silentwitness review mr-evil-001 --finding-id F-001 # inspect one finding in detail
+silentwitness approve mr-evil-001 F-001             # accept it into report material
 silentwitness verify --audit-chain mr-evil-001      # tamper-evident audit trail
 silentwitness export mr-evil-001 --md
 ```
+
+Repeat `review --finding-id ...` and `approve ...` for each staged finding you accept. The approval
+prompt asks for a case signing password, not your OS/root password. Reuse the same signing password
+for every approval in that case so `silentwitness verify` can reconcile the HMAC ledger later.
 
 ### What those commands mean
 
@@ -109,9 +115,10 @@ silentwitness export mr-evil-001 --md
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
 | `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If the inputs and profile are unchanged, reruns return quickly with `index already current`; use `--force` for an intentional rebuild. If memory evidence is present, `standard` indexes process, command-line, network, and pool-scan rows; `targeted` adds bounded `malfind --pid`; `deep` runs all-process `malfind`. Use `--with-plaso` only when you want the slower best-effort plaso super-timeline too. |
 | `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |
-| `review` | Lets the examiner inspect staged findings before they become accepted report material. |
+| `review` | Lists staged DRAFT findings and shows the next commands to inspect or approve them. Use `--finding-id F-001` for the full observation, interpretation, citations, caveats, and action prompt. |
+| `approve` | Promotes a DRAFT finding to APPROVED report material and signs `/var/lib/silentwitness/verification/<case-id>.jsonl` with the case approval password. |
 | `verify --audit-chain` | Recomputes every audit JSONL hash chain and reports tampering or missing audit links. |
-| `export` | Writes the finished report and optional PDF/IOC outputs from the reviewed findings. |
+| `export` | Prints the finished `report.md` path or renders `--pdf`. IOC sidecars are only attempted when `--ioc-format` is explicitly requested. |
 
 ## Architecture
 

@@ -335,7 +335,7 @@ def export(
     case_id: str = typer.Argument(...),
     pdf: bool = typer.Option(False, "--pdf"),
     md: bool = typer.Option(False, "--md"),
-    ioc_format: str = typer.Option("csv", "--ioc-format"),
+    ioc_format: str | None = typer.Option(None, "--ioc-format"),
     out: Path | None = typer.Option(None, "--out"),
 ) -> None:
     from silentwitness_agent.cli_commands.export import run as _run

@@ -52,7 +52,7 @@ def run(
     pdf: bool,
     md: bool,
     out: Path | None,
-    ioc_format: str,
+    ioc_format: str | None,
     no_color: bool,
 ) -> int:
     err = Console(stderr=True, no_color=no_color)
@@ -75,7 +75,8 @@ def run(
 
     if not pdf:
         # --md mode (default): emit the canonical report.md path.
-        _emit_iocs(case_dir, ioc_format, err=err)
+        if ioc_format is not None:
+            _emit_iocs(case_dir, ioc_format, err=err)
         print(str(report_md.resolve()))
         return 0
 
@@ -121,6 +122,7 @@ def run(
         f"({result.page_count} pages, {result.bytes_written:,} bytes)",
         highlight=False,
     )
-    _emit_iocs(case_dir, ioc_format, err=err)
+    if ioc_format is not None:
+        _emit_iocs(case_dir, ioc_format, err=err)
     print(str(result.output_path.resolve()))
     return 0

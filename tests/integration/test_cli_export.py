@@ -42,6 +42,7 @@ def test_export_md_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code == 0
     expected = str((case_dir / "report.md").resolve())
     assert expected in result.output
+    assert "IOC export" not in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,7 @@ def test_export_md_explicit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     result = runner.invoke(app, ["export", "mr-exp-002", "--md"], catch_exceptions=False)
     assert result.exit_code == 0
     assert str((case_dir / "report.md").resolve()) in result.output
+    assert "IOC export" not in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -168,8 +170,10 @@ def test_export_pdf_render_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 # ---------------------------------------------------------------------------
 
 
-def test_export_ioc_format_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Unknown IOC format emits warning but does not block the export, exit 0."""
+def test_export_ioc_format_unavailable_when_requested(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit IOC request emits warning but does not block the export."""
     _make_case(tmp_path, "mr-exp-009", monkeypatch)
     result = runner.invoke(
         app, ["export", "mr-exp-009", "--ioc-format", "stix"], catch_exceptions=False

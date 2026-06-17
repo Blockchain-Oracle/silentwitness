@@ -29,8 +29,10 @@ silentwitness index nitroba-smoke-001
 # 4) Investigate
 silentwitness investigate nitroba-smoke-001
 
-# 5) Review, verify, and export the report
+# 5) Review, approve, verify, and export the report
 silentwitness review nitroba-smoke-001
+silentwitness review nitroba-smoke-001 --finding-id F-001
+silentwitness approve nitroba-smoke-001 F-001
 silentwitness verify --audit-chain nitroba-smoke-001
 silentwitness export nitroba-smoke-001 --md
 ```
@@ -80,6 +82,8 @@ docker compose exec silentwitness silentwitness prepare nitroba-smoke-001
 docker compose exec silentwitness silentwitness index nitroba-smoke-001
 docker compose exec silentwitness silentwitness investigate nitroba-smoke-001
 docker compose exec silentwitness silentwitness review nitroba-smoke-001
+docker compose exec silentwitness silentwitness review nitroba-smoke-001 --finding-id F-001
+docker compose exec silentwitness silentwitness approve nitroba-smoke-001 F-001
 docker compose exec silentwitness silentwitness verify --audit-chain nitroba-smoke-001
 docker compose exec silentwitness silentwitness export nitroba-smoke-001 --md
 ```
@@ -119,9 +123,11 @@ volumes:
 3. **`silentwitness prepare nitroba-smoke-001`** — extracts high-value artifacts from the registered evidence without modifying the original file.
 4. **`silentwitness index nitroba-smoke-001`** — parses the prepared artifacts into `cases/nitroba-smoke-001/index.db`, the searchable evidence index used by the agent. Unchanged reruns skip the rebuild with `index already current`; use `--force` only when you want to rebuild the index from the prepared artifacts.
 5. **`silentwitness investigate nitroba-smoke-001`** — opens the live rich layout; the hypothesis sequence is `form → dispatch network specialist → confirm SMTP-to-Yahoo timing → pivot to roster + MAC → confirm`. Each tool call appears in `audit/<backend>.jsonl` with its `audit_id`, `result_sha256`, and `elapsed_ms`.
-6. **`silentwitness review nitroba-smoke-001`** — paginates staged findings with the `[a]pprove [r]eject [m]odify [s]kip` examiner UI. Approval signs the HMAC ledger row at `/var/lib/silentwitness/verification/<case_id>.jsonl`.
-7. **`silentwitness verify --audit-chain nitroba-smoke-001`** — recomputes every audit JSONL hash chain and exits non-zero if a row is missing or edited.
-8. **`silentwitness export nitroba-smoke-001 --md`** — writes the final Markdown report. Use `--pdf --out ./report.pdf` when you want the WeasyPrint-rendered PDF.
+6. **`silentwitness review nitroba-smoke-001`** — lists staged DRAFT findings and prints the next commands to inspect and approve one.
+7. **`silentwitness review nitroba-smoke-001 --finding-id F-001`** — shows the full observation, interpretation, cited audit IDs, caveats, and action prompt for one finding.
+8. **`silentwitness approve nitroba-smoke-001 F-001`** — promotes the finding into APPROVED report material and signs `/var/lib/silentwitness/verification/<case_id>.jsonl`. The prompt asks for a case signing password, not your OS/root password.
+9. **`silentwitness verify --audit-chain nitroba-smoke-001`** — recomputes every audit JSONL hash chain and exits non-zero if a row is missing or edited.
+10. **`silentwitness export nitroba-smoke-001 --md`** — prints the final Markdown report path. Use `--pdf --out ./report.pdf` when you want the WeasyPrint-rendered PDF.
 
 ## Model selection (provider-agnostic)
 

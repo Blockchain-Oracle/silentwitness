@@ -62,10 +62,15 @@ silentwitness register-evidence mr-evil-001 /evidence/hacking-case
 silentwitness prepare mr-evil-001
 silentwitness index mr-evil-001
 silentwitness investigate mr-evil-001
-silentwitness review mr-evil-001                  # materialise findings
+silentwitness review mr-evil-001                  # list staged findings
+silentwitness review mr-evil-001 --finding-id F-001
+silentwitness approve mr-evil-001 F-001
 silentwitness verify --audit-chain mr-evil-001    # tamper check
 silentwitness export mr-evil-001 --md
 ```
+
+Repeat `review --finding-id ...` and `approve ...` for each finding you accept. The approval
+password is a case signing password for the HMAC ledger, not your OS/root password.
 
 ## What Each Command Does
 
@@ -76,9 +81,10 @@ silentwitness export mr-evil-001 --md
 | `prepare` | Extracts the artifacts SilentWitness needs from the registered evidence without modifying the original image. |
 | `index` | Parses those artifacts into a searchable SQLite/FTS evidence index. |
 | `investigate` | Runs the agent: form hypotheses, search the index, record cited observations, pivot, and stage findings. |
-| `review` | Shows staged findings for examiner approval, rejection, or edits. |
+| `review` | Lists staged findings and prints the next commands to inspect or approve them. Use `--finding-id` for the full evidence block. |
+| `approve` | Promotes an accepted DRAFT finding into APPROVED report material and signs the case HMAC ledger. |
 | `verify --audit-chain` | Rechecks the audit JSONL hash chains so tampering is visible. |
-| `export` | Produces the final report output, and optional PDF or IOC files when requested. |
+| `export` | Prints the final `report.md` path or renders `--pdf`. IOC sidecars run only when `--ioc-format` is requested. |
 
 That's the full workflow. The report drops at `cases/mr-evil-001/report.md`
 with inline `[verify:audit_id]` links resolving to JSONL audit entries.

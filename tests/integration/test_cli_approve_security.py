@@ -156,6 +156,26 @@ def test_approve_no_verifier_any_password(tmp_path: Path, monkeypatch: pytest.Mo
     assert f["status"] == "APPROVED"
 
 
+def test_approve_no_verifier_explains_signing_password(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    case_dir = init_case(tmp_path, "mr-ap-nov-help-001", monkeypatch)
+    _write_case_yaml(case_dir, with_verifier=False)
+    _write_draft_finding(case_dir)
+    ledger_dir = _make_ledger_dir(tmp_path)
+    monkeypatch.setenv("_SILENTWITNESS_TEST_PASSWORD", "demo-signing-password")
+
+    result = runner.invoke(
+        app,
+        ["approve", "mr-ap-nov-help-001", "F-001", "--ledger", str(ledger_dir)],
+        catch_exceptions=False,
+    )
+
+    assert result.exit_code == 0
+    assert "not your Linux password" in result.stderr
+    assert "HMAC approval ledger" in result.stderr
+
+
 # ---------------------------------------------------------------------------
 # 15. Verifier hex fields are malformed → exit 2, VERIFIER_CORRUPT (fail-closed)
 # ---------------------------------------------------------------------------

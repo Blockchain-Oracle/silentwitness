@@ -181,14 +181,7 @@ def _run_critic_pass(
     err: Console,
     config: SilentWitnessConfig | None = None,
 ) -> None:
-    """Best-effort closed-loop critic over un-reviewed DRAFT findings.
-
-    Materialization already created the DRAFT Finding records; here we run the
-    fresh-context critic over the ones not yet carrying a ``critic_status`` and
-    route its verdicts (AGREE keeps DRAFT, REJECT archives). Best-effort by
-    design: if the model is unavailable (no key / offline — e.g. CI listing the
-    table), we log and fall through to a plain listing rather than failing the
-    command."""
+    """Best-effort critic over un-reviewed DRAFT findings."""
     from silentwitness_agent.critic import StagedFinding, critique
     from silentwitness_agent.critic_handler import handle_critic_verdicts
     from silentwitness_common.types import Confidence
@@ -229,7 +222,6 @@ def _run_critic_pass(
         )
     if not staged:
         return
-    # Best-effort applies ONLY to the model call (no key / offline → list anyway).
     try:
         report = asyncio.run(
             critique(
@@ -248,16 +240,12 @@ def _run_critic_pass(
             highlight=False,
         )
         return
-    # Verdict routing writes findings.json/archived.json; a failure here is a
-    # data-integrity event and MUST surface (handle_critic_verdicts raises on
-    # persistence failure) — do not swallow it. pending_critiques is a throwaway
-    # list: the CLI review has no live investigator loop to feed CHALLENGEs back to.
     handle_critic_verdicts(case_dir, examiner, report.verdicts, [])
 
 
-def run_list(case_dir: Path, status_filter: str, *, console: Console, err: Console) -> int:
-    # NOTE: callers (run()) materialize DRAFT findings before delegating here,
-    # so the table is non-empty. run_list itself is pure read+render.
+def run_list(
+    case_dir: Path, case_id: str, status_filter: str, *, console: Console, err: Console
+) -> int:
     try:
         findings = read_findings(case_dir)
     except (json.JSONDecodeError, ValueError, OSError) as exc:
@@ -292,6 +280,17 @@ def run_list(case_dir: Path, status_filter: str, *, console: Console, err: Conso
             ", ".join(obs.get("audit_ids") or [])[:40],
         )
     console.print(tbl)
+    if f_records and target == "DRAFT":
+        first_id = str(f_records[0].get("finding_id", "F-001"))
+        console.print(
+            "\nNext: inspect a finding with "
+            f"`silentwitness review {case_id} --finding-id {first_id}`",
+            highlight=False,
+        )
+        console.print(
+            f"Approve accepted report material with `silentwitness approve {case_id} {first_id}`.",
+            highlight=False,
+        )
     return 0
 
 
@@ -323,8 +322,6 @@ def run_detail(
     _print_block(finding, obs, interp, 1, 1, console=console)
     if non_interactive:
         return 0
-    # input() rather than rich.Prompt: CliRunner patches sys.stdin for test isolation;
-    # rich.Prompt reads from Console.file, bypassing the runner's stdin capture.
     while True:
         try:
             key = input(_PROMPT).strip().lower()[:1]
@@ -347,7 +344,6 @@ def run_detail(
             return 0
         if key == "m":
             if _modify(case_dir, finding_id, obs, interp, err=err):
-                # Re-read so _print_block reflects the committed edits on disk.
                 try:
                     refreshed = read_findings(case_dir)
                 except (json.JSONDecodeError, ValueError, OSError):
@@ -374,15 +370,12 @@ def run(
 ) -> int:
     console, err = Console(no_color=no_color), Console(stderr=True, no_color=no_color)
     if finding_id is None:
-        # Materialize DRAFT findings once, then run the critic over the
-        # un-reviewed ones, before listing — so the examiner sees critic-annotated
-        # DRAFTs. run_list does NOT re-materialize (it is pure read+render).
         try:
             materialize_findings(case_dir)
         except (OSError, ValueError) as exc:
             err.print(f"[yellow]![/yellow] finding materialization skipped: {exc}", highlight=False)
         _run_critic_pass(case_dir, examiner, err=err, config=config)
-        return run_list(case_dir, status_filter, console=console, err=err)
+        return run_list(case_dir, case_id, status_filter, console=console, err=err)
     return run_detail(
         case_dir,
         case_id,
