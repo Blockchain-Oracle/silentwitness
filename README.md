@@ -79,6 +79,9 @@ docker compose exec silentwitness silentwitness investigate mr-evil-001
 | `SILENTWITNESS_VOL3_MALFIND_MAX_PIDS` | `64` | PID cap for `--memory-profile targeted`, which runs `malfind --pid` only against selected high-signal processes. |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
 
+The Linux installer uses the `silentwitness[forensics]` target and verifies the tool environment at
+the end, including parser imports, `log2timeline`, `psort`, and the spaCy entity model.
+
 ## Quick start
 
 After install + at least one LLM API key exported:
@@ -101,7 +104,7 @@ silentwitness export mr-evil-001 --md
 | `init` | Creates the case folder, empty report, audit logs, evidence registry, and per-case verification salt. |
 | `register-evidence` | Records an evidence file or starter-case folder, classifies artifact types, computes hashes, and refuses unsafe writable evidence mounts. |
 | `prepare` | Extracts high-value artifacts from registered evidence read-only: event logs, registry hives, file tables, shortcuts, prefetch, memory archives, and similar inputs. |
-| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If the inputs and profile are unchanged, reruns return quickly with `index already current`; use `--force` for an intentional rebuild. If memory evidence is present, `standard` indexes process, command-line, network, and pool-scan rows; `targeted` adds bounded `malfind --pid`; `deep` runs all-process `malfind`. |
+| `index` | Parses prepared artifacts into `cases/<case-id>/index.db`, the searchable evidence index the agent is allowed to query. If the inputs and profile are unchanged, reruns return quickly with `index already current`; use `--force` for an intentional rebuild. If memory evidence is present, `standard` indexes process, command-line, network, and pool-scan rows; `targeted` adds bounded `malfind --pid`; `deep` runs all-process `malfind`. Use `--with-plaso` only when you want the slower best-effort plaso super-timeline too. |
 | `investigate` | Runs the hypothesis-first agent. It searches the index, records cited observations, pivots when challenged, and stages findings. |
 | `review` | Lets the examiner inspect staged findings before they become accepted report material. |
 | `verify --audit-chain` | Recomputes every audit JSONL hash chain and reports tampering or missing audit links. |

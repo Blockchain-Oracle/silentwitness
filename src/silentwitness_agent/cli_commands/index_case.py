@@ -105,12 +105,13 @@ def run(
     no_color: bool,
     memory_profile: Literal["standard", "targeted", "deep"] = "standard",
     force: bool = False,
+    with_plaso: bool = False,
 ) -> int:
-    """Run the targeted parsers (+ best-effort plaso) over prepared artifacts.
+    """Run the targeted parsers and optional best-effort plaso over prepared artifacts.
 
     Returns 0 once the index is populated, 1 if there is nothing registered to index.
-    A plaso failure is reported as an advisory, not a hard error: the targeted spine
-    is the source of truth."""
+    A plaso failure is reported as an advisory when enabled, not a hard error: the
+    targeted spine is the source of truth."""
     out = Console(no_color=no_color)
     err = Console(stderr=True, no_color=no_color)
     registry = EvidenceRegistry(case_dir)
@@ -124,6 +125,7 @@ def run(
         return 1
 
     # Lazy: parsers + mount tools live in the forensics extra / install.sh.
+    from silentwitness_agent.cli_commands.index_progress import IndexProgressTracker, index_progress
     from silentwitness_mcp.index.feeders_memory import (
         DEEP_PLUGINS,
         STANDARD_PLUGINS,
@@ -156,6 +158,7 @@ def run(
         host=host,
         memory_profile=memory_profile,
         memory_plugins=memory_plugins,
+        with_plaso=with_plaso,
         artifacts=artifacts,
     )
     if not force:
@@ -180,10 +183,18 @@ def run(
             highlight=False,
         )
         _remove_index_files(case_dir)
-        with EvidenceIndex(case_dir / _INDEX_DB) as idx:
+        with index_progress(out) as progress, EvidenceIndex(case_dir / _INDEX_DB) as idx:
+            tracker = IndexProgressTracker(progress)
+
             idx.begin_bulk()  # bulk-load PRAGMAs; FTS is built once at the end
             phase_t0 = time.monotonic()
-            ingested = ingest_prepared_artifacts(registry, idx, audit_id=audit_id, host=host)
+            ingested = ingest_prepared_artifacts(
+                registry,
+                idx,
+                audit_id=audit_id,
+                host=host,
+                progress=tracker.artifact,
+            )
             phase_timings["targeted_parsers"] = time.monotonic() - phase_t0
             counts = ingested.counts
             for kind, name, message in ingested.failures:
@@ -194,14 +205,19 @@ def run(
                 advisories.append(f"{kind} {name}: skipped records ({detail})")
             _print_skip_summary(err, ingested.diagnostics)
 
-            images = [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE]
+            images = (
+                [r for r in artifacts if r.type == EvidenceType.DISK_IMAGE] if with_plaso else []
+            )
             phase_t0 = time.monotonic()
+            tracker.start_plaso(len(images))
             for rec in images:
-                out.print(
-                    f"[cyan]…[/cyan] plaso super-timeline over {rec.path.name} "
-                    "(mount + parse; best-effort, can take minutes)",
-                    highlight=False,
-                )
+                tracker.plaso_item(rec.path.name)
+                if progress is None:
+                    out.print(
+                        f"[cyan]…[/cyan] plaso super-timeline over {rec.path.name} "
+                        "(mount + parse; best-effort, can take minutes)",
+                        highlight=False,
+                    )
                 try:
                     plaso_rows += ingest_image_timeline(rec.path, idx, audit_id=audit_id, host=host)
                 except IngestError as exc:
@@ -211,16 +227,23 @@ def run(
                         "— targeted spine still indexed (see advisory)",
                         highlight=False,
                     )
+                finally:
+                    tracker.plaso_done()
             phase_timings["plaso"] = time.monotonic() - phase_t0
             memory_images = [r for r in artifacts if r.type == EvidenceType.MEMORY_DUMP]
             phase_t0 = time.monotonic()
+            tracker.start_memory(len(memory_images) * len(memory_plugins))
             for rec in memory_images:
-                out.print(
-                    f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name}",
-                    highlight=False,
-                )
+                if progress is None:
+                    out.print(
+                        f"[cyan]…[/cyan] vol3 memory pass over {rec.path.name}",
+                        highlight=False,
+                    )
 
                 def _memory_progress(event: MemoryPluginEvent) -> None:
+                    tracker.memory(event)
+                    if progress is not None:
+                        return
                     if event.status == "start":
                         timeout = (
                             "timeout disabled"
@@ -265,9 +288,12 @@ def run(
                 for plugin, message in mem.failures:
                     advisories.append(f"vol3 {plugin} failed on {rec.path.name}: {message}")
             phase_timings["memory"] = time.monotonic() - phase_t0
-            out.print("[cyan]…[/cyan] building the full-text search index", highlight=False)
+            tracker.start_fts()
+            if progress is None:
+                out.print("[cyan]…[/cyan] building the full-text search index", highlight=False)
             phase_t0 = time.monotonic()
             idx.rebuild_fts()
+            tracker.finish_fts()
             phase_timings["fts_rebuild"] = time.monotonic() - phase_t0
         memory_total = sum(memory_counts.values())
         total = sum(counts.values()) + plaso_rows + memory_total

@@ -21,6 +21,8 @@ import contextlib
 import json
 import shutil
 import subprocess
+import sys
+import sysconfig
 import tempfile
 from collections.abc import Iterator
 from pathlib import Path
@@ -202,10 +204,27 @@ def _resolve(*names: str) -> str:
         found = shutil.which(name)
         if found:
             return found
+        for directory in _tool_script_dirs():
+            candidate = directory / name
+            if candidate.is_file():
+                return str(candidate)
     raise IngestError(
         f"required tool not found (tried {names}) — install the forensics extra "
         "and mount tools: `uv sync --extra forensics` + `bash install.sh`"
     )
+
+
+def _tool_script_dirs() -> tuple[Path, ...]:
+    """Script dirs to search when dependency CLIs live inside the uv tool venv."""
+    candidates = [Path(sys.executable).resolve().parent]
+    scripts = sysconfig.get_path("scripts")
+    if scripts:
+        candidates.append(Path(scripts))
+    unique: list[Path] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return tuple(unique)
 
 
 def _run(argv: list[str], *, timeout: int, what: str) -> None:

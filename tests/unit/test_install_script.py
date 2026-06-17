@@ -26,3 +26,16 @@ def test_spacy_model_installs_after_global_cli_env_exists() -> None:
     text = _INSTALL_SH.read_text()
 
     assert text.index("\ninstall_silentwitness_cli\n") < text.index("\ninstall_spacy_model\n")
+
+
+def test_install_verifies_forensic_tool_environment_after_model_install() -> None:
+    text = _INSTALL_SH.read_text()
+    start = text.index("verify_tool_environment()")
+    end = text.index(
+        "# ---------------------------------------------------------------------------", start + 1
+    )
+    block = text[start:end]
+
+    assert '"Evtx", "regipy", "pyscca", "dfvfs", "plaso", "spacy"' in block
+    assert '"silentwitness", "log2timeline", "psort"' in block
+    assert text.index("\ninstall_spacy_model\n") < text.index("\nverify_tool_environment\n")

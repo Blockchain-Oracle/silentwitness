@@ -45,7 +45,9 @@ curl -fsSL https://raw.githubusercontent.com/Blockchain-Oracle/silentwitness/mai
 ```
 
 This installs SilentWitness and every dependency (the forensic parsers, the index engine, the
-agent). When it finishes you'll have a `silentwitness` command.
+agent). It finishes with a parser-environment verification check for the Python modules,
+`log2timeline`, `psort`, and the spaCy entity model. When it finishes you'll have a
+`silentwitness` command.
 
 **Check it worked:**
 ```bash
@@ -139,8 +141,16 @@ silentwitness index rocba --memory-profile deep
 
 Slow plugins are bounded by `SILENTWITNESS_VOL3_TIMEOUT_SEC` (default: 300 seconds) and become
 audit advisories instead of making the terminal look stuck.
-*What you'll see:* a summary like `indexed 2,673,733 records`, phase timings for parser, memory,
-and full-text-index rebuild work, plus any memory-plugin advisory that needs review.
+*What you'll see:* progress bars with ETA for artifact parsing, visible plugin-level progress for
+memory indexing, a full-text-index build spinner, then a summary like `indexed 2,673,733 records`
+with phase timings and any memory-plugin advisory that needs review.
+
+The default index path uses the targeted parser spine. The slower plaso super-timeline is available
+when you explicitly want extra breadth:
+
+```bash
+silentwitness index rocba --with-plaso
+```
 
 ### Step 5 - Investigate
 

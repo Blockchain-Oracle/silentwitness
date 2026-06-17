@@ -14,6 +14,7 @@ import pytest
 from silentwitness_common.types import EvidenceType
 from silentwitness_mcp.index import ingest_artifacts
 from silentwitness_mcp.index.ingest_artifacts import (
+    ArtifactProgressEvent,
     _citation_path,
     _kind_for,
     ingest_prepared_artifacts,
@@ -109,6 +110,33 @@ def test_evtx_and_hive_dispatched_and_counted(
         assert result.counts == {"evtx": 2, "registry": 1}
         assert result.failures == []
         assert idx.count() == 3
+
+
+def test_progress_events_report_artifact_completion(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(ingest_artifacts, "evtx_file_records", _one_record_feeder("evtx:Security"))
+    registry = _FakeRegistry(
+        [
+            _Rec(EvidenceType.EVTX, Path("/c/prepared/img/evtx/Security.evtx")),
+            _Rec(EvidenceType.EVTX, Path("/c/prepared/img/evtx/System.evtx")),
+        ]
+    )
+    events: list[ArtifactProgressEvent] = []
+
+    with EvidenceIndex(tmp_path / "index.db") as idx:
+        ingest_prepared_artifacts(
+            registry,
+            idx,
+            audit_id="sift-a-1",
+            max_workers=1,
+            progress=events.append,
+        )
+
+    assert [event.status for event in events] == ["start", "ok", "ok"]
+    assert [event.completed for event in events] == [0, 1, 2]
+    assert all(event.total == 2 for event in events)
+    assert [event.rows for event in events[1:]] == [1, 1]
 
 
 def test_pcap_dispatched_and_counted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

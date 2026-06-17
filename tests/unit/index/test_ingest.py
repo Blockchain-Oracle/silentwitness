@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from silentwitness_mcp.index.ingest import (
     _MAX_TEXT,
     _iter_json_lines,
     _plaso_event_to_record,
+    _resolve,
 )
 
 
@@ -64,3 +67,17 @@ def test_iter_json_lines_skips_junk(tmp_path: Path) -> None:
     )
     msgs = [obj["message"] for obj in _iter_json_lines(f)]
     assert msgs == ["a", "b", "c"]
+
+
+def test_resolve_finds_tool_env_script_when_not_on_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tool = tmp_path / "log2timeline"
+    tool.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setenv("PATH", "")
+    monkeypatch.setattr(
+        "silentwitness_mcp.index.ingest._tool_script_dirs",
+        lambda: (tmp_path,),
+    )
+
+    assert _resolve("log2timeline.py", "log2timeline") == str(tool)

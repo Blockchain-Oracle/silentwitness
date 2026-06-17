@@ -37,6 +37,11 @@ _FORCE_INDEX_OPT = typer.Option(
     "--force",
     help="Rebuild the index even if inputs are unchanged.",
 )
+_WITH_PLASO_OPT = typer.Option(
+    False,
+    "--with-plaso",
+    help="Also run the best-effort plaso super-timeline over disk images.",
+)
 _BASELINE_OPT = typer.Option("protocol-sift", "--baseline")
 _OUT_OPT = typer.Option(None, "--out")
 _METRICS_OPT = typer.Option("time,pivots,provenance,hallucinations,epistemic", "--metrics")
@@ -128,6 +133,7 @@ def index(
     host: str = _HOST_OPT,
     memory_profile: str = _MEMORY_PROFILE_OPT,
     force: bool = _FORCE_INDEX_OPT,
+    with_plaso: bool = _WITH_PLASO_OPT,
 ) -> None:
     """Parse the prepared artifacts into the case's searchable evidence index."""
     from silentwitness_agent.cli_commands.index_case import run as _run
@@ -160,6 +166,7 @@ def index(
         no_color=cli_ctx.no_color,
         memory_profile=profile,
         force=force,
+        with_plaso=with_plaso,
     )
     raise typer.Exit(code=code)
 

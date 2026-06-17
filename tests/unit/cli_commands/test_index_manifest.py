@@ -25,12 +25,15 @@ def _record(path: Path, *, sha: str = "a" * 64) -> EvidenceRecord:
     )
 
 
-def _manifest(tmp_path: Path, *, profile: str = "standard") -> dict[str, object]:
+def _manifest(
+    tmp_path: Path, *, profile: str = "standard", with_plaso: bool = False
+) -> dict[str, object]:
     return build_expected_manifest(
         case_id="case-1",
         host="host-a",
         memory_profile=profile,
         memory_plugins=("windows.pslist.PsList",),
+        with_plaso=with_plaso,
         artifacts=(_record(tmp_path / "Security.evtx"),),
     )
 
@@ -60,3 +63,13 @@ def test_index_manifest_invalidates_profile_change(tmp_path: Path) -> None:
     write_index_manifest(tmp_path, _manifest(tmp_path, profile="standard"), rows=1, summary={})
 
     assert index_is_current(tmp_path, _manifest(tmp_path, profile="targeted")) == (False, 1)
+
+
+def test_index_manifest_invalidates_plaso_change(tmp_path: Path) -> None:
+    with EvidenceIndex(tmp_path / "index.db") as index:
+        index.bulk_ingest([IndexRecord(text="EventID=4624")])
+        index.rebuild_fts()
+
+    write_index_manifest(tmp_path, _manifest(tmp_path), rows=1, summary={})
+
+    assert index_is_current(tmp_path, _manifest(tmp_path, with_plaso=True)) == (False, 1)

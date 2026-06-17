@@ -23,7 +23,7 @@ from silentwitness_common.types import EvidenceRecord
 
 _MANIFEST_PATH: Final = Path(".silentwitness") / "index-manifest.json"
 _SCHEMA_VERSION: Final = 1
-_INDEXER_SIGNATURE: Final = "index-v3-bulk-manifest-20260617"
+_INDEXER_SIGNATURE: Final = "index-v4-progress-plaso-20260617"
 
 
 def _canonical(data: dict[str, Any]) -> str:
@@ -36,6 +36,7 @@ def build_expected_manifest(
     host: str,
     memory_profile: str,
     memory_plugins: Sequence[str],
+    with_plaso: bool = False,
     artifacts: Sequence[EvidenceRecord],
 ) -> dict[str, Any]:
     """Return the input fingerprint payload for the current index request."""
@@ -46,6 +47,7 @@ def build_expected_manifest(
         "host": host,
         "memory_profile": memory_profile,
         "memory_plugins": list(memory_plugins),
+        "with_plaso": with_plaso,
         "settings": {
             "evtx_tolerant_fallback": os.environ.get("SILENTWITNESS_EVTX_TOLERANT_FALLBACK", ""),
             "malfind_max_pids": os.environ.get("SILENTWITNESS_VOL3_MALFIND_MAX_PIDS", ""),

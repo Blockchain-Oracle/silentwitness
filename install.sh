@@ -360,6 +360,38 @@ install_silentwitness_cli() {
 }
 
 # ---------------------------------------------------------------------------
+# Verify the Python parser stack and dependency scripts installed into the uv
+# tool environment. Dependency CLIs such as log2timeline/psort live in the tool
+# venv, not necessarily in ~/.local/bin.
+# ---------------------------------------------------------------------------
+verify_tool_environment() {
+    local tool_python="$HOME/.local/share/uv/tools/silentwitness/bin/python"
+
+    [[ -x "$tool_python" ]] \
+        || fail "silentwitness tool Python missing at $tool_python"
+
+    log "verifying SilentWitness forensic Python tool environment"
+    "$tool_python" - <<'PY' \
+        || fail "SilentWitness parser environment verification failed"
+import importlib
+import pathlib
+import sys
+
+for module in ("Evtx", "regipy", "pyscca", "dfvfs", "plaso", "spacy"):
+    importlib.import_module(module)
+
+scripts = pathlib.Path(sys.executable).resolve().parent
+missing = [
+    name
+    for name in ("silentwitness", "log2timeline", "psort")
+    if not (scripts / name).is_file()
+]
+if missing:
+    raise SystemExit(f"missing tool-env script(s): {', '.join(missing)}")
+PY
+}
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 if [ "$#" -gt 0 ]; then
@@ -378,6 +410,7 @@ install_zeek
 install_suricata
 install_evidence_access
 install_spacy_model
+verify_tool_environment
 
 log "all tools provisioned successfully"
 log "next: run \`silentwitness --help\` (it's a global command now)"

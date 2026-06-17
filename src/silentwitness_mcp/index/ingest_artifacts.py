@@ -29,7 +29,8 @@ import contextlib
 import io
 import os
 import signal
-from collections.abc import Iterator
+import time
+from collections.abc import Callable, Iterator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -131,6 +132,28 @@ class IngestResult:
     diagnostics: list[tuple[str, str, dict[str, int]]] = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class ArtifactProgressEvent:
+    """Progress update emitted as prepared artifacts finish parsing."""
+
+    status: Literal["start", "ok", "failed"]
+    completed: int
+    total: int
+    kind: str = ""
+    name: str = ""
+    rows: int = 0
+    elapsed_seconds: float = 0.0
+    message: str = ""
+
+
+ArtifactProgress = Callable[[ArtifactProgressEvent], None]
+
+
+def _emit(progress: ArtifactProgress | None, event: ArtifactProgressEvent) -> None:
+    if progress is not None:
+        progress(event)
+
+
 def _citation_path(path: Path) -> str:
     """Path relative to the ``prepared/`` root, for a stable, portable citation.
 
@@ -228,6 +251,7 @@ def ingest_prepared_artifacts(
     audit_id: str,
     host: str = "",
     max_workers: int | None = None,
+    progress: ArtifactProgress | None = None,
 ) -> IngestResult:
     """Parse every registered prepared artifact into ``index``; return counts + failures.
 
@@ -243,10 +267,31 @@ def ingest_prepared_artifacts(
     result = IngestResult()
     if not tasks:
         return result
+    started = time.monotonic()
+    _emit(progress, ArtifactProgressEvent(status="start", completed=0, total=len(tasks)))
     workers = max_workers if max_workers is not None else max(1, (os.cpu_count() or 2) - 1)
+    completed = 0
     if workers == 1:
         for kind, path, cite in tasks:
+            before_failures = len(result.failures)
+            before_rows = result.counts.get(kind, 0)
             _ingest_one(index, kind, path, cite, audit_id, host, result)
+            completed += 1
+            failed = len(result.failures) > before_failures
+            written_rows = max(0, result.counts.get(kind, 0) - before_rows)
+            _emit(
+                progress,
+                ArtifactProgressEvent(
+                    status="failed" if failed else "ok",
+                    completed=completed,
+                    total=len(tasks),
+                    kind=kind,
+                    name=path.name,
+                    rows=written_rows,
+                    elapsed_seconds=time.monotonic() - started,
+                    message=result.failures[-1][2] if failed else "",
+                ),
+            )
         return result
 
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -257,14 +302,40 @@ def ingest_prepared_artifacts(
         for future in as_completed(futures):
             kind, path = futures[future]
             try:
-                rows, skipped = future.result()
-                written = index.bulk_ingest(rows)
+                parsed_rows, skipped = future.result()
+                written = index.bulk_ingest(parsed_rows)
             except Exception as exc:  # parse OR bulk-insert failure -> skip + record
                 result.failures.append((kind, path.name, str(exc)))
+                completed += 1
+                _emit(
+                    progress,
+                    ArtifactProgressEvent(
+                        status="failed",
+                        completed=completed,
+                        total=len(tasks),
+                        kind=kind,
+                        name=path.name,
+                        elapsed_seconds=time.monotonic() - started,
+                        message=str(exc),
+                    ),
+                )
                 continue
             result.counts[kind] = result.counts.get(kind, 0) + written
             if skipped:
                 result.diagnostics.append((kind, path.name, skipped))
+            completed += 1
+            _emit(
+                progress,
+                ArtifactProgressEvent(
+                    status="ok",
+                    completed=completed,
+                    total=len(tasks),
+                    kind=kind,
+                    name=path.name,
+                    rows=written,
+                    elapsed_seconds=time.monotonic() - started,
+                ),
+            )
     return result
 
 
@@ -299,4 +370,4 @@ def _ingest_one(
         result.diagnostics.append((kind, path.name, stats.skipped))
 
 
-__all__ = ["IngestResult", "Kind", "ingest_prepared_artifacts"]
+__all__ = ["ArtifactProgressEvent", "IngestResult", "Kind", "ingest_prepared_artifacts"]
