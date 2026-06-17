@@ -173,11 +173,11 @@ def compose_findings(
     approved: list[dict[str, Any]],
     observations: dict[str, dict[str, Any]],
 ) -> str:
-    """Approved findings + provisional (DRAFT) findings from staged observations.
+    """Approved findings + unreviewed observations staged by the agent.
 
     The report drafts itself as the case unfolds — examiner-approved findings get
-    the signed treatment, observations the agent has staged render as DRAFT so the
-    report is never empty mid-investigation. Each approved finding carries a
+    the signed treatment, observations the agent has staged render as unreviewed
+    so the report is never empty mid-investigation. Each approved finding carries a
     `Corroboration:` badge from the materialised tier (Phase 6a); legacy findings
     without the field render unchanged."""
     parts: list[str] = []
@@ -212,7 +212,7 @@ def compose_findings(
         )
         parts.append(section)
 
-    # Provisional (DRAFT) findings — staged observations not yet approved.
+    # Staged observations not yet approved by the examiner.
     approved_obs = {f.get("observation_id") for f in approved}
     provisional: list[str] = []
     for oid, obs in observations.items():
@@ -231,16 +231,17 @@ def compose_findings(
         verify_links = " ".join(f"[verify:{oid}/{aid}]" for aid in obs_audit_ids)
         evidence_line = f"- {obs_text}" + (f"  {verify_links}" if verify_links else "")
         provisional.append(
-            f"### {oid} — provisional (DRAFT)\n\n"
+            f"### {oid} — unreviewed observation\n\n"
             f"**Confidence:** {confidence}  \n"
-            f"**Status:** DRAFT — not yet examiner-approved\n\n"
+            f"**Review state:** Not examiner-approved\n\n"
             f"{interp_text}\n\n"
             f"**Supporting evidence:**\n\n{evidence_line}\n"
         )
     if provisional:
         parts.append(
-            "## Provisional findings (DRAFT — pending examiner approval)\n\n"
-            + "\n".join(provisional)
+            "## Unreviewed observations\n\n"
+            "These staged observations remain available for examiner review. "
+            "They are not signed findings until approved.\n\n" + "\n".join(provisional)
         )
 
     if not parts:
