@@ -88,7 +88,7 @@ def _ok_doc() -> str:
         "docker compose up -d\ndocker compose exec silentwitness investigate\n\n"
         "## Step-by-step\n\nsilentwitness investigate nitroba-smoke-001\n\n"
         "## Model selection\n\n"
-        "anthropic:claude-opus\nopenai:gpt-5\ngoogle-gla:gemini-2.5\nollama:llama4\n\n"
+        "anthropic:claude-sonnet\nopenai:gpt-5-mini\ngoogle-gla:gemini-2.5-flash\nollama:llama4\n\n"
         "## Troubleshooting\n\n"
         "- **q1**: a\n- **q2**: a\n- **q3**: a\n- **q4**: a\n- **q5**: a\n- **q6**: a\n\n"
         "## License\n"
@@ -162,7 +162,7 @@ def test_model_strings_scope_is_section_not_global(tmp_path: Path) -> None:
     bad = tmp_path / "TRY_IT_OUT.md"
     # Move provider strings out of the Model section by deleting the lines under it
     doc = _ok_doc().replace(
-        "anthropic:claude-opus\nopenai:gpt-5\ngoogle-gla:gemini-2.5\nollama:llama4\n",
+        "anthropic:claude-sonnet\nopenai:gpt-5-mini\ngoogle-gla:gemini-2.5-flash\nollama:llama4\n",
         "(removed providers from section)\n",
     )
     # Put them in the H1 area, OUTSIDE Model selection
@@ -179,7 +179,7 @@ def test_model_strings_scope_is_section_not_global(tmp_path: Path) -> None:
 def test_openai_word_boundary_not_matched_by_openai_chat(tmp_path: Path) -> None:
     """`openai-chat:` MUST NOT satisfy the `openai:` provider-prefix rule."""
     bad = tmp_path / "TRY_IT_OUT.md"
-    doc = _ok_doc().replace("openai:gpt-5", "openai-chat:gpt-5")
+    doc = _ok_doc().replace("openai:gpt-5-mini", "openai-chat:gpt-5-mini")
     bad.write_text(doc)
     r = _run_gate("--doc", str(bad))
     assert r.returncode == 1

@@ -25,7 +25,7 @@ any finding to its tool execution in the [Three-Claim Trace](./docs/THREE_CLAIM_
 | Requirement | Why | How |
 |---|---|---|
 | **Python 3.12 or 3.13** | `silentwitness` is a Python CLI. | SIFT 2026 has 3.12 pre-installed. Other OS: [python.org](https://www.python.org) or your package manager. |
-| **LLM API key** | The investigator drives an LLM (Anthropic / OpenAI / Gemini / Ollama). Recommended: `gpt-5.2` or `claude-opus-4-7`. | Export `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` before `silentwitness investigate`. |
+| **LLM API key** | The investigator drives an LLM (Anthropic / OpenAI / Gemini / Ollama). Default: `claude-sonnet-4-6`. Cost-safe OpenAI choice: `gpt-5-mini`. Nested critic/specialist calls use cheaper provider siblings by default. | Export `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` before `silentwitness investigate`. |
 | **`uv` (or `pipx`)** | Installs `silentwitness` as a global command in an isolated env. | `install.sh` installs `uv` automatically. Alt: [astral.sh/uv](https://astral.sh/uv) / [pipx](https://pipx.pypa.io). |
 | **Subprocess forensic tools** *(SIFT only)* | Hayabusa, Chainsaw, Sigma rules, Zeek, Suricata, dfVFS. | `install.sh` provisions them all; direct archive downloads are pinned and SHA256-verified. |
 
@@ -71,13 +71,16 @@ docker compose exec silentwitness silentwitness investigate mr-evil-001
 
 | Env var | Default | What |
 |---|---|---|
-| `SILENTWITNESS_MODEL` | `openai:gpt-5.2` | Investigator model. Format: `provider:model`. |
-| `CRITIC_MODEL` | (inherits) | Live critic model — usually a faster/cheaper sibling of the investigator. |
-| `MAX_ITERS` | unlimited | Hard cap on agent iterations. Unlimited by default (PR #236); three self-termination signals — structured output, token budget, coverage-gate retry exhaustion — still stop the run. |
-| `CASES_DIR` | `./cases` | Where investigations are written. |
+| `SILENTWITNESS_MODEL` | `anthropic:claude-sonnet-4-6` | Investigator model. Format: `provider:model`. |
+| `SILENTWITNESS_CRITIC_MODEL` | `anthropic:claude-haiku-4-5` | Live critic model — usually a faster/cheaper sibling of the investigator. |
+| `SILENTWITNESS_MAX_STEPS` / `SILENTWITNESS_MAX_ITERS` | `80` | Hard cap on model requests. The legacy `SILENTWITNESS_MAX_ITERS` alias is still accepted. |
+| `SILENTWITNESS_MAX_TOKENS` | `6,000,000` | Run-wide token cap enforced through Pydantic AI `UsageLimits.total_tokens_limit`. |
+| `SILENTWITNESS_CASES_DIR` | `./cases` | Where investigations are written. |
 | `SILENTWITNESS_VOL3_TIMEOUT_SEC` | `300` | Per-Volatility-plugin timeout during `index` when memory evidence is registered. |
 | `SILENTWITNESS_VOL3_MALFIND_MAX_PIDS` | `64` | PID cap for `--memory-profile targeted`, which runs `malfind --pid` only against selected high-signal processes. |
 | `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` | _at least one required_ | LLM provider credential. |
+
+For OpenAI runs, start with `SILENTWITNESS_MODEL=openai:gpt-5-mini`. Treat larger OpenAI models as deliberate reruns with an explicit `--max-tokens` cap.
 
 The Linux installer uses the `silentwitness[forensics]` target and verifies the tool environment at
 the end, including parser imports, `log2timeline`, `psort`, and the spaCy entity model.
@@ -113,6 +116,8 @@ silentwitness export mr-evil-001 --md
 ## Architecture
 
 ![SilentWitness architecture diagram showing read-only evidence, offline ingest, MCP server, Pydantic AI investigator, audit ledger, and report export](./assets/brand/diagram-A-architecture.png)
+
+Read the full diagram set in [`docs/architecture.md`](./docs/architecture.md): evidence ingest, the MCP finding firewall, the investigation loop, the finding-to-evidence trace, and the accuracy/gaps review all point back to the same shipped components.
 
 **Eight boundaries, six of them architectural.** Verification gates (entity gate, citation gate, HMAC audit chain), the `ro,noexec,nosuid` evidence mount, and the per-specialist MCP toolset run in code — not in prompts. The two prompt-based guardrails (investigator system prompt + critic agreement prompt) are *supplementary*: removing them degrades quality but doesn't unlock hallucinations against unmounted artifacts.
 

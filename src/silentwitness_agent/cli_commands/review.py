@@ -17,6 +17,7 @@ import yaml
 from rich.console import Console
 from rich.table import Table
 
+from silentwitness_agent.config import SilentWitnessConfig
 from silentwitness_common.atomic_io import write_json_atomic
 from silentwitness_mcp.audit.chained_jsonl import append_chained_jsonl
 from silentwitness_mcp.findings._approval_store import (
@@ -173,7 +174,13 @@ def _modify(
     return True
 
 
-def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
+def _run_critic_pass(
+    case_dir: Path,
+    examiner: str,
+    *,
+    err: Console,
+    config: SilentWitnessConfig | None = None,
+) -> None:
     """Best-effort closed-loop critic over un-reviewed DRAFT findings.
 
     Materialization already created the DRAFT Finding records; here we run the
@@ -224,7 +231,15 @@ def _run_critic_pass(case_dir: Path, examiner: str, *, err: Console) -> None:
         return
     # Best-effort applies ONLY to the model call (no key / offline → list anyway).
     try:
-        report = asyncio.run(critique(case_dir, examiner, staged))
+        report = asyncio.run(
+            critique(
+                case_dir,
+                examiner,
+                staged,
+                request_limit=config.budget.max_steps if config is not None else None,
+                total_token_limit=config.budget.max_tokens if config is not None else None,
+            )
+        )
     except Exception as exc:
         _LOG.warning("review: critic model unavailable (%s: %s)", type(exc).__name__, exc)
         err.print(
@@ -355,6 +370,7 @@ def run(
     non_interactive: bool,
     no_color: bool,
     examiner: str,
+    config: SilentWitnessConfig | None = None,
 ) -> int:
     console, err = Console(no_color=no_color), Console(stderr=True, no_color=no_color)
     if finding_id is None:
@@ -365,7 +381,7 @@ def run(
             materialize_findings(case_dir)
         except (OSError, ValueError) as exc:
             err.print(f"[yellow]![/yellow] finding materialization skipped: {exc}", highlight=False)
-        _run_critic_pass(case_dir, examiner, err=err)
+        _run_critic_pass(case_dir, examiner, err=err, config=config)
         return run_list(case_dir, status_filter, console=console, err=err)
     return run_detail(
         case_dir,

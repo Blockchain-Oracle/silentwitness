@@ -21,15 +21,18 @@ from pydantic_ai.models import Model, infer_model
 from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent._caching import cache_settings
+from silentwitness_agent.config import DEFAULT_MAX_STEPS, DEFAULT_MAX_TOKENS
 from silentwitness_agent.critic import CriticVerdictRecord
 from silentwitness_agent.hypothesis.budget import BudgetEnforcer
 from silentwitness_agent.hypothesis.stack import HypothesisStack
+from silentwitness_agent.model_policy import DEFAULT_INVESTIGATOR_MODEL
 from silentwitness_mcp._case_env import build_server_env
 
 _LOG = logging.getLogger(__name__)
 
-_DEFAULT_MODEL = "anthropic:claude-opus-4-7"
-_DEFAULT_MAX_ITERS: int | None = None
+_DEFAULT_MODEL = DEFAULT_INVESTIGATOR_MODEL
+_DEFAULT_MAX_ITERS: int | None = DEFAULT_MAX_STEPS
+_DEFAULT_MAX_TOKENS = DEFAULT_MAX_TOKENS
 # How many times the coverage gate may bounce the agent back before it is allowed to
 # finalize regardless — so a genuinely-unanswerable question can't deadlock the run. Each
 # bounce consumes one of the Agent ``retries`` below, which is SHARED with tool-call and
@@ -71,6 +74,7 @@ class InvestigatorDeps(BaseModel):
     # Pydantic's own default cap, which is otherwise 50 and can terminate long IR
     # runs inside a specialist even when the outer investigator was configured higher.
     request_limit: int | None = None
+    total_token_limit: int | None = None
 
 
 class InvestigatorResult(BaseModel):
@@ -105,20 +109,45 @@ class _AgentConfig:
 
 
 def _parse_max_iters_env(default: int | None) -> int | None:
-    """Read SILENTWITNESS_MAX_ITERS; raises ValueError with a diagnostic message on bad input."""
-    raw = os.environ.get("SILENTWITNESS_MAX_ITERS")
+    """Read SILENTWITNESS_MAX_ITERS/MAX_STEPS with diagnostics on bad input."""
+    env_key = "SILENTWITNESS_MAX_ITERS"
+    raw = os.environ.get(env_key)
+    if raw is None:
+        env_key = "SILENTWITNESS_MAX_STEPS"
+        raw = os.environ.get(env_key)
     if raw is None:
         return default
     try:
         value = int(raw)
     except ValueError:
         raise ValueError(
-            f"investigator: SILENTWITNESS_MAX_ITERS={raw!r} is not a valid integer; "
-            "set it to a positive integer (e.g. 200) or unset it for no request cap."
+            f"investigator: {env_key}={raw!r} is not a valid integer; "
+            "set it to a positive integer (e.g. 80)."
         ) from None
     if value < 1:
-        raise ValueError(f"investigator: SILENTWITNESS_MAX_ITERS={value} must be >= 1.")
+        raise ValueError(f"investigator: {env_key}={value} must be >= 1.")
     return value
+
+
+def _usage_limits(
+    request_limit: int | None,
+    token_limit: int,
+    *,
+    model: Any = None,
+) -> UsageLimits:
+    return UsageLimits(
+        request_limit=request_limit,
+        total_tokens_limit=token_limit,
+        count_tokens_before_request=model is None or model.__class__.__name__ != "TestModel",
+    )
+
+
+def _usage_limit_final_state(
+    exc: BaseException,
+) -> Literal["MAX_ITERATIONS", "BUDGET_EXHAUSTED"]:
+    if "token" in str(exc).lower():
+        return "BUDGET_EXHAUSTED"
+    return "MAX_ITERATIONS"
 
 
 def _resolve_model(model_str: str) -> Model:
@@ -154,10 +183,9 @@ def build_investigator(
 ) -> _AgentConfig:
     """Build and return an ``_AgentConfig`` wrapping the configured Investigator Agent.
 
-    Reads ``SILENTWITNESS_MODEL`` (default ``anthropic:claude-opus-4-7``) and
-    ``SILENTWITNESS_MAX_ITERS`` (default: unlimited — set to a positive int to
-    opt in to a request-cap safety belt) at call time. Constructor args override
-    env values.
+    Reads ``SILENTWITNESS_MODEL`` (default ``anthropic:claude-sonnet-4-6``) and
+    ``SILENTWITNESS_MAX_ITERS`` / ``SILENTWITNESS_MAX_STEPS`` at call time.
+    Constructor args override env values.
 
     ``case_dir`` / ``examiner`` are passed to the spawned MCP server via
     ``build_server_env`` so the server binds to this case (see
@@ -242,6 +270,7 @@ async def investigate(
     *,
     model: str | None = None,
     max_iterations: int | None = None,
+    max_tokens: int = _DEFAULT_MAX_TOKENS,
     hooks: list[Any] | None = None,
 ) -> InvestigatorResult:
     """Run a full investigation; returns an ``InvestigatorResult``.
@@ -263,6 +292,7 @@ async def investigate(
         stack=stack,
         budget=budget,
         request_limit=cfg.max_iters,
+        total_token_limit=max_tokens,
     )
 
     t_start = time.monotonic()
@@ -291,7 +321,7 @@ async def investigate(
         run = await cfg.agent.run(
             prompt,
             deps=deps,
-            usage_limits=UsageLimits(request_limit=cfg.max_iters),
+            usage_limits=_usage_limits(cfg.max_iters, max_tokens, model=cfg.agent.model),
         )
         usage = run.usage
         return _build_result(
@@ -309,10 +339,11 @@ async def investigate(
             exc,
             exc_info=True,
         )
+        final_state = _usage_limit_final_state(exc)
         snap = stack.snapshot()
         if snap.active:
             try:
-                stack.abandon(snap.active.id, "MAX_ITERATIONS")
+                stack.abandon(snap.active.id, final_state)
             except Exception as abandon_exc:
                 _LOG.error(
                     "investigate: failed to emit ABANDON for %s after MAX_ITERATIONS"
@@ -324,7 +355,7 @@ async def investigate(
                 )
         # findings_staged and total_tool_calls are unavailable from UsageLimitExceeded.
         return _build_result(
-            final_state="MAX_ITERATIONS",
+            final_state=final_state,
             findings_staged=0,
             total_tool_calls=0,
             total_tokens_consumed=0,

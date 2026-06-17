@@ -15,10 +15,12 @@ from typing import Any
 from rich.console import Console
 from rich.table import Table
 
+from silentwitness_agent.config import DEFAULT_MAX_STEPS, DEFAULT_MAX_TOKENS
+
 _PIVOT_GLYPH = "⤷"
 _STATUS_APPROVED = "APPROVED"
-_DEFAULT_TOKEN_BUDGET = 800_000
-_DEFAULT_STEP_BUDGET = 200
+_DEFAULT_TOKEN_BUDGET = DEFAULT_MAX_TOKENS
+_DEFAULT_STEP_BUDGET = DEFAULT_MAX_STEPS
 _HYP_STATUSES = ("ACTIVE", "CONFIRMED", "PIVOTED", "ABANDONED")
 _HYP_TYPE_MAP = {
     "form": "ACTIVE",

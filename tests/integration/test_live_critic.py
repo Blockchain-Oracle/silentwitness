@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
+from pydantic_ai import RunUsage
 
 from silentwitness_agent.critic import CriticReport, CriticVerdictRecord, StagedFinding
 from silentwitness_agent.critic_trigger import CriticTrigger
@@ -119,7 +120,7 @@ async def _run_hook(case_dir: Path, deps: InvestigatorDeps, report: CriticReport
     after_model_request callback directly (bypassing a full agent run)."""
     captured: dict[str, list[StagedFinding]] = {}
 
-    async def _stub_critique(cdir, examiner, findings, *, model=None):  # type: ignore[no-untyped-def]
+    async def _stub_critique(cdir, examiner, findings, **kwargs):  # type: ignore[no-untyped-def]
         captured["findings"] = findings
         return report
 
@@ -129,6 +130,7 @@ async def _run_hook(case_dir: Path, deps: InvestigatorDeps, report: CriticReport
     class _Ctx:
         def __init__(self, d: InvestigatorDeps) -> None:
             self.deps = d
+            self.usage = RunUsage()
 
     # The Hooks dispatcher invokes the registered after_model_request callback.
     await hooks.after_model_request(_Ctx(deps), request_context=None, response="resp")  # type: ignore[arg-type]
@@ -183,7 +185,7 @@ async def test_critique_failure_does_not_abort_run(tmp_path: Path) -> None:
     _write_findings(case_dir, 3)
     deps = _make_deps(case_dir)
 
-    async def _boom(cdir, examiner, findings, *, model=None):  # type: ignore[no-untyped-def]
+    async def _boom(cdir, examiner, findings, **kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("critic model unavailable")
 
     trigger = CriticTrigger(case_dir=case_dir, examiner="aj", interval_findings=2)
@@ -192,6 +194,7 @@ async def test_critique_failure_does_not_abort_run(tmp_path: Path) -> None:
     class _Ctx:
         def __init__(self, d: InvestigatorDeps) -> None:
             self.deps = d
+            self.usage = RunUsage()
 
     # Must not raise.
     out = await hooks.after_model_request(_Ctx(deps), request_context=None, response="resp")  # type: ignore[arg-type]
@@ -211,7 +214,7 @@ async def test_routing_failure_does_not_advance_watermark(tmp_path: Path) -> Non
     _write_findings(case_dir, 3)
     deps = _make_deps(case_dir)
 
-    async def _stub(cdir, examiner, findings, *, model=None):  # type: ignore[no-untyped-def]
+    async def _stub(cdir, examiner, findings, **kwargs):  # type: ignore[no-untyped-def]
         return CriticReport(
             verdicts=[CriticVerdictRecord(finding_id="O-001", verdict="AGREE", reason="ok")],
             tokens_spent=0,
@@ -225,6 +228,7 @@ async def test_routing_failure_does_not_advance_watermark(tmp_path: Path) -> Non
     class _Ctx:
         def __init__(self, d: InvestigatorDeps) -> None:
             self.deps = d
+            self.usage = RunUsage()
 
     import silentwitness_agent.live_critic as lc
 
@@ -284,7 +288,7 @@ async def test_detector_floor_routes_when_llm_fails(tmp_path: Path) -> None:
     (case_dir / "findings.json").write_text(json.dumps(findings), encoding="utf-8")
     deps = _make_deps(case_dir)
 
-    async def _boom(cdir, examiner, fs, *, model=None):  # type: ignore[no-untyped-def]
+    async def _boom(cdir, examiner, fs, **kwargs):  # type: ignore[no-untyped-def]
         raise RuntimeError("no API key")
 
     trigger = CriticTrigger(case_dir=case_dir, examiner="aj", interval_findings=2)
@@ -293,6 +297,7 @@ async def test_detector_floor_routes_when_llm_fails(tmp_path: Path) -> None:
     class _Ctx:
         def __init__(self, d: InvestigatorDeps) -> None:
             self.deps = d
+            self.usage = RunUsage()
 
     await hooks.after_model_request(_Ctx(deps), request_context=None, response="r")  # type: ignore[arg-type]
     # The deterministic floor still produced a CHALLENGE for the overclaim.

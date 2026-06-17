@@ -172,6 +172,13 @@ function _rewriteHref(href) {
     return `/${normalized}`;
   }
 
+  if (normalized.startsWith("../assets/brand/")) {
+    return `/brand/${normalized.slice("../assets/brand/".length)}`;
+  }
+  if (normalized.startsWith("assets/brand/")) {
+    return `/brand/${normalized.slice("assets/brand/".length)}`;
+  }
+
   if (
     normalized.startsWith("execution_logs/") ||
     normalized.startsWith("EXAMPLE_EXECUTION_LOGS/")

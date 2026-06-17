@@ -300,7 +300,6 @@ def test_evidence_bound_tools_set_matches_architecture_4_11() -> None:
     refuse-on-bad-mount set. Architecture §4.10 + §4.11."""
     assert EVIDENCE_BOUND_TOOLS == frozenset(
         {
-            "record_observation",
             "register_evidence",
             "verify_evidence_hash",
         }
@@ -340,7 +339,7 @@ def test_guard_mount_refuses_evidence_bound_tools_when_mount_failed() -> None:
 
 
 def test_guard_mount_passes_through_non_evidence_tools_on_failed_mount() -> None:
-    """record_interpretation / record_pivot / record_narrative /
+    """record_observation / record_interpretation / record_pivot / record_narrative /
     approve_finding don't touch /evidence — _guard_mount is a no-op for
     them even if the mount check failed."""
     ctx = _fake_ctx_with_mount(ok=False, advisories=["bad mount"])

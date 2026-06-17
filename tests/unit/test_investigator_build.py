@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -82,11 +83,11 @@ def test_factory_reads_model_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_factory_default_model_string() -> None:
-    assert _DEFAULT_MODEL == "anthropic:claude-opus-4-7"
+    assert _DEFAULT_MODEL == "anthropic:claude-sonnet-4-6"
 
 
 def test_factory_direct_model_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-opus-4-7")
+    monkeypatch.setenv("SILENTWITNESS_MODEL", "anthropic:claude-sonnet-4-6")
     cfg = build_investigator(Path("sw-test-case"), "tester", model="test")
     assert cfg.model_str == "test"
 
@@ -107,9 +108,9 @@ def test_factory_honours_max_iters_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_factory_default_max_iters() -> None:
-    assert _DEFAULT_MAX_ITERS is None
+    assert _DEFAULT_MAX_ITERS == 80
     cfg = build_investigator(Path("sw-test-case"), "tester", model="test")
-    assert cfg.max_iters is None
+    assert cfg.max_iters == 80
 
 
 def test_factory_max_iterations_param_overrides_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -200,6 +201,7 @@ def test_investigator_deps_has_expected_fields() -> None:
         "pending_critiques",
         "coverage_gate_attempts",
         "request_limit",
+        "total_token_limit",
     }
     assert set(InvestigatorDeps.model_fields) == expected
 
@@ -300,7 +302,27 @@ def _make_test_cfg(model_str: str = "test") -> _AgentConfig:
 @pytest.mark.anyio
 async def test_investigate_completed_path(tmp_path: Path) -> None:
     cfg = _make_test_cfg()
-    with patch("silentwitness_agent.investigator.build_investigator", return_value=cfg):
+
+    output = InvestigatorResult(
+        hypotheses_formed=2,
+        hypotheses_confirmed=1,
+        hypotheses_pivoted=0,
+        hypotheses_abandoned=1,
+        findings_staged=1,
+        total_tool_calls=4,
+        total_tokens_consumed=800,
+        time_elapsed_ms=50.0,
+        final_state="COMPLETED",
+        model_used="test",
+    )
+
+    async def _ok(*_a: object, **_kw: object) -> object:
+        return SimpleNamespace(output=output, usage=SimpleNamespace(total_tokens=800))
+
+    with (
+        patch("silentwitness_agent.investigator.build_investigator", return_value=cfg),
+        patch.object(cfg.agent, "run", side_effect=_ok),
+    ):
         result = await investigate(tmp_path, "aj", "test prompt")
     assert result.final_state == "COMPLETED"
     assert result.model_used == "test"

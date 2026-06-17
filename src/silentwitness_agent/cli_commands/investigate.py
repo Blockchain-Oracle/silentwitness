@@ -175,13 +175,14 @@ async def _run_async(
 
     live: Live | None = None
     live_started: bool = False
+    layout: Layout | None = None
     decay_task: asyncio.Task[None] | None = None
     refresh_task: asyncio.Task[None] | None = None
     stream_task: asyncio.Task[None] | None = None
 
     try:
         if is_tty:
-            layout: Layout = build_layout()
+            layout = build_layout()
             update_layout(
                 layout,
                 stack_snap=None,
@@ -211,7 +212,7 @@ async def _run_async(
 
     except UsageLimitExceeded as exc:
         Console(stderr=True, no_color=no_color).print(
-            f"[red]✗[/red] Investigation hit the configured request limit: {exc}",
+            f"[red]✗[/red] Investigation hit the configured usage limit: {exc}",
             highlight=False,
         )
         return 1
@@ -237,9 +238,9 @@ async def _run_async(
             with contextlib.suppress(asyncio.CancelledError):
                 await stream_task
         if live is not None and live_started:
-            if is_tty and state.stack_snap is not None:
+            if is_tty and layout is not None and state.stack_snap is not None:
                 update_layout(
-                    live.renderable,  # type: ignore[arg-type]
+                    layout,
                     stack_snap=state.stack_snap,
                     active_tool=state.active_tool,
                     findings=state.findings,
@@ -268,7 +269,7 @@ def run(
     *,
     model: str | None,
     max_iterations: int | None,
-    max_tokens: int,
+    max_tokens: int | None,
     no_hud: bool,
     hud: bool,
     resume: bool,
@@ -288,6 +289,10 @@ def run(
         _try_start_hud(config, err)
 
     resolved_model = model or os.environ.get("SILENTWITNESS_MODEL") or config.model.default
+    resolved_max_iterations = (
+        max_iterations if max_iterations is not None else config.budget.max_steps
+    )
+    resolved_max_tokens = max_tokens if max_tokens is not None else config.budget.max_tokens
     examiner = _read_case_examiner(case_dir, config.examiner.name)
 
     # Set SILENTWITNESS_MODEL for the duration of the run then restore.
@@ -299,8 +304,8 @@ def run(
                 case_dir,
                 examiner,
                 model=resolved_model,
-                max_iterations=max_iterations,
-                max_tokens=max_tokens,
+                max_iterations=resolved_max_iterations,
+                max_tokens=resolved_max_tokens,
                 no_color=no_color,
                 no_hud=no_hud,
                 config=config,

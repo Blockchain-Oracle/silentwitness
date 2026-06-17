@@ -13,8 +13,10 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_ai.exceptions import UserError
 from pydantic_ai.models import Model, infer_model
+from pydantic_ai.usage import UsageLimits
 
 from silentwitness_agent.critic import CriticVerdictRecord
+from silentwitness_agent.model_policy import cost_optimized_model_for_provider
 from silentwitness_common.types import AuditId, Confidence, SpecialistName
 
 _GLOBAL_MODEL_ENV = "SILENTWITNESS_MODEL"
@@ -114,12 +116,14 @@ def resolve_specialist_model(
     """Resolve a specialist's model with a single, model-agnostic precedence.
 
     Order (first match wins): explicit ``model`` arg → per-specialist
-    ``env_model_key`` → global ``SILENTWITNESS_MODEL`` → ``MODEL_QUALITY=high``
-    → ``default_model``. The global model deliberately outranks the quality
-    knob: ``high_quality_model`` is a hardcoded Anthropic id, so honouring it
-    over an explicit non-Anthropic ``SILENTWITNESS_MODEL`` (e.g. ``openai:*``)
-    would reintroduce the very Anthropic-pinning this resolution order exists to
-    prevent under an OpenAI/Gemini-only key.
+    ``env_model_key`` → ``SILENTWITNESS_MODEL`` with ``MODEL_QUALITY=high`` →
+    same-provider cost-optimized sibling of ``SILENTWITNESS_MODEL`` →
+    ``MODEL_QUALITY=high`` → ``default_model``.
+
+    The cost-optimized sibling prevents a strong investigator model such as
+    ``openai:gpt-5.2`` or ``google:gemini-2.5-pro`` from making every nested
+    specialist call use that same expensive model. ``MODEL_QUALITY=high`` opts
+    back into the explicit global model without switching providers.
     """
     if model is not None:
         return _infer_model_checked(model, f"{label} specialist: explicit model")
@@ -128,10 +132,35 @@ def resolve_specialist_model(
         return _infer_model_checked(env_model, f"{label} specialist: {env_model_key}")
     global_model = os.environ.get(_GLOBAL_MODEL_ENV)
     if global_model:
-        return _infer_model_checked(global_model, f"{label} specialist: {_GLOBAL_MODEL_ENV}")
+        if os.environ.get(_QUALITY_ENV, "").lower() == "high":
+            return _infer_model_checked(global_model, f"{label} specialist: {_GLOBAL_MODEL_ENV}")
+        sibling_model = cost_optimized_model_for_provider(global_model)
+        return _infer_model_checked(
+            sibling_model,
+            f"{label} specialist: {_GLOBAL_MODEL_ENV} provider default",
+        )
     if os.environ.get(_QUALITY_ENV, "").lower() == "high":
         return infer_model(high_quality_model)
     return infer_model(default_model)
+
+
+def specialist_usage_limits(
+    model: object,
+    *,
+    request_limit: int | None,
+    token_limit: int | None,
+) -> UsageLimits:
+    """Build nested specialist limits, avoiding pre-counting for TestModel.
+
+    Real provider models can preflight token counts. Pydantic AI's TestModel
+    intentionally does not implement ``count_tokens()``, so offline unit tests
+    must disable pre-counting while preserving the same request/token caps.
+    """
+    return UsageLimits(
+        request_limit=request_limit,
+        total_tokens_limit=token_limit,
+        count_tokens_before_request=model.__class__.__name__ != "TestModel",
+    )
 
 
 def _load_specialist_prompt(slug: str) -> str:
@@ -158,4 +187,5 @@ __all__ = [
     "ToolCallRecord",
     "_load_specialist_prompt",
     "resolve_specialist_model",
+    "specialist_usage_limits",
 ]

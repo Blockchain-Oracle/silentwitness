@@ -13,19 +13,23 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from silentwitness_agent.model_policy import DEFAULT_CRITIC_MODEL, DEFAULT_INVESTIGATOR_MODEL
+
 _BASE = ConfigDict(frozen=True, extra="forbid")
+DEFAULT_MAX_STEPS = 80
+DEFAULT_MAX_TOKENS = 6_000_000
 
 
 class ModelConfig(BaseModel):
     model_config = _BASE
-    default: str = "anthropic:claude-opus-4-7"
-    critic: str = "anthropic:claude-haiku-4-5"
+    default: str = DEFAULT_INVESTIGATOR_MODEL
+    critic: str = DEFAULT_CRITIC_MODEL
 
 
 class BudgetConfig(BaseModel):
     model_config = _BASE
-    max_steps: int = Field(default=200, ge=1)
-    max_tokens: int = Field(default=800_000, ge=1)
+    max_steps: int = Field(default=DEFAULT_MAX_STEPS, ge=1)
+    max_tokens: int = Field(default=DEFAULT_MAX_TOKENS, ge=1)
 
 
 class ExaminerConfig(BaseModel):
@@ -95,6 +99,7 @@ def _merge(base: dict[str, object], overlay: dict[str, object]) -> dict[str, obj
 _ENV_MAP: dict[str, tuple[str, str]] = {
     "SILENTWITNESS_MODEL": ("model", "default"),
     "SILENTWITNESS_CRITIC_MODEL": ("model", "critic"),
+    "SILENTWITNESS_MAX_ITERS": ("budget", "max_steps"),
     "SILENTWITNESS_MAX_STEPS": ("budget", "max_steps"),
     "SILENTWITNESS_MAX_TOKENS": ("budget", "max_tokens"),
     "SILENTWITNESS_EXAMINER": ("examiner", "name"),
@@ -136,6 +141,8 @@ def load_config(config_file: Path | None = None) -> SilentWitnessConfig:
 
 
 __all__ = [
+    "DEFAULT_MAX_STEPS",
+    "DEFAULT_MAX_TOKENS",
     "BudgetConfig",
     "EvidenceConfig",
     "ExaminerConfig",

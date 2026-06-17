@@ -1,6 +1,6 @@
 """Anthropic prompt-caching settings for the agent loop (Phase 4 — performance).
 
-The investigator runs many iterations per case (uncapped by default — see
+The investigator can run many iterations per case (bounded by
 ``investigator._DEFAULT_MAX_ITERS``), and every iteration re-sends
 the *unchanged* tool-definition schemas (the largest stable block) plus the system
 instructions. Without caching that prefix is billed at full input price every

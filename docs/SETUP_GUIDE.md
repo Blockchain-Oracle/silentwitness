@@ -64,12 +64,15 @@ Pick **one** provider and paste your key in place of the placeholder.
 ```bash
 # Option A — OpenAI
 export OPENAI_API_KEY="<paste-your-openai-key-here>"
-export SILENTWITNESS_MODEL="openai:gpt-5.5"      # a strong, tested choice
+export SILENTWITNESS_MODEL="openai:gpt-5-mini"   # cost-safe OpenAI investigator model
 
 # Option B — Anthropic (Claude)
 export ANTHROPIC_API_KEY="<paste-your-anthropic-key-here>"
-export SILENTWITNESS_MODEL="anthropic:claude-opus-4-7"
+export SILENTWITNESS_MODEL="anthropic:claude-sonnet-4-6"
 ```
+
+For a deliberate high-recall rerun, use a stronger model only with an explicit cap, for example
+`silentwitness investigate rocba --max-iterations 120 --max-tokens 8_000_000`.
 
 > Tip: the key is read from the environment. To make it permanent, add those two lines to the
 > bottom of `~/.bashrc` and run `source ~/.bashrc`.
@@ -223,6 +226,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | `silentwitness: command not found` | Install didn't finish or shell not reloaded | Re-run the install command; open a new terminal. |
 | `no evidence index for this case` | You skipped `prepare`/`index` | Run Step 2 then Step 3 before `investigate`. |
 | Investigation stops with `request_limit` | The model needs more steps | Re-run with `silentwitness investigate rocba --max-iterations 120`. |
+| Investigation stops with `total_tokens_limit` | The model consumed the run-wide token budget | Re-run only if needed with a deliberate cap, for example `silentwitness investigate rocba --max-tokens 8_000_000`. |
 | `authentication` / 401 error | API key not set or out of credit | Re-check Step 4; confirm your provider account has credit. |
 | `indexed 0 records` | `prepare` extracted nothing | Confirm the image path is correct and is a Windows disk image. |
 | `index already current` | The registered evidence, prepared artifacts, host label, memory profile, and relevant parser settings match the last successful build | Continue to `investigate`; add `--force` only when you intentionally want to rebuild. |

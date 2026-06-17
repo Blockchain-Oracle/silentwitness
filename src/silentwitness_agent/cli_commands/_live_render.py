@@ -13,7 +13,13 @@ from typing import TYPE_CHECKING, Any
 
 from rich.layout import Layout
 
-from silentwitness_agent.cli_commands._live_layout import ToolCallSnapshot, update_layout
+from silentwitness_agent.cli_commands._live_layout import (
+    BudgetSnapshot,
+    FindingsSnapshot,
+    ToolCallSnapshot,
+    update_layout,
+)
+from silentwitness_agent.hypothesis.types import HypothesisEvent
 
 if TYPE_CHECKING:
     pass
@@ -40,7 +46,117 @@ class DisplayState:
     last_event: Any = None  # HypothesisEvent | None
     flash_frame: int = 0
     step_count: int = 0
+    tool_call_count: int = 0
     t_start: float = dataclasses.field(default_factory=time.monotonic)
+
+
+def _staged_findings_count(case_dir: Path) -> int:
+    path = case_dir / "findings.json"
+    if not path.is_file():
+        return 0
+    try:
+        records = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    if not isinstance(records, list):
+        return 0
+    return sum(
+        1
+        for record in records
+        if isinstance(record, dict)
+        and record.get("finding_id")
+        and str(record.get("status", "DRAFT")).upper() == "DRAFT"
+    )
+
+
+def _last_hypothesis_event(case_dir: Path) -> HypothesisEvent | None:
+    path = case_dir / "audit" / "hypothesis.jsonl"
+    if not path.is_file():
+        return None
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return None
+    for raw in reversed(lines):
+        if not raw.strip():
+            continue
+        try:
+            return HypothesisEvent.model_validate_json(raw)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
+def _agent_step_usage(case_dir: Path) -> tuple[int, int]:
+    """Return (tokens, steps) from agent.jsonl step events."""
+    path = case_dir / "audit" / "agent.jsonl"
+    if not path.is_file():
+        return 0, 0
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return 0, 0
+    tokens = 0
+    steps = 0
+    for raw in lines:
+        try:
+            event = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") != "step":
+            continue
+        steps += 1
+        tokens += int(event.get("input_tokens") or 0) + int(event.get("output_tokens") or 0)
+    return tokens, steps
+
+
+def _budget_snapshot(ctx: Any, snap: Any, state: DisplayState) -> BudgetSnapshot | None:
+    active = snap.active if snap is not None else None
+    if active is not None:
+        remaining = ctx.deps.budget.remaining(active)
+        tokens_budgeted = active.tokens_budgeted or getattr(
+            ctx.deps.budget,
+            "_default_token_budget",
+            0,
+        )
+        steps_budgeted = active.steps_budgeted or getattr(
+            ctx.deps.budget,
+            "_default_step_budget",
+            0,
+        )
+        return BudgetSnapshot(
+            tokens_remaining=remaining.tokens_remaining,
+            steps_remaining=remaining.steps_remaining,
+            tokens_budgeted=tokens_budgeted,
+            steps_budgeted=steps_budgeted,
+        )
+
+    token_limit = getattr(ctx.deps, "total_token_limit", None)
+    request_limit = getattr(ctx.deps, "request_limit", None)
+    if token_limit is None and request_limit is None:
+        return None
+    tokens_used, steps_used = _agent_step_usage(ctx.deps.case_dir)
+    steps_used = max(steps_used, state.step_count)
+    tokens_budgeted = token_limit or max(tokens_used, 1)
+    steps_budgeted = request_limit or max(steps_used, 1)
+    return BudgetSnapshot(
+        tokens_remaining=max(tokens_budgeted - tokens_used, 0),
+        steps_remaining=max(steps_budgeted - steps_used, 0),
+        tokens_budgeted=tokens_budgeted,
+        steps_budgeted=steps_budgeted,
+    )
+
+
+def _refresh_snapshots(state: DisplayState, ctx: Any) -> None:
+    snap = ctx.deps.stack.snapshot()
+    state.stack_snap = snap
+    state.budget = _budget_snapshot(ctx, snap, state)
+    state.findings = FindingsSnapshot(
+        findings_staged=_staged_findings_count(ctx.deps.case_dir),
+        total_tool_calls=state.tool_call_count,
+        elapsed_ms=(time.monotonic() - state.t_start) * 1000,
+    )
+    state.last_event = _last_hypothesis_event(ctx.deps.case_dir)
 
 
 def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
@@ -86,10 +202,27 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
         result: Any,
     ) -> Any:
         state.active_tool = None
+        state.tool_call_count += 1
         # display-only; never abort agent run on snapshot failure
         with contextlib.suppress(Exception):
-            state.stack_snap = ctx.deps.stack.snapshot()
+            _refresh_snapshots(state, ctx)
         return result
+
+    @hooks.on.tool_execute_error
+    async def _tool_error(
+        ctx: RunContext[InvestigatorDeps],
+        /,
+        *,
+        call: ToolCallPart,
+        tool_def: ToolDefinition,
+        args: ValidatedToolArgs,
+        error: Exception,
+    ) -> None:
+        state.active_tool = None
+        state.tool_call_count += 1
+        with contextlib.suppress(Exception):
+            _refresh_snapshots(state, ctx)
+        raise error
 
     @hooks.on.after_model_request
     async def _after_model_req(
@@ -102,8 +235,8 @@ def build_display_hooks(state: DisplayState, is_tty: bool) -> Any:
         prev_pivots = state.stack_snap.total_pivot_count if state.stack_snap is not None else 0
         snap = state.stack_snap  # fallback to last known state if snapshot() fails
         with contextlib.suppress(Exception):
-            snap = ctx.deps.stack.snapshot()
-            state.stack_snap = snap
+            _refresh_snapshots(state, ctx)
+            snap = state.stack_snap
         if snap is not None and snap.total_pivot_count > prev_pivots:
             state.flash_frame = 4
         state.step_count += 1

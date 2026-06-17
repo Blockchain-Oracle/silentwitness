@@ -47,6 +47,21 @@ forms one hypothesis at a time, searches evidence records, records observations,
 pivots when evidence contradicts the hypothesis, and writes the final narrative
 through server tools.
 
+## Ingest and Index
+
+Before the model sees anything, source artifacts become bounded, searchable
+records. That step is the first practical guardrail.
+
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-C-ingest.png"
+  alt="SilentWitness evidence ingest and indexing pipeline"
+/>
+
+The important pieces are: registered evidence stays untouched, `prepare` extracts
+high-value artifacts read-only, targeted parsers build the searchable index, and
+records carry source paths, hashes, and audit IDs.
+
 ## The Hallucination Firewall
 
 Unsupported text has to survive multiple checks before it can become a finding.
@@ -117,3 +132,15 @@ For judges, the quickest proof path is:
   cases.
 - [Full architecture spec](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/architecture.md):
   the long internal spec with pins, ADRs, and implementation notes.
+
+## Accuracy and Gaps
+
+The public accuracy report is part of the architecture story. It keeps ground
+truth comparison, recalled findings, misses, residual gaps, and audit replay
+visible instead of hiding them behind a polished demo.
+
+<img
+  className="sw-doc-figure"
+  src="/brand/diagram-E-recall.png"
+  alt="SilentWitness accuracy report and residual gaps"
+/>

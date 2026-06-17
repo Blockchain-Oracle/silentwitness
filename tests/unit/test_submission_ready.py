@@ -31,17 +31,16 @@ def _make_minimal_fixture(tmp_path: Path) -> Path:
     (root / "README.md").write_text(
         "# SilentWitness\n\n"
         "Demo: https://youtu.be/abcdefghijk\n\n"
-        "![Architecture](docs/diagrams/architecture.svg)\n"
+        "![Architecture](assets/brand/diagram-A-architecture.png)\n"
     )
     docs = root / "docs"
     docs.mkdir()
     (docs / "architecture.md").write_text(
-        "# Architecture\n![Architecture](diagrams/architecture.svg)\n"
+        "# Architecture\n![Architecture](../assets/brand/diagram-A-architecture.png)\n"
     )
-    (docs / "diagrams").mkdir()
-    (docs / "diagrams" / "architecture.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg"><title>x</title><desc>y</desc></svg>\n'
-    )
+    brand = root / "assets" / "brand"
+    brand.mkdir(parents=True)
+    (brand / "diagram-A-architecture.png").write_bytes(b"\x89PNG\r\n\x1a\n")
     (docs / "DEVPOST.md").write_text(
         "# SilentWitness\n## One-line pitch\n## What it does\n## Built with\npython\n"
     )

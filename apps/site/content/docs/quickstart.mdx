@@ -42,15 +42,17 @@ npm install -g silentwitness
 
 ```bash
 export ANTHROPIC_API_KEY=...          # or OPENAI_API_KEY / GEMINI_API_KEY
-export SILENTWITNESS_MODEL=openai:gpt-5.2   # or anthropic:claude-opus-4-7
+export SILENTWITNESS_MODEL=anthropic:claude-sonnet-4-6
+# Cost-safe OpenAI alternative: openai:gpt-5-mini
 ```
 
 | Env var | Default | What |
 |---|---|---|
-| `SILENTWITNESS_MODEL` | `openai:gpt-5.2` | Investigator model. `provider:model`. |
-| `CRITIC_MODEL` | inherits | Live critic — usually a faster sibling. |
-| `MAX_ITERS` | unlimited | Iteration cap. Unlimited by default (PR #236). |
-| `CASES_DIR` | `./cases` | Where investigations are written. |
+| `SILENTWITNESS_MODEL` | `anthropic:claude-sonnet-4-6` | Investigator model. `provider:model`. |
+| `SILENTWITNESS_CRITIC_MODEL` | `anthropic:claude-haiku-4-5` | Live critic model. |
+| `SILENTWITNESS_MAX_STEPS` / `SILENTWITNESS_MAX_ITERS` | `80` | Hard cap on model requests. |
+| `SILENTWITNESS_MAX_TOKENS` | `6,000,000` | Run-wide token cap. |
+| `SILENTWITNESS_CASES_DIR` | `./cases` | Where investigations are written. |
 
 ## Investigate
 

@@ -14,6 +14,7 @@ import pytest
 from rich.console import Console
 
 from silentwitness_agent.cli_commands.review import _run_critic_pass
+from silentwitness_agent.config import BudgetConfig, SilentWitnessConfig
 from silentwitness_agent.critic import CriticReport
 
 
@@ -60,7 +61,9 @@ def test_critic_pass_skips_reviewed_and_malformed(
 ) -> None:
     seen: dict[str, int] = {}
 
-    async def _capture(case_dir: Path, examiner: str, staged: list) -> CriticReport:  # type: ignore[type-arg]
+    async def _capture(  # type: ignore[type-arg]
+        case_dir: Path, examiner: str, staged: list, **kwargs: object
+    ) -> CriticReport:
         seen["n"] = len(staged)
         return CriticReport(verdicts=[], tokens_spent=0, time_elapsed_ms=0.0)
 
@@ -82,6 +85,27 @@ def test_critic_pass_skips_reviewed_and_malformed(
     )
     _run_critic_pass(tmp_path, "aj", err=Console(stderr=True))
     assert seen["n"] == 2  # F-001 + F-002 only
+
+
+def test_critic_pass_uses_configured_usage_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    seen: dict[str, object] = {}
+
+    async def _capture(  # type: ignore[type-arg]
+        case_dir: Path, examiner: str, staged: list, **kwargs: object
+    ) -> CriticReport:
+        seen.update(kwargs)
+        return CriticReport(verdicts=[], tokens_spent=0, time_elapsed_ms=0.0)
+
+    monkeypatch.setattr("silentwitness_agent.critic.critique", _capture)
+    _write(tmp_path, [_obs("O-001", "I-001"), _finding("F-001", "O-001", "I-001")])
+    config = SilentWitnessConfig(budget=BudgetConfig(max_steps=9, max_tokens=123_456))
+
+    _run_critic_pass(tmp_path, "aj", err=Console(stderr=True), config=config)
+
+    assert seen["request_limit"] == 9
+    assert seen["total_token_limit"] == 123_456
 
 
 def test_critic_pass_no_drafts_is_noop(tmp_path: Path) -> None:

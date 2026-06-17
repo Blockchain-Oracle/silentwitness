@@ -107,18 +107,14 @@ def _check_deliverables(root: Path) -> list[Check]:
     # Deliverable 3: Architecture diagram asset + README reference
     chk = Check("Deliverable 3: Architecture diagram asset + README reference")
     arch_md = root / "docs" / "architecture.md"
-    arch_svg = root / "docs" / "diagrams" / "architecture.svg"
     arch_png = root / "assets" / "brand" / "diagram-A-architecture.png"
     if not arch_md.exists():
         chk.fail("docs/architecture.md missing")
-    elif not arch_svg.exists() and not arch_png.exists():
+    elif not arch_png.exists():
         chk.fail("architecture diagram asset missing")
     else:
         readme_text = readme.read_text(encoding="utf-8")
-        if (
-            "docs/diagrams/architecture.svg" not in readme_text
-            and "assets/brand/diagram-A-architecture.png" not in readme_text
-        ):
+        if "assets/brand/diagram-A-architecture.png" not in readme_text:
             chk.fail("README does not reference a tracked architecture diagram")
     checks.append(chk)
 

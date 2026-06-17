@@ -122,9 +122,9 @@ test("rewriteSiteLinks maps repo-only logs to GitHub", () => {
 });
 
 test("rewriteSiteLinks maps diagram assets to the local site public path", () => {
-  const input = "See ![Architecture](diagrams/architecture.svg).";
+  const input = "See ![Architecture](../assets/brand/diagram-A-architecture.png).";
   const output = rewriteSiteLinks(input);
-  assert.equal(output, "See ![Architecture](/diagrams/architecture.svg).");
+  assert.equal(output, "See ![Architecture](/brand/diagram-A-architecture.png).");
 });
 
 test("rewriteSiteLinks leaves fenced links untouched", () => {

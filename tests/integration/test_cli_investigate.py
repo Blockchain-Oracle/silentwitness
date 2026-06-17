@@ -114,10 +114,10 @@ def test_model_flag_sets_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         _stub_capture,
     )
     result = runner.invoke(
-        app, ["investigate", "i002", "--model", "openai:gpt-5"], catch_exceptions=False
+        app, ["investigate", "i002", "--model", "openai:gpt-5-mini"], catch_exceptions=False
     )
     assert result.exit_code == 0
-    assert captured and captured[0] == "openai:gpt-5"
+    assert captured and captured[0] == "openai:gpt-5-mini"
 
 
 # ---------------------------------------------------------------------------
@@ -321,7 +321,7 @@ def test_request_limit_exhaustion_exits_1(tmp_path: Path, monkeypatch: pytest.Mo
     )
     result = runner.invoke(app, ["investigate", "i010"], catch_exceptions=False)
     assert result.exit_code == 1
-    assert "request limit" in result.stderr.lower()
+    assert "usage limit" in result.stderr.lower()
 
 
 # ---------------------------------------------------------------------------
