@@ -1,0 +1,13 @@
+case:        mr-evil-001           model:   openai-chat:gpt-5.2
+examiner:    root                  status:  ERROR (2h 22m elapsed)
+
+hypothesis stack (0 active, 2 confirmed, 0 pivoted, 0 abandoned):
+ H-007  [CONFIRMED]  If this host was compromised, Sigma detections will flag
+                     suspicious authenticati
+ H-008  [CONFIRMED]  If earlier staged findings about Google Drive 'My Drive'
+                     and Dropbox activity ar
+
+findings: staged 49  approved 7  rejected 29
+tokens:   3M / 6M budget
+last pivot: 11:48:17Z  H-004  LNK records 2507943 and 2508004 show Recent
+shortcuts refere

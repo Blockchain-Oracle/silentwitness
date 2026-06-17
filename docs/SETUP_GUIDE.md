@@ -266,15 +266,15 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 
 - **Fastest path:** you do **not** need to run it — the [Accuracy Report](ACCURACY_REPORT.md),
   [Architecture](architecture.md) + [diagram](../assets/brand/diagram-A-architecture.png), and the
-  [execution logs](execution_logs/) contain everything scored. If you do run it, follow §3–§5
-  with your own API key.
+  [showcase runs](showcase_runs/) contain judge-clickable artifacts. If you do run it, follow
+  §3–§5 with your own API key.
 - **Three-claim trace:** [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) walks three findings from
-  the report → the cited evidence record → the exact `search_evidence` tool execution
-  (`docs/execution_logs/rocba_headline_run/`).
+  the report → the cited evidence record → the exact audit tool execution
+  (`docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/`).
 - **Report + JSON artifacts:** [`DEMO_ARTIFACTS.md`](DEMO_ARTIFACTS.md) points to the committed
   report, findings JSON, audit JSONL, and approval-ledger examples.
-- **Self-correction in the logs:** `docs/execution_logs/rocba_headline_run/critic.jsonl` — the live
-  critic challenged 3 of 7 findings; the agent revised them.
+- **Self-correction in the logs:** `docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/audit/critic.jsonl`
+  preserves AGREE/CHALLENGE/REJECT verdicts from the live critic.
 - **Evidence integrity:** [Accuracy Report §6](ACCURACY_REPORT.md#6-evidence-integrity--how-the-architecture-prevents-data-modification)
   — read-only evidence, no write surface, tamper-evident provenance, enforced architecturally.
 - **Guardrails (architectural, not prompt):** the citation gate, entity gate, and coverage gate
@@ -293,7 +293,7 @@ system rejects it before it reaches the report — see the [Accuracy Report](ACC
 | What data it was tested on | [`docs/STARTER_CASES.md`](STARTER_CASES.md) |
 | Trace a finding to its tool call | [`docs/THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) |
 | Report + JSON artifact map | [`docs/DEMO_ARTIFACTS.md`](DEMO_ARTIFACTS.md) |
-| Real run logs | [`docs/execution_logs/`](execution_logs/) |
+| Demo showcase runs | [`docs/showcase_runs/`](showcase_runs/) |
 | The MCP server (the product) | `src/silentwitness_mcp/` |
 | The agent | `src/silentwitness_agent/` |
 | The forensic parsers | `src/silentwitness_mcp/index/feeders_*.py` |

@@ -182,6 +182,7 @@ function _rewriteHref(href) {
   }
 
   if (
+    normalized.startsWith("showcase_runs/") ||
     normalized.startsWith("execution_logs/") ||
     normalized.startsWith("EXAMPLE_EXECUTION_LOGS/")
   ) {

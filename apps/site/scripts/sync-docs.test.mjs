@@ -113,11 +113,12 @@ test("rewriteSiteLinks maps canonical docs to site routes", () => {
 });
 
 test("rewriteSiteLinks maps repo-only logs to GitHub", () => {
-  const input = "Open [critic](execution_logs/gpt55_100pct_run/critic.jsonl).";
+  const input =
+    "Open [showcase](showcase_runs/mr_evil_openai_gpt_5_2_resume/report.md) and [synthetic](EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/report.md).";
   const output = rewriteSiteLinks(input);
   assert.equal(
     output,
-    "Open [critic](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/execution_logs/gpt55_100pct_run/critic.jsonl).",
+    "Open [showcase](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/report.md) and [synthetic](https://github.com/Blockchain-Oracle/silentwitness/blob/main/docs/EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/report.md).",
   );
 });
 

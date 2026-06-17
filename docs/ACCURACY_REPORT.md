@@ -18,9 +18,9 @@
   `findings.json`, resolves each cited `record_id` to its evidence-index `artifact_path`, and
   marks a ground-truth finding **recalled** when one of its expected substrings appears in the
   finding text **or** a cited artifact path. Recall = recalled / 10.
-- **Runs:** the full pipeline (`register-evidence → prepare → index → investigate`) was run on
-  real evidence for several model/configuration points. Raw logs for the headline run are
-  committed under [`docs/execution_logs/`](execution_logs/).
+- **Runs:** the full pipeline (`register-evidence -> prepare -> index -> investigate`) was run on
+  real evidence for several model/configuration points. The current judge/demo snapshot is
+  committed under [`docs/showcase_runs/`](showcase_runs/).
 
 ---
 
@@ -73,10 +73,10 @@ that cannot be found in the mounted evidence. A false positive is grounded in a 
 does not match the hand-crafted ground-truth finding set.
 
 Known false-positive risk in the ROCBA runs is over-broad interpretation, not fabricated artifacts:
-for example, cloud-sync and logon observations can be evidence-present while still too broad until
-the critic narrows them to the specific cited records. The headline run includes that challenge and
-revision loop for O-004/O-007 in `docs/execution_logs/rocba_headline_run/critic.jsonl` and
-`findings.jsonl`. We treat those as noisy claims that must be narrowed, not as proof the raw
+for example, cloud-sync observations can be evidence-present while still too broad until the critic
+narrows them to the specific cited records. The current showcase bundle includes that challenge
+loop in `docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/audit/critic.jsonl` and
+`audit/findings.jsonl`. We treat those as noisy claims that must be narrowed, not as proof the raw
 artifact was invented.
 
 ---
@@ -100,14 +100,14 @@ hallucination *prevention* is architectural here, not prompt-based:
 
 ## 5. Self-correction — documented, in the logs
 
-Self-correction is in the audit logs, not staged for the video. In the headline run
-([`execution_logs/rocba_headline_run/critic.jsonl`](execution_logs/rocba_headline_run/critic.jsonl))
-the live critic (separate agent, fresh context) **CHALLENGED 3 of 7 findings** (O-002, O-004,
-O-005) on real grounds — e.g. O-002: the critic narrowed an over-broad logon claim to the
-specific `LogonType=3 NTLM` / `LogonType=10 RDP` records actually cited. The investigator then
-**revised**: O-006/O-007 record *"This revision removes the specific dates that were
-challenged"* and *"This revised interpretation follows the critic guidance."* A genuine
-challenge → revise loop, traceable end to end.
+Self-correction is in the audit logs, not staged for the video. In the current showcase run
+([`showcase_runs/mr_evil_openai_gpt_5_2_resume/audit/critic.jsonl`](showcase_runs/mr_evil_openai_gpt_5_2_resume/audit/critic.jsonl))
+the live critic (separate agent, fresh context) records AGREE, CHALLENGE, and REJECT verdicts
+against the staged observations. For example, it agrees that `O-048` proves `GOOGLEDRIVEFS.EXE`
+execution, while challenging broader claims that a `G:\My Drive` LNK alone proves the exact drive
+mapping. It also rejects unsupported wording around `O-047` when the cited LNK string does not
+itself name `fredr`. This is the intended correction behavior: preserve the evidence, narrow the
+interpretation, and keep the caveat visible.
 
 The enforced **coverage gate** is a second, structural self-correction: when the agent tries to
 finalize with a Key Question unanswered, it is bounced back (`ModelRetry`) with the gap named,
@@ -135,9 +135,8 @@ agent could alter original evidence, regardless of what the model decides:
 ## 7. Known issues we are NOT hiding
 
 - **`[UNTRUSTED EVIDENCE BEGIN]` marker leakage.** `get_record` wraps evidence text in
-  untrusted-content markers for safe display; in the headline run the model copied those marker
-  strings into some interpretation justifications (O-001…O-007). It does not affect recall or
-  citations but pollutes report prose. Tracked as a cleanup item.
+  untrusted-content markers for safe display; some interpretations have copied those marker
+  strings into report prose. It does not affect recall or citations but should be cleaned up.
 - **Single-run 100% is not a stability claim.** See §3 — we report the distribution, not the
   peak.
 - **Memory analysis is not yet in the recall path.** Current recall is disk-derived;
@@ -158,6 +157,6 @@ SILENTWITNESS_MODEL=openai-chat:gpt-5.2 silentwitness investigate rocba --max-it
 python -m harness.score_case --case cases/rocba --dataset rocba
 ```
 
-The archived higher-cost benchmark logs are committed under
-[`docs/execution_logs/rocba_headline_run/`](execution_logs/rocba_headline_run/) for the three-claim
-trace (find → `record_id` → `search_evidence` execution in `index.jsonl`).
+The current judge-facing showcase logs are committed under
+[`docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/`](showcase_runs/mr_evil_openai_gpt_5_2_resume/)
+for the three-claim trace (finding -> `record_id` -> tool execution in audit JSONL).

@@ -147,9 +147,11 @@ Provenance + memorization-risk disclosure per case: see [`docs/STARTER_CASES.md`
 ## Example execution logs
 
 Report, findings JSON, audit JSONL, and approval-ledger pointers: see
-[`docs/DEMO_ARTIFACTS.md`](./docs/DEMO_ARTIFACTS.md). Synthetic full-case logs
-live in [`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/), and
-real ROCBA trace logs live in [`docs/execution_logs/`](./docs/execution_logs/).
+[`docs/DEMO_ARTIFACTS.md`](./docs/DEMO_ARTIFACTS.md). The current judge/demo
+showcase bundle lives in
+[`docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/`](./docs/showcase_runs/mr_evil_openai_gpt_5_2_resume/).
+Synthetic full-case logs live in
+[`docs/EXAMPLE_EXECUTION_LOGS/`](./docs/EXAMPLE_EXECUTION_LOGS/).
 
 ## Architecture deep-dive
 

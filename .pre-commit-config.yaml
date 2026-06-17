@@ -59,7 +59,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: ['--baseline', '.secrets.baseline']
-        exclude: ^(uv\.lock|pnpm-lock\.yaml|\.secrets\.baseline|tests/.*/fixtures/.*)$
+        exclude: ^(uv\.lock|pnpm-lock\.yaml|\.secrets\.baseline|tests/.*/fixtures/.*|docs/showcase_runs/.*/audit/.*\.jsonl)$
 
   # --- Standard hygiene ---
   - repo: https://github.com/pre-commit/pre-commit-hooks

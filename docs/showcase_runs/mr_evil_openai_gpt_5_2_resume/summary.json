@@ -1,0 +1,23 @@
+{
+  "case_id": "mr-evil-001",
+  "run_label": "mr_evil_openai_gpt_5_2_resume",
+  "snapshot_source": "/root/silentwitness-demo/cases/mr-evil-001",
+  "model_at_status_capture": "openai-chat:gpt-5.2",
+  "audit_model_note": "This is a resumed/current VPS case snapshot, not a clean model-comparison run. Approved-finding audit rows include earlier openai-chat:gpt-5-mini activity because the case was already in progress before the GPT-5.2 resume.",
+  "status_text": "case:        mr-evil-001           model:   openai-chat:gpt-5.2\nexaminer:    root                  status:  ERROR (2h 22m elapsed)\n\nhypothesis stack (0 active, 2 confirmed, 0 pivoted, 0 abandoned):\n H-007  [CONFIRMED]  If this host was compromised, Sigma detections will flag   \n                     suspicious authenticati                                    \n H-008  [CONFIRMED]  If earlier staged findings about Google Drive 'My Drive'   \n                     and Dropbox activity ar                                    \n\nfindings: staged 49  approved 7  rejected 29\ntokens:   3M / 6M budget\nlast pivot: 11:48:17Z  H-004  LNK records 2507943 and 2508004 show Recent \nshortcuts refere\n",
+  "record_count": 56,
+  "status_counts": {
+    "null": 49,
+    "APPROVED": 7
+  },
+  "approved_finding_ids": [
+    "F-001",
+    "F-002",
+    "F-003",
+    "F-004",
+    "F-005",
+    "F-006",
+    "F-007"
+  ],
+  "report_frontmatter": "case_id: mr-evil-001\nexaminer: root\nstatus: REVIEWED\ncontent_hash: sha256:f9b21b9bbcf2d3c210c810f1e2f64a334db25a13b18056738e380f278226dddd\ncreated_at: '2026-06-17T12:03:29Z'\nupdated_at: '2026-06-17T12:53:49Z'\nsilentwitness_version: 1.4.5\nmodel_used: unknown"
+}

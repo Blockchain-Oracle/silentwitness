@@ -31,23 +31,33 @@ The important files are:
 
 ## GitHub artifacts to show judges
 
+The current VPS demo bundle is under [`showcase_runs/`](showcase_runs/). These
+files are copied from the VPS case directory, committed, and pushed; they do not
+sync to GitHub automatically just because a VPS investigation finishes.
+
+- [Mr. Evil GPT-5.2 resume report](showcase_runs/mr_evil_openai_gpt_5_2_resume/report.md)
+- [Mr. Evil GPT-5.2 resume findings JSON](showcase_runs/mr_evil_openai_gpt_5_2_resume/findings.json)
+- [Mr. Evil GPT-5.2 resume audit JSONL directory](showcase_runs/mr_evil_openai_gpt_5_2_resume/audit/)
+- [Mr. Evil GPT-5.2 resume approval ledger](showcase_runs/mr_evil_openai_gpt_5_2_resume/verification/mr-evil-001.jsonl)
+- [Mr. Evil GPT-5.2 resume status snapshot](showcase_runs/mr_evil_openai_gpt_5_2_resume/status.txt)
+- [Mr. Evil GPT-5.2 resume snapshot summary](showcase_runs/mr_evil_openai_gpt_5_2_resume/summary.json)
 - [Synthetic full report](EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/report.md)
 - [Synthetic findings JSON](EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/findings.json)
 - [Synthetic audit JSONL directory](EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/audit/)
 - [Synthetic HMAC approval ledger](EXAMPLE_EXECUTION_LOGS/case-example-001_EXAMPLE/ledger.jsonl)
-- [ROCBA headline trace findings JSON](execution_logs/rocba_headline_run/findings.json)
-- [ROCBA headline trace findings tool log](execution_logs/rocba_headline_run/findings.jsonl)
-- [ROCBA headline trace index tool log](execution_logs/rocba_headline_run/index.jsonl)
-- [ROCBA headline trace critic log](execution_logs/rocba_headline_run/critic.jsonl)
-- [ROCBA headline trace hypothesis log](execution_logs/rocba_headline_run/hypothesis.jsonl)
+
+The Mr. Evil bundle is a point-in-time VPS snapshot. Its `status.txt` preserves
+the run state at capture, including `openai-chat:gpt-5.2`, `ERROR`, `3M / 6M`
+tokens, and 7 approved findings. It is labeled as a resume showcase because the
+case was resumed after earlier OpenAI mini runs; some audit rows therefore still
+record `openai-chat:gpt-5-mini`. Treat it as the current demo case snapshot, not
+as a clean model-comparison benchmark.
 
 The synthetic case exists so the whole report plus ledger can be inspected
-without a large evidence image. The ROCBA headline trace exists to show the real
-case's finding-to-evidence path. When a new GPT 5.2 run is approved for the
-submission, replace the ROCBA headline trace files with that run's
-`findings.json` and `audit/*.jsonl`, then update
-[`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) if the finding IDs or audit IDs
-changed.
+without a large evidence image. When a newer run is chosen for final submission,
+copy that run into a new folder under `showcase_runs/`, update this page, and
+update [`THREE_CLAIM_TRACE.md`](THREE_CLAIM_TRACE.md) if the finding IDs or
+audit IDs changed.
 
 ## Report status wording
 

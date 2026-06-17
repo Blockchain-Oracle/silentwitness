@@ -71,6 +71,8 @@ cat cases/nitroba-smoke-001/audit/hypothesis.jsonl | jq '.transition'
 
 For a GitHub-clickable map of the report, findings JSON, audit JSONL, and
 approval ledger artifacts, see [`DEMO_ARTIFACTS.md`](./DEMO_ARTIFACTS.md).
+The current Mr. Evil VPS demo snapshot lives in
+[`showcase_runs/mr_evil_openai_gpt_5_2_resume/`](./showcase_runs/mr_evil_openai_gpt_5_2_resume/).
 
 ## Path B — Docker Compose
 
@@ -138,7 +140,8 @@ After export, the examiner-facing report is `cases/nitroba-smoke-001/report.md`.
 The machine-readable finding records are in `cases/nitroba-smoke-001/findings.json`;
 the replayable tool-call logs are in `cases/nitroba-smoke-001/audit/*.jsonl`.
 Use [`DEMO_ARTIFACTS.md`](./DEMO_ARTIFACTS.md) when you want the same artifact
-map as clickable GitHub links.
+map as clickable GitHub links. Current VPS showcase bundles are stored under
+[`showcase_runs/`](./showcase_runs/).
 
 ## Model selection (provider-agnostic)
 
