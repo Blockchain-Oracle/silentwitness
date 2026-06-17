@@ -1,0 +1,13 @@
+case:        rocba-gpt-5-mini-001  model:   openai-chat:gpt-5-mini
+examiner:    root                  status:  ERROR (4m 16s elapsed)
+
+hypothesis stack (0 active, 3 confirmed, 0 pivoted, 0 abandoned):
+ H-001  [CONFIRMED]  Windows Security logs will contain an interactive/remote
+                     desktop logon (EventID
+ H-002  [CONFIRMED]  MicrosoftAccount fred.rocba@outlook.com will have EventID
+                     4624 LogonType=10 entr
+ H-003  [CONFIRMED]  There will be Recent LNK/jumplist evidence showing an
+                     email export or PST file (
+
+findings: staged 3  approved 3  rejected 0
+tokens:   3M / 6M budget

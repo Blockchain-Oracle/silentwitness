@@ -13,6 +13,12 @@ syncs results into the repository automatically.
   investigation status is preserved as `ERROR` because the process exited
   non-zero after narrative/finalization, even though the reviewed report and
   approval ledger were generated.
+- [`rocba_openai_gpt_5_mini_clean/`](rocba_openai_gpt_5_mini_clean/) - ROCBA
+  clean model showcase run using `openai-chat:gpt-5-mini`. The snapshot
+  captured `3M / 6M` tokens, 3 confirmed hypotheses, and 3 approved findings.
+  Its investigation status is preserved as `ERROR` because the process exited
+  non-zero after the final agent step, even though the reviewed report and
+  approval ledger were generated.
 
 ## Resume bundle
 
