@@ -22,9 +22,10 @@ def test_spacy_model_installs_into_silentwitness_tool_env() -> None:
     assert "en_core_web_lg-3.8.0-py3-none-any.whl" in block
 
 
-def test_spacy_model_installs_after_global_cli_env_exists() -> None:
+def test_global_cli_installs_after_native_forensic_deps() -> None:
     text = _INSTALL_SH.read_text()
 
+    assert text.index("\ninstall_evidence_access\n") < text.index("\ninstall_silentwitness_cli\n")
     assert text.index("\ninstall_silentwitness_cli\n") < text.index("\ninstall_spacy_model\n")
 
 

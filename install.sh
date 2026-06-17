@@ -398,9 +398,10 @@ if [ "$#" -gt 0 ]; then
     fail "unknown flag: $1"
 fi
 
-# The CLI install runs first so a fail-fast at the very first step short-
-# circuits before we spend time pulling Hayabusa / Chainsaw / Zeek etc. —
-# the subprocess tools are useless without `silentwitness` to drive them.
+# Native evidence-access dependencies must exist before the Linux
+# `silentwitness[forensics]` tool install, otherwise dfVFS/libyal wheels may
+# fail to build on a fresh SIFT box.
+install_evidence_access
 install_silentwitness_cli
 install_hayabusa
 install_hayabusa_rules
@@ -408,7 +409,6 @@ install_chainsaw
 install_sigma_rules
 install_zeek
 install_suricata
-install_evidence_access
 install_spacy_model
 verify_tool_environment
 
