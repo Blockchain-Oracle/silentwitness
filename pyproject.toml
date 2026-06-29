@@ -28,7 +28,7 @@ dependencies = [
     # each unresolved extra. Plain `pydantic-ai` gives us the full surface
     # including ollama (via openai-compatible). architecture.md §1 to be
     # updated to drop the extras list.
-    "pydantic-ai>=1.105.0,<2.0.0",
+    "pydantic-ai>=1.105.0,<3.0.0",
     "pydantic>=2.9",
     # CLI + terminal UI
     "typer>=0.15",
@@ -48,7 +48,7 @@ dependencies = [
     # (detect/sigma_eval.py) evaluates the parsed AST against EVTX event dicts.
     "pysigma>=0.11,<2",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
-    "volatility3==2.27.0",
+    "volatility3==2.28.0",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
     "matplotlib>=3.10,<3.11",
 ]
