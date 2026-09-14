@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
     # Core MCP + agent stack — audit-corrected pins (CVE closures)
-    "mcp>=1.23.0,<2.0",
+    "mcp>=1.23.0,<3.0",
     # `pydantic-ai` is a meta-package that already bundles every provider —
     # anthropic, openai, google, mcp, fastmcp — via `pydantic-ai-slim[*]`. The
     # custom extras quoted in architecture.md §1 (`[anthropic,openai,google,
@@ -28,13 +28,13 @@ dependencies = [
     # each unresolved extra. Plain `pydantic-ai` gives us the full surface
     # including ollama (via openai-compatible). architecture.md §1 to be
     # updated to drop the extras list.
-    "pydantic-ai>=1.105.0,<2.0.0",
+    "pydantic-ai>=1.105.0,<3.0.0",
     "pydantic>=2.9",
     # CLI + terminal UI
     "typer>=0.15",
     "rich>=14.1,<16",
     # Report rendering — CVE-closing pins
-    "weasyprint>=68.1,<70.0",
+    "weasyprint>=68.1,<71.0",
     "mistune>=3.2.1",
     # HTTP client (replaces requests)
     "httpx>=0.27",
@@ -48,7 +48,7 @@ dependencies = [
     # (detect/sigma_eval.py) evaluates the parsed AST against EVTX event dicts.
     "pysigma>=0.11,<2",
     # Forensic memory toolkit (runs in own venv; this dep is for type checking + integration tests)
-    "volatility3==2.27.0",
+    "volatility3==2.28.0",
     # Accuracy harness delta-report bar charts (Agg backend; CI-friendly)
     "matplotlib>=3.10,<3.11",
 ]
